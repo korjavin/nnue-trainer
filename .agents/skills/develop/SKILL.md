@@ -95,14 +95,18 @@ Watch via `TaskOutput` (block:false) and `tail` the progress file.
 - **Exit 0** → success, go to 2f.
 - **Non-zero exit / hang** → inspect the progress-file tail for the cause. If it's a transient failure (rate limit, executor crash, idle timeout), **restart ralphex on the same plan** (it resumes from plan checkboxes). Cap at **2 restarts**. If it still fails, stop that task, report the failure reason to the user, release the bead (`bd update <id> --status=open`), free the slot.
 
-### 2f. Open the PR
-ralphex works on branch `<derived>` in `.ralphex/worktrees/<derived>`. Push and open a **draft** PR:
+### 2f. Run Code Review and Open the PR
+Before pushing, run a code review using local `codex` against the base branch to verify quality and address any issues:
+```bash
+codex review --base master
+```
+Address any critical issues flagged by the review. Then push the branch and open a **draft** PR:
 ```bash
 git -C .ralphex/worktrees/<derived> push -u origin <derived>
 gh pr create --draft --head <derived> --title "<id>: <title>" \
   --body "Closes bd <id>.\n\nPlan: docs/plans/YYYYMMDD-<slug>.md\n\n<ralphex summary>"
 ```
-(If ralphex's finalize step already pushed/opened a PR, reuse it instead of duplicating.)
+(If ralphex's finalize step already pushed/opened a PR, run the `codex review` on it and push any corrective commits before announcing ready.)
 
 **Do NOT re-run the full test suite locally for ralphex/codex-produced branches.** ralphex's own acceptance-criteria (its Verify task) already runs `go build` + `go test` + `pnpm test` as part of the run, and CI re-runs them on the PR — a third local pass (`go test ./... -race`, `pnpm test`) is wasted minutes. Go straight from ralphex-success to push + PR + CI. Fast, cheap, project-specific sanity checks that ralphex's suite may NOT cover are still worth a glance (e.g. migration-number contiguity, the `go list -deps` import-boundary landmine, a new `window.*` global allowlist) — but not the suites themselves. (This exception is only for agent-produced branches; for your own **direct fixes** in 2b, still verify locally before pushing — there's no ralphex Verify step there.)
 
