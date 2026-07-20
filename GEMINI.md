@@ -43,6 +43,7 @@ This file preserves conversation context and orchestrator state across sessions.
 | `nnue-trainer-c54.1` | CI: Configure initial GitHub Actions workflow | — | Completed | Pushed JDK 25 Maven build |
 | `nnue-trainer-c54.2` | CI: Add Checkstyle / Spotless checks | — | open | P2 task |
 | `nnue-trainer-c54.3` | CI: Add code coverage gates | — | open | P3 task |
+| `nnue-trainer-9sb` | Docs: Create and fill README.md | — | open | P2 task |
 
 *(Detailed task hierarchy is tracked inside `bd`; run `bd list` to view full backlog).*
 
