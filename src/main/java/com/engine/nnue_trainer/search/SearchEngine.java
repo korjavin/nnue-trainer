@@ -73,17 +73,20 @@ public class SearchEngine {
 
   /** Terminal check: if either player has lost their base. */
   protected boolean isTerminal(Board board) {
+    boolean hasBases = false;
     boolean player1Base = false;
     boolean player2Base = false;
     for (int r = 0; r < board.rows; r++) {
       for (int c = 0; c < board.cols; c++) {
         Cell cell = board.getCell(r, c);
         if (cell != null && cell.kind == CellKind.BASE) {
+          hasBases = true;
           if (cell.owner == 1) player1Base = true;
           if (cell.owner == 2) player2Base = true;
         }
       }
     }
+    if (!hasBases) return false;
     return !player1Base || !player2Base;
   }
 
