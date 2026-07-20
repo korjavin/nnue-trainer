@@ -66,9 +66,31 @@ public class GameLoopHandler {
       JsonNode rowNode = boardNode.get(r);
       for (int c = 0; c < cols; c++) {
         JsonNode cellNode = rowNode.get(c);
-        int owner = cellNode.get("owner").asInt();
-        String kindStr = cellNode.get("kind").asText().toUpperCase();
-        CellKind kind = CellKind.valueOf(kindStr);
+
+        JsonNode ownerNode = cellNode.has("owner") ? cellNode.get("owner") : cellNode.get("Owner");
+        JsonNode kindNode = cellNode.has("kind") ? cellNode.get("kind") : cellNode.get("Kind");
+
+        int owner = ownerNode != null ? ownerNode.asInt() : 0;
+        CellKind kind = CellKind.EMPTY;
+
+        if (kindNode != null) {
+          String kindStr = kindNode.asText().toUpperCase();
+          try {
+            kind = CellKind.valueOf(kindStr);
+          } catch (IllegalArgumentException e) {
+            try {
+              int val = Integer.parseInt(kindStr);
+              for (CellKind k : CellKind.values()) {
+                if (k.value == val) {
+                  kind = k;
+                  break;
+                }
+              }
+            } catch (NumberFormatException nfe) {
+              // Ignore
+            }
+          }
+        }
         board.setCell(r, c, new Cell(owner, kind));
       }
     }

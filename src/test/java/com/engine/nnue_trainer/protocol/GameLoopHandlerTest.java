@@ -38,9 +38,9 @@ public class GameLoopHandlerTest {
             + "  \"neutralUsed\":[false,false],"
             + "  \"bases\":[{\"row\":0,\"col\":0},{\"row\":2,\"col\":2}],"
             + "  \"board\":["
-            + "    [{\"owner\":1,\"kind\":\"base\"},{\"owner\":0,\"kind\":\"empty\"},{\"owner\":0,\"kind\":\"empty\"}],"
-            + "    [{\"owner\":0,\"kind\":\"empty\"},{\"owner\":0,\"kind\":\"empty\"},{\"owner\":0,\"kind\":\"empty\"}],"
-            + "    [{\"owner\":0,\"kind\":\"empty\"},{\"owner\":0,\"kind\":\"empty\"},{\"owner\":2,\"kind\":\"base\"}]"
+            + "    [{\"Owner\":1,\"Kind\":2},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":2,\"Kind\":2}]"
             + "  ]"
             + "}"
             + "}";
