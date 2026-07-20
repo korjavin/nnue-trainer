@@ -1,7 +1,9 @@
 package com.engine.nnue_trainer.protocol;
 
+import com.engine.nnue_trainer.protocol.messages.AcceptChallengeMessage;
 import com.engine.nnue_trainer.protocol.messages.BaseMessage;
 import com.engine.nnue_trainer.protocol.messages.BotWantedMessage;
+import com.engine.nnue_trainer.protocol.messages.ChallengeReceivedMessage;
 import com.engine.nnue_trainer.protocol.messages.JoinLobbyMessage;
 import com.engine.nnue_trainer.protocol.messages.WelcomeMessage;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -24,6 +26,8 @@ public class HandshakeHandler {
         handleWelcome((WelcomeMessage) message);
       } else if (message instanceof BotWantedMessage) {
         handleBotWanted((BotWantedMessage) message);
+      } else if (message instanceof ChallengeReceivedMessage) {
+        handleChallengeReceived((ChallengeReceivedMessage) message);
       }
     } catch (JsonProcessingException e) {
       // Log error or ignore unknown messages
@@ -42,6 +46,23 @@ public class HandshakeHandler {
       messageSender.send(jsonResponse);
     } catch (JsonProcessingException e) {
       System.err.println("Error serializing join_lobby message: " + e.getMessage());
+    }
+  }
+
+  private void handleChallengeReceived(ChallengeReceivedMessage challengeMessage) {
+    System.out.println(
+        "Received challenge from: "
+            + challengeMessage.getFromUsername()
+            + " (Challenge ID: "
+            + challengeMessage.getChallengeId()
+            + ")");
+    AcceptChallengeMessage acceptMessage =
+        new AcceptChallengeMessage(challengeMessage.getChallengeId());
+    try {
+      String jsonResponse = objectMapper.writeValueAsString(acceptMessage);
+      messageSender.send(jsonResponse);
+    } catch (JsonProcessingException e) {
+      System.err.println("Error serializing accept_challenge message: " + e.getMessage());
     }
   }
 }

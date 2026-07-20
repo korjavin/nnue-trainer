@@ -52,6 +52,28 @@ public class HandshakeHandlerTest {
   }
 
   @Test
+  public void testHandleUsersUpdateMessage() {
+    String usersUpdateJson = "{\"type\":\"users_update\",\"users\":[]}";
+    handshakeHandler.handleMessage(usersUpdateJson);
+
+    verify(messageSender, never()).send(anyString());
+  }
+
+  @Test
+  public void testHandleChallengeReceived() {
+    String challengeJson =
+        "{\"type\":\"challenge_received\",\"challengeId\":\"chall-123\",\"fromUsername\":\"challenger\"}";
+    handshakeHandler.handleMessage(challengeJson);
+
+    ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+    verify(messageSender, times(1)).send(messageCaptor.capture());
+
+    String sent = messageCaptor.getValue();
+    assert (sent.contains("\"type\":\"accept_challenge\""));
+    assert (sent.contains("\"challengeId\":\"chall-123\""));
+  }
+
+  @Test
   public void testHandleInvalidJson() {
     String invalidJson = "invalid json";
     handshakeHandler.handleMessage(invalidJson);
