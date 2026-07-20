@@ -38,6 +38,10 @@ This file preserves conversation context and orchestrator state across sessions.
 | **nnue-trainer-2mt** | Alpha-Beta Search Engine | — | open | Epic (P2) |
 | **nnue-trainer-ntd** | Training Pipeline | — | open | Epic (P2) |
 | **nnue-trainer-raz** | Tournament & Performance Verification | — | open | Epic (P2) |
+| **nnue-trainer-c54** | Continuous Integration & Quality Gates | — | open | Epic (P1) |
+| `nnue-trainer-c54.1` | CI: Configure initial GitHub Actions workflow | — | Completed | Pushed JDK 25 Maven build |
+| `nnue-trainer-c54.2` | CI: Add Checkstyle / Spotless checks | — | open | P2 task |
+| `nnue-trainer-c54.3` | CI: Add code coverage gates | — | open | P3 task |
 
 *(Detailed task hierarchy is tracked inside `bd`; run `bd list` to view full backlog).*
 
