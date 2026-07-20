@@ -16,6 +16,7 @@ This file preserves conversation context and orchestrator state across sessions.
        - *Fail-Fast*: If Jules goes down the wrong path or gets stuck, abort and restart/redelegate immediately instead of fixing it.
        - *Feedback Loop*: Comment directly on the GitHub PR to request changes/fixes; Jules listens to PR comments and updates the code automatically.
   4. Review and merge PRs (plain merge commits only), close beads, sync Dolt.
+     - **Watch for workarounds**: Audit PR diffs to ensure Jules is not bypassing test failures or compilation bugs by changing build files, build tool settings, or disabling tests. Request clean code fixes via PR comments.
   5. Report status table.
 
 ## 📋 Status Table
