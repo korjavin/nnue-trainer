@@ -1,0 +1,70 @@
+# Docker Compose Template with Traefik Support
+# This template includes Traefik labels for automatic HTTPS and reverse proxy
+#
+# Required environment variables:
+# - HOSTNAME: Your domain name (e.g., example.com)
+# - NETWORK_NAME: Traefik network name (default: traefik_network)
+#
+# To use: Copy this template and customize for your project
+
+version: "3.8"
+
+services:
+  # Main application service
+  app:
+    # Image will be automatically updated by GitHub Actions
+    image: ghcr.io/OWNER/REPO:latest
+    container_name: app-name
+    networks:
+      - app_network
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      # Tell Traefik which network to use for routing (must match the network name below)
+      - "traefik.docker.network=${TRAEFIK_NETWORK_NAME:-traefik_default}"
+
+      # HTTP router configuration
+      - "traefik.http.routers.app.rule=Host(`${HOSTNAME}`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls.certresolver=myresolver"
+
+      # Service configuration (specify backend port)
+      - "traefik.http.services.app.loadbalancer.server.port=8080"
+
+      # Optional: WebSocket support (uncomment if needed)
+      # - "traefik.http.middlewares.app-ws.headers.customrequestheaders.Connection=upgrade"
+      # - "traefik.http.middlewares.app-ws.headers.customrequestheaders.Upgrade=websocket"
+      # - "traefik.http.routers.app.middlewares=app-ws"
+
+    # Persistent data
+    volumes:
+      - ./data:/app/data
+
+    # Environment variables (customize for your app)
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+
+    restart: unless-stopped
+
+  # Example: Add more services if needed (database, cache, etc.)
+  # database:
+  #   image: postgres:16-alpine
+  #   container_name: app-database
+  #   networks:
+  #     - app_network
+  #   environment:
+  #     - POSTGRES_DB=${DB_NAME}
+  #     - POSTGRES_USER=${DB_USER}
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+  #   volumes:
+  #     - db-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+networks:
+  app_network:
+    external: true
+    name: ${TRAEFIK_NETWORK_NAME:-traefik_default}
+
+# volumes:
+#   db-data:

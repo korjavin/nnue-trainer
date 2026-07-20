@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  {{PROJECT_NAME}}:
+    image: ghcr.io/{{GH_OWNER}}/{{PROJECT_NAME}}:latest
+    container_name: {{PROJECT_NAME}}
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{PROJECT_NAME}}.rule=Host(`${HOSTNAME}`)"
+      - "traefik.http.routers.{{PROJECT_NAME}}.entrypoints=websecure"
+      - "traefik.http.routers.{{PROJECT_NAME}}.tls.certresolver=myresolver"
+      - "traefik.http.services.{{PROJECT_NAME}}.loadbalancer.server.port=8080"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - DB_PATH=${DB_PATH:-/app/data/{{PROJECT_NAME}}.db}
+      - SERVER_ADDR=${SERVER_ADDR:-:8080}
+
+{{#if LITESTREAM}}
+  litestream:
+    image: litestream/litestream:latest
+    container_name: {{PROJECT_NAME}}-litestream
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Auto-restore: attempt to restore from R2 before starting replication
+        # If no backup exists, this will fail gracefully and start fresh
+        if [ ! -f "${DB_PATH:-/app/data/{{PROJECT_NAME}}.db}" ]; then
+          echo "Database not found, attempting restore from R2..."
+          litestream restore -if-replica-exists -config /tmp/litestream.yml "${DB_PATH:-/app/data/{{PROJECT_NAME}}.db}" || echo "No backup found, starting fresh"
+        fi
+        
+        cat <<EOF > /tmp/litestream.yml
+        dbs:
+          - path: ${DB_PATH:-/app/data/{{PROJECT_NAME}}.db}
+            replicas:
+              - type: s3
+                bucket: ${LITESTREAM_R2_BUCKET_NAME}
+                path: {{PROJECT_NAME}}
+                endpoint: https://${LITESTREAM_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+                sync-interval: 1h
+                snapshot-interval: 24h
+                retention: 168h
+        EOF
+        exec litestream replicate -config /tmp/litestream.yml
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - {{PROJECT_NAME}}
+    environment:
+      - AWS_ACCESS_KEY_ID=${LITESTREAM_R2_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${LITESTREAM_R2_SECRET_ACCESS_KEY}
+{{/if}}
+
+networks:
+  traefik_network:
+    name: ${NETWORK_NAME:-traefik_network}
+    external: true

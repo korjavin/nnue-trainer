@@ -1,0 +1,60 @@
+# Git files
+.git
+.gitignore
+
+# Node modules (will be installed during build)
+frontend/node_modules
+node_modules
+
+# Build artifacts
+frontend/dist
+frontend/build
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+**/*_test.go
+test
+tests
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files (should be provided via container env)
+.env
+.env.*
+!.env.example
+
+# Documentation (except README)
+*.md
+!README.md
+
+# CI/CD
+.github
+.claude
+
+# Database files (should be volume-mounted)
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+bin/

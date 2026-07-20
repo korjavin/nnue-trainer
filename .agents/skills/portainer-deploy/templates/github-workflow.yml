@@ -1,0 +1,76 @@
+# GitHub Actions Workflow Template for Portainer Deploy
+# This template supports:
+# - Building and pushing to ghcr.io
+# - Updating docker-compose.yml with new image tag
+# - Triggering Portainer webhook for auto-deployment
+
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main  # Change to 'master' if needed
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+
+      - name: Update and commit docker-compose.yml
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git checkout -B deploy
+
+          # Update image tags in docker-compose.yml
+          # Pattern: Replace any tag after the image name with the commit SHA
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" docker-compose.yml
+
+          # If you have additional compose files, add them here:
+          # sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" other-compose.yml
+
+          git add docker-compose.yml
+          # Add other compose files if needed:
+          # git add other-compose.yml
+
+          git commit -m "ci: Update image tag to ${{ github.sha }}" || echo "No changes to commit"
+          git push origin deploy --force
+
+      - name: Trigger Portainer Redeploy Webhook
+        uses: distributhor/workflow-webhook@v3
+        with:
+          webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK }}
+          webhook_secret: "trigger"
+
+      # Add additional webhook steps if you have multiple Portainer stacks:
+      # - name: Trigger Portainer Redeploy Webhook (Stack 2)
+      #   uses: distributhor/workflow-webhook@v3
+      #   with:
+      #     webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK_2 }}
+      #     webhook_secret: "trigger"
