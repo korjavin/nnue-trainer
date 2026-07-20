@@ -7,42 +7,32 @@ The previous Go-based approach computed 26 handcrafted features per player (such
 
 Instead of hand-designing features, we will feed the entire board state directly into the NNUE model, allowing the first hidden layer to learn spatial, connectivity, and tactical patterns automatically.
 
-## 2. Input Representation & Encoding
-We represent each cell of the grid as a one-hot vector of its state.
+## 2. Input Representation & Encoding (1v1 Perspective Optimization)
+To maximize training efficiency and reduce parameter space, the network is restricted to **1v1 play** and uses a **perspective-based mapping** (evaluating the board relative to the active player whose turn it is to move):
 
-### State Mapping per Cell
-A cell on the board can have one of **14 possible states**:
-1. `0`: Empty
-2. `1`: Normal piece owned by Player 1
-3. `2`: Normal piece owned by Player 2
-4. `3`: Normal piece owned by Player 3
-5. `4`: Normal piece owned by Player 4
-6. `5`: Base owned by Player 1
-7. `6`: Base owned by Player 2
-8. `7`: Base owned by Player 3
-9. `8`: Base owned by Player 4
-10. `9`: Fortified piece owned by Player 1
-11. `10`: Fortified piece owned by Player 2
-12. `11`: Fortified piece owned by Player 3
-13. `12`: Fortified piece owned by Player 4
-14. `13`: Neutral cell
+- **"Us" (active player)** is mapped to Player index `1` in the vector encoding.
+- **"Them" (opponent)** is mapped to Player index `2` in the vector encoding.
+
+### Cell State Mapping
+Since bases at `(0,0)` and `(11,11)` are static and guaranteed to be alive during all active search evaluations, we omit "base" states from the cell encoding entirely. Each cell on the board has one of **6 possible states**:
+1. `0`: Empty (and static bases)
+2. `1`: Normal piece owned by Us (active player)
+3. `2`: Normal piece owned by Them (opponent)
+4. `3`: Fortified piece owned by Us (active player)
+5. `4`: Fortified piece owned by Them (opponent)
+6. `5`: Neutral cell
 
 ### Feature Vector Dimension
-For a default $N \times M$ grid, the input vector size is:
-$$\text{Input Size} = (N \times M) \times 14$$
+For the fixed 12x12 board size:
+$$\text{Input Size} = 144 \text{ cells} \times 6 \text{ states} = 864 \text{ features}$$
 
-For the default 12x12 board size:
-$$\text{Input Size} = 144 \times 14 = 2016 \text{ features}$$
-
-This size (2,016 inputs) is extremely small compared to traditional chess NNUEs (which typically have 40,000+ features). It is highly performant and can be evaluated on a CPU in microseconds.
+This provides a **57% reduction** in network input size and parameter space compared to the general 14-state model, dramatically speeding up PyTorch training iterations and minimax leaf node forward evaluations.
 
 ## 3. NNUE Model Architecture Adjustments
-- **Input Layer**: 2016 float values (instead of 104).
-- **Hidden Layer**: 256 or 512 nodes (Clipped ReLU activation).
+- **Input Layer**: 864 float values (instead of 2016).
+- **Hidden Layer**: 256 nodes (Clipped ReLU activation).
 - **Output Layer**: 1 scalar evaluation score.
 
 ## 4. Execution Plan
-We will file the following issues in the Beads database:
-1. **Bead 1**: Update NNUE input dimensions and forward pass to support the 2016-dimensional whole-board feature vector.
-2. **Bead 2**: Implement the whole-board feature mapper in Java (`com.engine.nnue_trainer.nnue`).
-3. **Bead 3**: Adapt the self-play simulation data generator to produce dataset records containing full board states instead of handcrafted features.
+1. **Bead 1**: Update NNUEModel and BoardFeatureMapper to support 864 features using perspective-based mapping and 6 cell states.
+2. **Bead 2**: Adapt the self-play simulation data generator to generate dataset records matching the 864-feature perspective-based format.
