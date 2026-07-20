@@ -20,5 +20,8 @@ jobs:
         distribution: 'temurin'
         cache: maven
         
+    - name: Check Formatting with Spotless
+      run: ./mvnw spotless:check --file pom.xml
+
     - name: Build and Test with Maven
       run: ./mvnw -B clean test --file pom.xml
