@@ -262,10 +262,11 @@ prompt: |
      to understand context, not just the diff. Focus on what the code actually
      does vs what the PR description claims.
 
-  2. **Run validation** - from the worktree directory:
-     - Run Maven build and tests: `mvn clean test`
+  2. **Run validation & codex review** - from the worktree directory:
+     - Run Maven build and tests: `./mvnw clean test`
+     - Run local Codex review CLI: `codex review --base master` (or against origin/master)
      - Verify compiler warnings or run checkstyle/spotless if configured in pom.xml.
-     Record all failures.
+     Record all failures and codex review findings.
 
   3. **Architecture analysis** - check for:
      - Over-engineering (unnecessary abstractions, premature generalization)
