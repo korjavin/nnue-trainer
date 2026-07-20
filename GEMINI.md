@@ -14,6 +14,7 @@ This file preserves conversation context and orchestrator state across sessions.
        - *Note on Jules*: Cheap/free (100 runs/day), parallelizable (up to 10 concurrent), but slow and junior-level quality.
        - *Double-Attempt*: For complex tasks, start two parallel Jules sessions and pick the best solution.
        - *Fail-Fast*: If Jules goes down the wrong path or gets stuck, abort and restart/redelegate immediately instead of fixing it.
+       - *Feedback Loop*: Comment directly on the GitHub PR to request changes/fixes; Jules listens to PR comments and updates the code automatically.
   4. Review and merge PRs (plain merge commits only), close beads, sync Dolt.
   5. Report status table.
 
