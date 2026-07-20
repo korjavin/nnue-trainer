@@ -49,9 +49,11 @@ For P0/P1 tasks or blocking bugs:
 
 ### 2. Jules (For Parallel/Non-Blocking Tasks)
 For tasks that can be done in parallel and do not block execution:
-- Author a plan file under `docs/plans/` describing the work.
-- Use the `/jules-task-from-plan` skill to commit the plan to master, push (if a remote is configured), and run `jules new "Read and implement <path>"` to spin up a Jules asynchronous coding task.
-- If the repository does not have a git remote configured, prompt the user to add one or skip the push step if jules supports local upload, but prioritize configuring the GitHub remote so Jules can access it.
+- **Jules Characteristics**: Jules is cheap/free (up to 100 sessions/day) and runs fully isolated in parallel (up to 10 concurrent runs), but it is slow and writes lower-quality (junior-level) code.
+- **Appropriate Tasks**: Use Jules for simple, isolated, or boilerplate tasks. Do not use Jules for highly critical architectural paths unless as a preliminary draft.
+- **Double-Attempt Strategy**: For complex or tricky tasks, you may launch **two parallel Jules sessions** for the same plan (e.g. using `jules new --parallel 2 "Read and implement <path>"` or creating two separate sessions) and compare the results to choose the best implementation.
+- **Fail-Fast Policy**: If a Jules run is clearly struggling, went down the wrong path, or is unable to polish/finish, do not waste time trying to fix it. Terminate/discard the attempt and start a new one (or delegate to a local subagent if the task is too complex for Jules).
+- **Execution**: Author a plan file under `docs/plans/` describing the work. Use the `/jules-task-from-plan` skill to commit the plan, push, and run `jules new` to spin up the task. Priority should be given to ensuring a git remote `origin` is configured so Jules can fetch it.
 
 ### Merge-disjointness (the scheduling rule)
 Before firing, decide parallel vs serial by **file ownership**:
