@@ -1,8 +1,14 @@
 package com.engine.nnue_trainer.search;
 
+import com.engine.nnue_trainer.board.Action;
+import com.engine.nnue_trainer.board.BaseConnectionSearch;
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
+import com.engine.nnue_trainer.board.MoveAction;
+import com.engine.nnue_trainer.board.MoveGenerator;
+import com.engine.nnue_trainer.board.PlaceNeutralsAction;
+import com.engine.nnue_trainer.board.Pos;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,44 +68,136 @@ public class SearchEngine {
   }
 
   protected int getOpponent(int player) {
-    return player == 1 ? 2 : 1;
+    return 3 - player;
   }
 
-  /** Stub for terminal check. */
+  /** Terminal check: if either player has lost their base. */
   protected boolean isTerminal(Board board) {
-    return false;
+    boolean player1Base = false;
+    boolean player2Base = false;
+    for (int r = 0; r < board.rows; r++) {
+      for (int c = 0; c < board.cols; c++) {
+        Cell cell = board.getCell(r, c);
+        if (cell != null && cell.kind == CellKind.BASE) {
+          if (cell.owner == 1) player1Base = true;
+          if (cell.owner == 2) player2Base = true;
+        }
+      }
+    }
+    return !player1Base || !player2Base;
   }
 
-  /**
-   * Stub evaluation function: simple count of pieces owned by the player. We evaluate from the
-   * perspective of the original maximizing player.
-   */
+  /** Evaluation function: simple count of pieces owned by the player, penalized if base is lost. */
   protected float evaluate(Board board, int player, boolean maximizingPlayer) {
     int originalPlayer = maximizingPlayer ? player : getOpponent(player);
     int opponent = getOpponent(originalPlayer);
 
+    boolean myBaseAlive = false;
+    boolean oppBaseAlive = false;
     int myPieces = 0;
     int oppPieces = 0;
 
     for (int r = 0; r < board.rows; r++) {
       for (int c = 0; c < board.cols; c++) {
         Cell cell = board.getCell(r, c);
-        if (cell != null && cell.kind != CellKind.EMPTY && cell.kind != CellKind.NEUTRAL) {
-          if (cell.owner == originalPlayer) {
-            myPieces++;
-          } else if (cell.owner == opponent) {
-            oppPieces++;
+        if (cell != null) {
+          if (cell.kind == CellKind.BASE) {
+            if (cell.owner == originalPlayer) myBaseAlive = true;
+            else if (cell.owner == opponent) oppBaseAlive = true;
+          }
+          if (cell.kind != CellKind.EMPTY && cell.kind != CellKind.NEUTRAL) {
+            if (cell.owner == originalPlayer) {
+              myPieces++;
+            } else if (cell.owner == opponent) {
+              oppPieces++;
+            }
           }
         }
       }
     }
 
+    if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
+    if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+
     return myPieces - oppPieces;
   }
 
-  /** Stub for move generation. In a real game, this would generate all legal next board states. */
+  public static Board applyAction(Board board, int player, Action action) {
+    Board nextBoard = new Board(board.rows, board.cols);
+    for (int r = 0; r < board.rows; r++) {
+      for (int c = 0; c < board.cols; c++) {
+        Cell cell = board.getCell(r, c);
+        if (cell != null) {
+          nextBoard.setCell(r, c, new Cell(cell.owner, cell.kind));
+        }
+      }
+    }
+
+    if (action instanceof MoveAction) {
+      Pos target = ((MoveAction) action).target;
+      nextBoard.setCell(target.row, target.col, new Cell(player, CellKind.NORMAL));
+    } else if (action instanceof PlaceNeutralsAction) {
+      Pos pos1 = ((PlaceNeutralsAction) action).pos1;
+      Pos pos2 = ((PlaceNeutralsAction) action).pos2;
+      nextBoard.setCell(pos1.row, pos1.col, new Cell(0, CellKind.NEUTRAL));
+      nextBoard.setCell(pos2.row, pos2.col, new Cell(0, CellKind.NEUTRAL));
+    }
+
+    // Clean up disconnected cells for all players
+    for (int p = 1; p <= 2; p++) {
+      boolean[][] connected = BaseConnectionSearch.connected(p, nextBoard);
+      for (int r = 0; r < nextBoard.rows; r++) {
+        for (int c = 0; c < nextBoard.cols; c++) {
+          Cell cell = nextBoard.getCell(r, c);
+          if (cell != null
+              && cell.owner == p
+              && cell.kind != CellKind.EMPTY
+              && cell.kind != CellKind.NEUTRAL) {
+            if (!connected[r][c]) {
+              nextBoard.setCell(r, c, new Cell(0, CellKind.EMPTY));
+            }
+          }
+        }
+      }
+    }
+
+    return nextBoard;
+  }
+
   protected List<Board> generateNextBoards(Board board, int player, boolean maximizingPlayer) {
-    // Return empty list by default for stub
-    return new ArrayList<>();
+    List<Action> actions = MoveGenerator.getLegalActions(player, board, false);
+    List<Board> boards = new ArrayList<>();
+    for (Action action : actions) {
+      boards.add(applyAction(board, player, action));
+    }
+    return boards;
+  }
+
+  public static Action findBestAction(Board board, int player, int depth, boolean canPlaceNeutral) {
+    List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
+    if (actions.isEmpty()) {
+      return null;
+    }
+
+    SearchEngine engine = new SearchEngine();
+    Action bestAction = null;
+    float bestValue = Float.NEGATIVE_INFINITY;
+
+    for (Action action : actions) {
+      Board child = applyAction(board, player, action);
+      float value =
+          engine.alphaBeta(
+              child,
+              depth - 1,
+              Float.NEGATIVE_INFINITY,
+              Float.POSITIVE_INFINITY,
+              3 - player,
+              false);
+      if (value > bestValue) {
+        bestValue = value;
+        bestAction = action;
+      }
+    }
+    return bestAction;
   }
 }

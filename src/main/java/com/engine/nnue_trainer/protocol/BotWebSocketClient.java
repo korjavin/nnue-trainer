@@ -7,12 +7,18 @@ import org.java_websocket.handshake.ServerHandshake;
 
 public class BotWebSocketClient extends WebSocketClient {
 
+  private final HandshakeHandler handshakeHandler;
+  private final GameLoopHandler gameLoopHandler;
+
   public BotWebSocketClient(URI serverUri) {
     super(serverUri);
+    MessageSender sender = this::send;
+    this.handshakeHandler = new HandshakeHandler(sender);
+    this.gameLoopHandler = new GameLoopHandler(sender);
   }
 
   public BotWebSocketClient() throws URISyntaxException {
-    super(new URI("ws://localhost:8080/ws"));
+    this(new URI("ws://localhost:8080/ws"));
   }
 
   @Override
@@ -23,6 +29,8 @@ public class BotWebSocketClient extends WebSocketClient {
   @Override
   public void onMessage(String message) {
     System.out.println("Received message: " + message);
+    handshakeHandler.handleMessage(message);
+    gameLoopHandler.handleMessage(message);
   }
 
   @Override

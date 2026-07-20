@@ -1,0 +1,129 @@
+package com.engine.nnue_trainer.protocol;
+
+import com.engine.nnue_trainer.board.Action;
+import com.engine.nnue_trainer.board.Board;
+import com.engine.nnue_trainer.board.Cell;
+import com.engine.nnue_trainer.board.CellKind;
+import com.engine.nnue_trainer.board.MoveAction;
+import com.engine.nnue_trainer.board.PlaceNeutralsAction;
+import com.engine.nnue_trainer.search.SearchEngine;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+public class GameLoopHandler {
+  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final MessageSender messageSender;
+  private int myPlayerIndex = -1;
+  private String currentGameId = "";
+
+  public GameLoopHandler(MessageSender messageSender) {
+    this.messageSender = messageSender;
+  }
+
+  public void handleMessage(String jsonMessage) {
+    try {
+      JsonNode node = objectMapper.readTree(jsonMessage);
+      if (!node.has("type")) return;
+      String type = node.get("type").asText();
+
+      if ("multiplayer_game_start".equals(type)) {
+        this.currentGameId = node.get("gameId").asText();
+        this.myPlayerIndex = node.get("yourPlayer").asInt();
+        System.out.println("Game started: gameId=" + currentGameId + ", myPlayer=" + myPlayerIndex);
+      } else if ("move_made".equals(type)
+          || "neutrals_placed".equals(type)
+          || "turn_change".equals(type)) {
+        if (node.has("snapshot")) {
+          JsonNode snapshot = node.get("snapshot");
+          int currentPlayer = snapshot.get("currentPlayer").asInt();
+          boolean gameOver = snapshot.get("gameOver").asBoolean();
+
+          if (!gameOver && currentPlayer == myPlayerIndex) {
+            Board board = parseBoardFromSnapshot(snapshot);
+            boolean canPlaceNeutral =
+                !snapshot.get("neutralUsed").get(myPlayerIndex - 1).asBoolean();
+            makeMove(board, canPlaceNeutral);
+          }
+        }
+      } else if ("game_end".equals(type)) {
+        System.out.println("Game ended. Winner: player " + node.get("winner").asInt());
+        this.currentGameId = "";
+        this.myPlayerIndex = -1;
+      }
+    } catch (Exception e) {
+      System.err.println("Error in GameLoopHandler: " + e.getMessage());
+      e.printStackTrace();
+    }
+  }
+
+  private Board parseBoardFromSnapshot(JsonNode snapshot) {
+    int rows = snapshot.get("rows").asInt();
+    int cols = snapshot.get("cols").asInt();
+    Board board = new Board(rows, cols);
+    JsonNode boardNode = snapshot.get("board");
+    for (int r = 0; r < rows; r++) {
+      JsonNode rowNode = boardNode.get(r);
+      for (int c = 0; c < cols; c++) {
+        JsonNode cellNode = rowNode.get(c);
+        int owner = cellNode.get("owner").asInt();
+        String kindStr = cellNode.get("kind").asText().toUpperCase();
+        CellKind kind = CellKind.valueOf(kindStr);
+        board.setCell(r, c, new Cell(owner, kind));
+      }
+    }
+    return board;
+  }
+
+  private void makeMove(Board board, boolean canPlaceNeutral) {
+    Action bestAction = SearchEngine.findBestAction(board, myPlayerIndex, 3, canPlaceNeutral);
+    if (bestAction == null) {
+      System.out.println("No legal actions available.");
+      return;
+    }
+
+    try {
+      ObjectNode response = objectMapper.createObjectNode();
+      response.put("gameId", currentGameId);
+
+      if (bestAction instanceof MoveAction) {
+        MoveAction move = (MoveAction) bestAction;
+        response.put("type", "move");
+        response.put("row", move.target.row);
+        response.put("col", move.target.col);
+        System.out.println("Playing Move: (" + move.target.row + ", " + move.target.col + ")");
+      } else if (bestAction instanceof PlaceNeutralsAction) {
+        PlaceNeutralsAction place = (PlaceNeutralsAction) bestAction;
+        response.put("type", "neutrals");
+        JsonNode cellsNode =
+            objectMapper
+                .createArrayNode()
+                .add(
+                    objectMapper
+                        .createObjectNode()
+                        .put("row", place.pos1.row)
+                        .put("col", place.pos1.col))
+                .add(
+                    objectMapper
+                        .createObjectNode()
+                        .put("row", place.pos2.row)
+                        .put("col", place.pos2.col));
+        response.set("cells", cellsNode);
+        System.out.println(
+            "Placing Neutrals: ("
+                + place.pos1.row
+                + ", "
+                + place.pos1.col
+                + "), ("
+                + place.pos2.row
+                + ", "
+                + place.pos2.col
+                + ")");
+      }
+
+      messageSender.send(objectMapper.writeValueAsString(response));
+    } catch (Exception e) {
+      System.err.println("Failed to send action: " + e.getMessage());
+    }
+  }
+}
