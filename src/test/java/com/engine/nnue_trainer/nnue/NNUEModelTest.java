@@ -10,7 +10,7 @@ public class NNUEModelTest {
   @Test
   public void testForwardWithDefaultWeights() {
     NNUEModel model = NNUEModel.createDefault();
-    float[] input = new float[104];
+    float[] input = new float[2016];
 
     // Input of 0s, output should be outputBias
     float output = model.forward(input);
@@ -19,7 +19,7 @@ public class NNUEModelTest {
 
   @Test
   public void testForwardWithCustomWeights() {
-    int inputSize = 104;
+    int inputSize = 2016;
     int hiddenSize = 256;
     float[][] hiddenWeights = new float[hiddenSize][inputSize];
     float[] hiddenBiases = new float[hiddenSize];
@@ -33,7 +33,7 @@ public class NNUEModelTest {
     }
 
     NNUEModel model = new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, outputBias);
-    float[] input = new float[104];
+    float[] input = new float[2016];
 
     // Output should be:
     // sum(hidden_layer) = 256 nodes, each with bias 1.0 -> 1.0
@@ -45,7 +45,7 @@ public class NNUEModelTest {
 
   @Test
   public void testForwardWithClippedRelu() {
-    int inputSize = 104;
+    int inputSize = 2016;
     int hiddenSize = 256;
     float[][] hiddenWeights = new float[hiddenSize][inputSize];
     float[] hiddenBiases = new float[hiddenSize];
@@ -61,7 +61,7 @@ public class NNUEModelTest {
     outputWeights[1] = 1.0f;
 
     NNUEModel model = new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, outputBias);
-    float[] input = new float[104];
+    float[] input = new float[2016];
 
     // Node 0 should be clipped to 127.0
     // Node 1 should be clipped to 0.0
