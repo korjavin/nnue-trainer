@@ -15,7 +15,7 @@ public class NNUEModel {
   }
 
   public static NNUEModel createDefault() {
-    int inputSize = 104;
+    int inputSize = 2016;
     int hiddenSize = 256;
     float[][] hiddenWeights = new float[hiddenSize][inputSize];
     float[] hiddenBiases = new float[hiddenSize];
@@ -26,8 +26,8 @@ public class NNUEModel {
   }
 
   public float forward(float[] input) {
-    if (input.length != 104) {
-      throw new IllegalArgumentException("Input array must have length 104");
+    if (input.length != 2016) {
+      throw new IllegalArgumentException("Input array must have length 2016");
     }
 
     int hiddenSize = hiddenWeights.length;
@@ -35,7 +35,7 @@ public class NNUEModel {
 
     for (int i = 0; i < hiddenSize; i++) {
       float sum = hiddenBiases[i];
-      for (int j = 0; j < 104; j++) {
+      for (int j = 0; j < 2016; j++) {
         sum += hiddenWeights[i][j] * input[j];
       }
       // Clipped ReLU

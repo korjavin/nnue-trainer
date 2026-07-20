@@ -9,10 +9,26 @@ import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.MoveGenerator;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.board.Pos;
+import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import java.util.ArrayList;
 import java.util.List;
 
 public class SearchEngine {
+
+  private NNUEModel nnueModel;
+
+  public SearchEngine() {
+    this.nnueModel = null;
+  }
+
+  public SearchEngine(NNUEModel nnueModel) {
+    this.nnueModel = nnueModel;
+  }
+
+  public void setNnueModel(NNUEModel nnueModel) {
+    this.nnueModel = nnueModel;
+  }
 
   /**
    * Executes alpha-beta minimax search.
@@ -124,6 +140,11 @@ public class SearchEngine {
     if (hasBases) {
       if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
       if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+    }
+
+    if (nnueModel != null) {
+      float[] features = BoardFeatureMapper.map(board);
+      return nnueModel.forward(features);
     }
 
     return myPieces - oppPieces;
