@@ -94,6 +94,7 @@ public class SearchEngine {
 
     boolean myBaseAlive = false;
     boolean oppBaseAlive = false;
+    boolean hasBases = false;
     int myPieces = 0;
     int oppPieces = 0;
 
@@ -102,6 +103,7 @@ public class SearchEngine {
         Cell cell = board.getCell(r, c);
         if (cell != null) {
           if (cell.kind == CellKind.BASE) {
+            hasBases = true;
             if (cell.owner == originalPlayer) myBaseAlive = true;
             else if (cell.owner == opponent) oppBaseAlive = true;
           }
@@ -116,8 +118,10 @@ public class SearchEngine {
       }
     }
 
-    if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
-    if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+    if (hasBases) {
+      if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
+      if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+    }
 
     return myPieces - oppPieces;
   }
