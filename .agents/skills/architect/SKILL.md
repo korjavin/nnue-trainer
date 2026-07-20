@@ -54,6 +54,7 @@ For tasks that can be done in parallel and do not block execution:
 - **Double-Attempt Strategy**: For complex or tricky tasks, you may launch **two parallel Jules sessions** for the same plan (e.g. using `jules new --parallel 2 "Read and implement <path>"` or creating two separate sessions) and compare the results to choose the best implementation.
 - **Fail-Fast Policy**: If a Jules run is clearly struggling, went down the wrong path, or is unable to polish/finish, do not waste time trying to fix it. Terminate/discard the attempt and start a new one (or delegate to a local subagent if the task is too complex for Jules).
 - **Execution**: Author a plan file under `docs/plans/` describing the work. Use the `/jules-task-from-plan` skill to commit the plan, push, and run `jules new` to spin up the task. Priority should be given to ensuring a git remote `origin` is configured so Jules can fetch it.
+- **PR Feedback Loop**: Jules creates Pull Requests (PRs) on GitHub. If changes or bug fixes are needed during review, do NOT make local changes or run ralphex. Instead, post comments directly on the GitHub PR (`gh pr comment <number> -b "your feedback"`). Jules listens to PR comments and will automatically iterate and update the code to resolve them.
 
 ### Merge-disjointness (the scheduling rule)
 Before firing, decide parallel vs serial by **file ownership**:
@@ -72,6 +73,7 @@ med-x.3     (shared)   —     queued behind #611
 ## Reviewing a PR (verify what matters, don't re-read everything)
 
 Trust the executor's honest flags; spot-check the invariants specific to the change:
+- **Jules Workarounds & Cheats Guard**: Junior agents like Jules might try to evade fixing code bugs by modifying setup/infrastructure (e.g. downgrading the JDK version in pom.xml, changing setup-java configurations, disabling tests, or removing validation rules). Audit the PR diff for these modifications. If found, comment on the PR constructively to redirect Jules: "Revert the change to pom.xml/workflow and address the root cause of the compile/test issue in the code instead." Guide it constructively without confusing it.
 - **The hard invariant of the feature** (e.g. purity of a pure module, "no-effect rewarded like effect", opt-in default not broken, deterministic-value-always-wins). Grep the diff for it.
 - **Repo guards the diff could trip**: migration-number contiguity, no hardcoded colors / inline `.style.`, new `window.*` in the globals allowlist with justification, MCP-coverage for new routes, embed lists for new domain modules.
 - **CI green** — watch it; do NOT ping the owner on red, diagnose and fix (a targeted commit, or send the executor back via SendMessage for anything fiddly like encoding surgery). A trivial CI-unblock (a lint nit) you can fix directly; delegate back anything you can't do cleanly by hand.
