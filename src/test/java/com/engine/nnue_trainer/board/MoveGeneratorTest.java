@@ -37,7 +37,8 @@ class MoveGeneratorTest {
 
     List<Action> actions = MoveGenerator.getLegalActions(1, board, true);
 
-    long placeNeutralsCount = actions.stream().filter(a -> a instanceof PlaceNeutralsAction).count();
+    long placeNeutralsCount =
+        actions.stream().filter(a -> a instanceof PlaceNeutralsAction).count();
     assertEquals(3, placeNeutralsCount);
 
     assertTrue(actions.contains(new PlaceNeutralsAction(new Pos(0, 0), new Pos(0, 1))));
