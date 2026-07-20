@@ -14,21 +14,10 @@ This file preserves conversation context and orchestrator state across sessions.
        - *Note on Jules*: Cheap/free (100 runs/day), parallelizable (up to 10 concurrent), but slow and junior-level quality.
        - *Double-Attempt*: For complex tasks, start two parallel Jules sessions and pick the best solution.
        - *Fail-Fast*: If Jules goes down the wrong path or gets stuck, abort and restart/redelegate immediately instead of fixing it.
+       - *Feedback Loop*: Comment directly on the GitHub PR to request changes/fixes; Jules listens to PR comments and updates the code automatically.
   4. Review and merge PRs (plain merge commits only), close beads, sync Dolt.
-  5. Report status table.
-
-## 📋 Status Table
-
-| Bead ID | Track | PR | State | Note |
-|---|---|---|---|---|
-| **nnue-trainer-8ka** | WebSocket Connection & Game Protocol | — | open | Epic (P1) |
-| **nnue-trainer-a22** | Game Board Representation & Rule Validation | — | open | Epic (P1) |
-| **nnue-trainer-a0c** | NNUE Network Representation | — | open | Epic (P1) |
-| **nnue-trainer-2mt** | Alpha-Beta Search Engine | — | open | Epic (P2) |
-| **nnue-trainer-ntd** | Training Pipeline | — | open | Epic (P2) |
-| **nnue-trainer-raz** | Tournament & Performance Verification | — | open | Epic (P2) |
-
-*(Detailed task hierarchy is tracked inside `bd`; run `bd list` to view full backlog).*
+     - **Watch for workarounds**: Audit PR diffs to ensure Jules is not bypassing test failures or compilation bugs by changing build files, build tool settings, or disabling tests. Request clean code fixes via PR comments.
+  5. Report active task and sync status.
 
 ## ⚠️ Important Rules
 - **No container recreation** without permission; always preview commands.
