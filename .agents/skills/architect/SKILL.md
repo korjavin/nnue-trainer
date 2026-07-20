@@ -73,6 +73,7 @@ med-x.3     (shared)   —     queued behind #611
 ## Reviewing a PR (verify what matters, don't re-read everything)
 
 Trust the executor's honest flags; spot-check the invariants specific to the change:
+- **Jules Workarounds & Cheats Guard**: Junior agents like Jules might try to evade fixing code bugs by modifying setup/infrastructure (e.g. downgrading the JDK version in pom.xml, changing setup-java configurations, disabling tests, or removing validation rules). Audit the PR diff for these modifications. If found, comment on the PR constructively to redirect Jules: "Revert the change to pom.xml/workflow and address the root cause of the compile/test issue in the code instead." Guide it constructively without confusing it.
 - **The hard invariant of the feature** (e.g. purity of a pure module, "no-effect rewarded like effect", opt-in default not broken, deterministic-value-always-wins). Grep the diff for it.
 - **Repo guards the diff could trip**: migration-number contiguity, no hardcoded colors / inline `.style.`, new `window.*` in the globals allowlist with justification, MCP-coverage for new routes, embed lists for new domain modules.
 - **CI green** — watch it; do NOT ping the owner on red, diagnose and fix (a targeted commit, or send the executor back via SendMessage for anything fiddly like encoding surgery). A trivial CI-unblock (a lint nit) you can fix directly; delegate back anything you can't do cleanly by hand.
