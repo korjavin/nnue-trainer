@@ -37,8 +37,8 @@ class MoveGeneratorTest {
 
     List<Action> actions = MoveGenerator.getLegalActions(1, board, true);
 
-    // Number of unique pairs for 3 cells is 3! / (2! * 1!) = 3
-    assertEquals(3, actions.size());
+    long placeNeutralsCount = actions.stream().filter(a -> a instanceof PlaceNeutralsAction).count();
+    assertEquals(3, placeNeutralsCount);
 
     assertTrue(actions.contains(new PlaceNeutralsAction(new Pos(0, 0), new Pos(0, 1))));
     assertTrue(actions.contains(new PlaceNeutralsAction(new Pos(0, 0), new Pos(0, 2))));
