@@ -15,11 +15,17 @@ This file preserves conversation context and orchestrator state across sessions.
   5. Report status table.
 
 ## 📋 Status Table
-No tasks filed yet.
 
 | Bead ID | Track | PR | State | Note |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| **nnue-trainer-8ka** | WebSocket Connection & Game Protocol | — | open | Epic (P1) |
+| **nnue-trainer-a22** | Game Board Representation & Rule Validation | — | open | Epic (P1) |
+| **nnue-trainer-a0c** | NNUE Network Representation | — | open | Epic (P1) |
+| **nnue-trainer-2mt** | Alpha-Beta Search Engine | — | open | Epic (P2) |
+| **nnue-trainer-ntd** | Training Pipeline | — | open | Epic (P2) |
+| **nnue-trainer-raz** | Tournament & Performance Verification | — | open | Epic (P2) |
+
+*(Detailed task hierarchy is tracked inside `bd`; run `bd list` to view full backlog).*
 
 ## ⚠️ Important Rules
 - **No container recreation** without permission; always preview commands.
