@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "nnue_trainer",
+  "project_id": "1fc2f334-fe57-4ba6-92fc-4c7b876c3c9f"
+}
