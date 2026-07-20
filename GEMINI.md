@@ -29,13 +29,13 @@ This file preserves conversation context and orchestrator state across sessions.
 | `nnue-trainer-8ka.3` | Protocol: Implement Handshake Handlers | `17955866970117918486` | Planning | Plan: `07-protocol-handshake.md` |
 | `nnue-trainer-8ka.4` | Protocol: Implement Game Loop Messages | `8504532035093649533` | Planning | Plan: `08-game-loop-messages.md` |
 | **nnue-trainer-a22** | Game Board Representation & Rule Validation | — | open | Epic (P1) |
-| `nnue-trainer-a22.1` | Board: Implement Coordinates System | `3849428682639415005` | In Progress | Plan: `02-board-representation.md` |
+| `nnue-trainer-a22.1` | Board: Implement Coordinates System | `3849428682639415005` | Completed | Plan: `02-board-representation.md` |
 | `nnue-trainer-a22.2` | Board: Implement Base Connection Search | `5764093050482660391` | Planning | Plan: `03-base-connection-search.md` |
 | `nnue-trainer-a22.3` | Board: Implement Move Validator | `15869792185815581223` | Planning | Plan: `04-move-validator.md` |
 | `nnue-trainer-a22.4` | Board: Implement Move Generator | `1922572738557334799` | Planning | Plan: `05-move-generator.md` |
 | **nnue-trainer-a0c** | NNUE Network Representation | — | open | Epic (P1) |
 | `nnue-trainer-a0c.1` | NNUE: Design Board Feature Mapping | `11144204111641442719` | Planning | Plan: `09-nnue-feature-mapping.md` |
-| `nnue-trainer-a0c.3` | NNUE: Implement forward pass inference | `12738943261395940269` | Planning | Plan: `10-nnue-forward-pass.md` |
+| `nnue-trainer-a0c.3` | NNUE: Implement forward pass inference | `12738943261395940269` | Completed | Plan: `10-nnue-forward-pass.md` |
 | **nnue-trainer-2mt** | Alpha-Beta Search Engine | — | open | Epic (P2) |
 | **nnue-trainer-ntd** | Training Pipeline | — | open | Epic (P2) |
 | **nnue-trainer-raz** | Tournament & Performance Verification | — | open | Epic (P2) |
