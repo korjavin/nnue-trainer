@@ -27,7 +27,7 @@ public class GameLoopHandler {
       if (!node.has("type")) return;
       String type = node.get("type").asText();
 
-      if ("multiplayer_game_start".equals(type)) {
+      if ("multiplayer_game_start".equals(type) || "game_start".equals(type)) {
         this.currentGameId = node.get("gameId").asText();
         this.myPlayerIndex = node.get("yourPlayer").asInt();
         System.out.println("Game started: gameId=" + currentGameId + ", myPlayer=" + myPlayerIndex);
