@@ -143,7 +143,7 @@ public class SearchEngine {
     }
 
     if (nnueModel != null) {
-      float[] features = BoardFeatureMapper.map(board);
+      float[] features = BoardFeatureMapper.map(board, originalPlayer);
       return nnueModel.forward(features);
     }
 
