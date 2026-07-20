@@ -145,7 +145,7 @@ public class SearchEngine {
 
     // Clean up disconnected cells for all players
     for (int p = 1; p <= 2; p++) {
-      boolean[][] connected = BaseConnectionSearch.connected(p, nextBoard);
+      boolean[] connected = BaseConnectionSearch.connected(p, nextBoard);
       for (int r = 0; r < nextBoard.rows; r++) {
         for (int c = 0; c < nextBoard.cols; c++) {
           Cell cell = nextBoard.getCell(r, c);
@@ -153,7 +153,7 @@ public class SearchEngine {
               && cell.owner == p
               && cell.kind != CellKind.EMPTY
               && cell.kind != CellKind.NEUTRAL) {
-            if (!connected[r][c]) {
+            if (!connected[r * nextBoard.cols + c]) {
               nextBoard.setCell(r, c, new Cell(0, CellKind.EMPTY));
             }
           }
