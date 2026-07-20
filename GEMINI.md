@@ -11,6 +11,9 @@ This file preserves conversation context and orchestrator state across sessions.
      - **No Ralphex without user confirmation**: Do not run ralphex unless explicitly approved.
      - **High-Priority / Blocker Tasks**: Delegate to **localsubagents** (using `invoke_subagent` running developer model).
      - **Parallel / Non-Blocking Tasks**: Author plans under `docs/plans/` and delegate to **Jules** (via the `jules-task-from-plan` skill).
+       - *Note on Jules*: Cheap/free (100 runs/day), parallelizable (up to 10 concurrent), but slow and junior-level quality.
+       - *Double-Attempt*: For complex tasks, start two parallel Jules sessions and pick the best solution.
+       - *Fail-Fast*: If Jules goes down the wrong path or gets stuck, abort and restart/redelegate immediately instead of fixing it.
   4. Review and merge PRs (plain merge commits only), close beads, sync Dolt.
   5. Report status table.
 
