@@ -20,6 +20,13 @@ This file preserves conversation context and orchestrator state across sessions.
   5. Report active task and sync status.
 
 ## 📈 Active Status (July 21, 2026)
+- **Active Jules Sessions**:
+  * **Plan 30 (`nnue-trainer-ntd.7` - TD-bootstrapped value labels)**:
+    - Session #1: `8275694817017901931`
+    - Session #2: `10332515160927540011`
+  * **Plan 31 (`nnue-trainer-ntd.5.4` - Java self-play distribution shift)**:
+    - Session #1: `1004752041680703003`
+    - Session #2: `1145759515787579085`
 - **Completed Task `nnue-trainer-raz.2.2`**: Successfully integrated full search upgrades (Transposition Table with Zobrist hashing, Principal Variation Search with null-window re-searches, move ordering with killer moves & history heuristics, depth-limited quiescence search, and custom-model gated opening book) via PR #38. All 65 unit tests pass cleanly in GitHub Actions CI. Closed bead `nnue-trainer-raz.2.2`.
 - **Portainer CI/CD Deployment**: Added `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml` with secure non-root user setup, automatic image builds, tags, deploy branch pushes, and Portainer webhooks.
 - **Gated challenging**: Gated outgoing challenges behind `CHALLENGER_MODE=true` environment variable to prevent automated spamming by default.
