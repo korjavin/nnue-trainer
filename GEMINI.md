@@ -20,10 +20,7 @@ This file preserves conversation context and orchestrator state across sessions.
   5. Report active task and sync status.
 
 ## 📈 Active Status (July 21, 2026)
-- **Active Jules Sessions**:
-  * Session #1: `1924412228059294609` (Parallel implementation attempt for `nnue-trainer-ntd.5`)
-  * Session #2: `6261202734603092814` (Parallel implementation attempt for `nnue-trainer-ntd.5`)
-- **Closed Jules PRs**: All 8 previous open PRs from Jules (#23, #24, #25, #30, #31, #32, #33, #34) were safely closed because their code was already integrated in `master` and the respective beads were closed.
+- **Completed Task `nnue-trainer-raz.2.2`**: Successfully integrated full search upgrades (Transposition Table with Zobrist hashing, Principal Variation Search with null-window re-searches, move ordering with killer moves & history heuristics, depth-limited quiescence search, and custom-model gated opening book) via PR #38. All 65 unit tests pass cleanly in GitHub Actions CI. Closed bead `nnue-trainer-raz.2.2`.
 - **Portainer CI/CD Deployment**: Added `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml` with secure non-root user setup, automatic image builds, tags, deploy branch pushes, and Portainer webhooks.
 - **Gated challenging**: Gated outgoing challenges behind `CHALLENGER_MODE=true` environment variable to prevent automated spamming by default.
 
