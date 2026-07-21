@@ -58,13 +58,32 @@ public class PeriodicRetrainer implements AutoCloseable {
     GameImporter.ImportResult importResult =
         importer.importGames(
             new GameImporter.ImportOptions(config.dbPath(), config.minStartedAt(), true));
-    if (importResult.examples().size() < config.minExamples()) {
+
+    // Generate self-play dataset
+    SelfPlayGenerator.Config spConfig = new SelfPlayGenerator.Config();
+    spConfig.numGames =
+        Math.max(10, config.minExamples() / 40); // Rough estimate for examples per game
+    SelfPlayGenerator.GenerationResult spResult =
+        SelfPlayGenerator.generate(spConfig, liveSearchEngine);
+    System.out.println(
+        "Generated "
+            + spResult.dataset.size()
+            + " self-play examples. Distinct ratio: "
+            + spResult.distinctGameRatio);
+
+    java.util.List<NNUETrainer.TrainingExample> combinedExamples =
+        new java.util.ArrayList<>(importResult.examples());
+    for (SelfPlayGenerator.TrainingRecord record : spResult.dataset) {
+      combinedExamples.add(new NNUETrainer.TrainingExample(record.features, record.target));
+    }
+
+    if (combinedExamples.size() < config.minExamples()) {
       return RetrainingResult.skipped(
-          importResult.examples().size(), "not enough examples for retraining");
+          combinedExamples.size(), "not enough examples for retraining");
     }
 
     NNUETrainer trainer = new NNUETrainer(config.seed());
-    NNUETrainer.TrainingResult trainingResult = trainer.train(importResult.examples());
+    NNUETrainer.TrainingResult trainingResult = trainer.train(combinedExamples);
     NNUEModel candidate = trainer.createModel();
     NNUEModel current = liveSearchEngine.getNnueModel();
     EvaluationResult evaluation = evaluator.evaluate(current, candidate);

@@ -11,15 +11,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 public class SelfPlayGenerator {
 
-  private static final int DEFAULT_GAMES = 50;
-  private static final int MAX_TURNS = 100;
-  private static final double EPSILON = 0.1;
-  private static final int SEARCH_DEPTH = 2; // configurable, standard minimax depth
+  public static class Config {
+    public int numGames = 50;
+    public int maxTurns = 100;
+    public double epsilon = 0.1;
+    public int exploreTurns = 6;
+    public int searchDepth = 2;
+    public long timeLimitMs = 0;
+  }
 
   public static class TrainingRecord {
     public float[] features;
@@ -28,6 +35,16 @@ public class SelfPlayGenerator {
     public TrainingRecord(float[] features, float target) {
       this.features = features;
       this.target = target;
+    }
+  }
+
+  public static class GenerationResult {
+    public List<TrainingRecord> dataset;
+    public double distinctGameRatio;
+
+    public GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio) {
+      this.dataset = dataset;
+      this.distinctGameRatio = distinctGameRatio;
     }
   }
 
@@ -42,27 +59,37 @@ public class SelfPlayGenerator {
   }
 
   public static void main(String[] args) {
-    int numGames = DEFAULT_GAMES;
+    Config config = new Config();
     String outputPath = "src/main/resources/self_play_data.json";
 
     if (args.length > 0) {
       try {
-        numGames = Integer.parseInt(args[0]);
+        config.numGames = Integer.parseInt(args[0]);
       } catch (NumberFormatException e) {
-        System.err.println("Invalid number of games. Using default: " + DEFAULT_GAMES);
+        System.err.println("Invalid number of games. Using default: " + config.numGames);
       }
     }
     if (args.length > 1) {
       outputPath = args[1];
     }
 
-    System.out.println("Starting self-play generation for " + numGames + " games...");
+    System.out.println("Starting self-play generation for " + config.numGames + " games...");
+    GenerationResult result = generate(config, null);
+    System.out.println("Generation complete. Total records: " + result.dataset.size());
+    System.out.println("Distinct game ratio: " + result.distinctGameRatio);
+    saveDataset(result.dataset, outputPath);
+  }
+
+  public static GenerationResult generate(Config config, SearchEngine customEngine) {
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = new Random();
-    SearchEngine engine = new SearchEngine();
+    SearchEngine engine = customEngine != null ? customEngine : new SearchEngine();
 
-    for (int game = 1; game <= numGames; game++) {
-      System.out.println("Simulating game " + game + "/" + numGames);
+    Set<Integer> uniquePositionHashes = new HashSet<>();
+    int totalPositions = 0;
+
+    for (int game = 1; game <= config.numGames; game++) {
+      // System.out.println("Simulating game " + game + "/" + config.numGames);
       List<TurnData> turns = new ArrayList<>();
       Board board = new Board(12, 12);
 
@@ -73,7 +100,7 @@ public class SelfPlayGenerator {
       int currentPlayer = 1;
       int winner = 0;
 
-      for (int turn = 0; turn < MAX_TURNS; turn++) {
+      for (int turn = 0; turn < config.maxTurns; turn++) {
         // Collect board snapshot BEFORE move
         turns.add(new TurnData(copyBoard(board), currentPlayer));
 
@@ -89,13 +116,20 @@ public class SelfPlayGenerator {
         }
 
         Action chosenAction = null;
-        if (random.nextDouble() < EPSILON) {
+        if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
           // Exploration
           chosenAction = legalActions.get(random.nextInt(legalActions.size()));
         } else {
           // Exploitation
-          chosenAction =
-              SearchEngine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true).bestAction;
+          if (engine.getNnueModel() != null) {
+            chosenAction =
+                engine.findBestActionUsingModel(board, currentPlayer, config.searchDepth, true)
+                    .bestAction;
+          } else {
+            chosenAction =
+                SearchEngine.findBestAction(board, currentPlayer, config.searchDepth, true)
+                    .bestAction;
+          }
           if (chosenAction == null) {
             chosenAction = legalActions.get(0); // fallback
           }
@@ -112,9 +146,6 @@ public class SelfPlayGenerator {
         currentPlayer = 3 - currentPlayer;
       }
 
-      // If loop ended and winner is still 0, it's a draw (reached MAX_TURNS or no terminal
-      // condition met)
-
       // Process collected turns to dataset
       for (TurnData turnData : turns) {
         float target = 0.0f;
@@ -123,11 +154,15 @@ public class SelfPlayGenerator {
         }
         float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
         dataset.add(new TrainingRecord(features, target));
+
+        uniquePositionHashes.add(Arrays.hashCode(features));
+        totalPositions++;
       }
     }
 
-    System.out.println("Generation complete. Total records: " + dataset.size());
-    saveDataset(dataset, outputPath);
+    double distinctGameRatio =
+        totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
+    return new GenerationResult(dataset, distinctGameRatio);
   }
 
   private static int determineWinner(Board board) {
