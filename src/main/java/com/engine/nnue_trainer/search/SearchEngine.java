@@ -627,12 +627,6 @@ public class SearchEngine {
     long startTime = System.currentTimeMillis();
     nodesEvaluated = 0;
 
-    // Check if we are in opening phase and should pick a random opening move
-    Action randomOpening = OpeningBook.getRandomOpeningMove(board, player, canPlaceNeutral);
-    if (randomOpening != null) {
-      return new SearchResult(randomOpening, 0.0f, 1, 0, System.currentTimeMillis() - startTime);
-    }
-
     actions = orderActions(actions, board, player, null, depth);
 
     Action bestAction = null;
