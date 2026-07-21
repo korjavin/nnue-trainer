@@ -77,7 +77,7 @@ def map_board_to_features(board, active_player, rows=12, cols=12):
     return features
 
 def main():
-    db_path = "/Users/iv/Projects/nnue-trainer/games.db"
+    db_path = "/Users/iv/Projects/virusgame/backend/data/games.db"
     if not os.path.exists(db_path):
         print(f"Error: {db_path} not found.")
         return
@@ -85,10 +85,12 @@ def main():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    # Only clean GoBot-vs-GoBot games (the diverse epsilon self-play set).
     cursor.execute("""
-        SELECT id, result, pgn_content 
-        FROM games 
+        SELECT id, result, pgn_content
+        FROM games
         WHERE rows = 12 AND cols = 12 AND pgn_content IS NOT NULL AND pgn_content != 'null'
+          AND player1_name LIKE 'GoBot%' AND player2_name LIKE 'GoBot%'
     """)
     rows = cursor.fetchall()
     print(f"Found {len(rows)} valid 12x12 games.")

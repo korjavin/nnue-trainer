@@ -38,3 +38,7 @@ build/
 .beads-credential-key
 .beads/proxieddb/
 dataset.json
+
+# Python venv and run logs
+.venv/
+*.log

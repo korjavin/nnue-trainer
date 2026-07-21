@@ -1,125 +1,97 @@
+"""Train the NNUE value net (864 -> 256 -> 1, clipped ReLU, MSE) on the
+imported self-play dataset and export weights for the Java engine.
+
+Same architecture and output format as the original pure-Python trainer, but
+vectorised with numpy so it runs in seconds instead of hours. Run with the
+venv interpreter: .venv/bin/python train.py
+
+Requires: dataset.json (from import_games.py). Writes src/main/resources/nnue_weights.json.
+"""
 import json
-import random
-import math
 import os
+import numpy as np
 
-class NNUE:
-    def __init__(self, input_size=864, hidden_size=256):
-        # Xavier initialization
-        scale = math.sqrt(2.0 / input_size)
-        self.w1 = [[random.gauss(0, scale) for _ in range(input_size)] for _ in range(hidden_size)]
-        self.b1 = [0.0] * hidden_size
-        self.w2 = [random.gauss(0, math.sqrt(2.0 / hidden_size)) for _ in range(hidden_size)]
-        self.b2 = 0.0
+INPUT_SIZE = 864
+HIDDEN_SIZE = 256
+EPOCHS = 40
+BATCH_SIZE = 256
+INITIAL_LR = 0.01
+SEED = 0
 
-    def forward(self, x):
-        h_sum = []
-        h_act = []
-        for i in range(len(self.w1)):
-            s = self.b1[i]
-            for j in range(len(x)):
-                if x[j] != 0.0:  # Sparse optimization: input is mostly zeros
-                    s += self.w1[i][j] * x[j]
-            h_sum.append(s)
-            # Clipped ReLU [0.0, 127.0]
-            h_act.append(max(0.0, min(127.0, s)))
+DATASET = "/Users/iv/Projects/nnue-trainer/dataset.json"
+OUT_PATH = "/Users/iv/Projects/nnue-trainer/src/main/resources/nnue_weights.json"
 
-        out = self.b2
-        for i in range(len(self.w2)):
-            out += self.w2[i] * h_act[i]
 
-        return out, h_sum, h_act
+def clipped_relu(x):
+    return np.clip(x, 0.0, 127.0)
 
-    def backward(self, x, target, out, h_sum, h_act, lr=0.001):
-        # dLoss/dout = 2 * (out - target)
-        error = out - target
 
-        # Output layer gradients
-        dw2 = [error * h for h in h_act]
-        db2 = error
-
-        # Hidden layer gradients
-        dw1 = []
-        db1 = []
-        for i in range(len(self.w1)):
-            # Derivative of Clipped ReLU
-            if 0.0 <= h_sum[i] <= 127.0:
-                dh = error * self.w2[i]
-            else:
-                dh = 0.0
-            
-            dw1.append([dh * xi for xi in x])
-            db1.append(dh)
-
-        # SGD Update step
-        for i in range(len(self.w1)):
-            self.b1[i] -= lr * db1[i]
-            for j in range(len(x)):
-                if x[j] != 0.0:  # Sparse update
-                    self.w1[i][j] -= lr * dw1[i][j]
-
-        for i in range(len(self.w2)):
-            self.w2[i] -= lr * dw2[i]
-        self.b2 -= lr * db2
-
-def train():
-    dataset_path = "/Users/iv/Projects/nnue-trainer/dataset.json"
-    if not os.path.exists(dataset_path):
-        print(f"Error: dataset.json not found at {dataset_path}")
+def main():
+    if not os.path.exists(DATASET):
+        print(f"Error: {DATASET} not found. Run import_games.py first.")
         return
 
-    with open(dataset_path, "r") as f:
-        dataset = json.load(f)
+    with open(DATASET) as f:
+        data = json.load(f)
+    if not data:
+        print("Error: dataset is empty.")
+        return
 
-    print(f"Loaded {len(dataset)} position records.")
-    
-    # Initialize model
-    model = NNUE(input_size=864, hidden_size=256)
-    
-    epochs = 40
-    batch_size = 16
-    initial_lr = 0.01
+    X = np.asarray([d["features"] for d in data], dtype=np.float32)
+    y = np.asarray([d["target"] for d in data], dtype=np.float32)
+    n = len(y)
+    print(f"Loaded {n} positions | features={X.shape[1]} "
+          f"| targets: mean={y.mean():.3f} (+1={int((y > 0).sum())}, -1={int((y < 0).sum())})")
 
-    for epoch in range(epochs):
-        random.shuffle(dataset)
+    rng = np.random.default_rng(SEED)
+    # Xavier/He-style init, matching the original scales.
+    W1 = rng.normal(0.0, np.sqrt(2.0 / INPUT_SIZE), (HIDDEN_SIZE, INPUT_SIZE)).astype(np.float32)
+    b1 = np.zeros(HIDDEN_SIZE, dtype=np.float32)
+    w2 = rng.normal(0.0, np.sqrt(2.0 / HIDDEN_SIZE), HIDDEN_SIZE).astype(np.float32)
+    b2 = np.float32(0.0)
+
+    for epoch in range(EPOCHS):
+        lr = INITIAL_LR / (1.0 + 0.1 * epoch)
+        idx = rng.permutation(n)
         total_loss = 0.0
-        
-        # Learning rate decay
-        lr = initial_lr / (1.0 + 0.1 * epoch)
+        for start in range(0, n, BATCH_SIZE):
+            bi = idx[start:start + BATCH_SIZE]
+            xb, yb = X[bi], y[bi]                      # (B,864), (B,)
+            m = len(yb)
 
-        for item in dataset:
-            x = item['features']
-            target = item['target']
+            pre = xb @ W1.T + b1                       # (B,256)
+            h = clipped_relu(pre)
+            out = h @ w2 + b2                          # (B,)
 
-            # Forward pass
-            out, h_sum, h_act = model.forward(x)
-            
-            # MSE loss contribution
-            loss = (out - target) ** 2
-            total_loss += loss
+            err = out - yb                             # (B,)
+            total_loss += float((err ** 2).sum())
 
-            # Backward pass & SGD step
-            model.backward(x, target, out, h_sum, h_act, lr=lr)
+            # Gradients (mean over batch; factor 2 folded into lr, as before).
+            d_out = err / m                            # (B,)
+            dw2 = h.T @ d_out                          # (256,)
+            db2 = d_out.sum()
+            dh = np.outer(d_out, w2)                   # (B,256)
+            dh *= (pre >= 0.0) & (pre <= 127.0)        # clipped-ReLU grad
+            dw1 = dh.T @ xb                            # (256,864)
+            db1 = dh.sum(axis=0)
 
-        avg_loss = total_loss / len(dataset)
-        print(f"Epoch {epoch+1}/{epochs} - Avg Loss (MSE): {avg_loss:.5f} (lr: {lr:.5f})")
+            W1 -= lr * dw1
+            b1 -= lr * db1
+            w2 -= lr * dw2
+            b2 -= lr * db2
 
-    # Export weights to resources folder
-    out_dir = "/Users/iv/Projects/nnue-trainer/src/main/resources"
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "nnue_weights.json")
+        print(f"Epoch {epoch + 1}/{EPOCHS} - MSE: {total_loss / n:.5f} (lr {lr:.5f})")
 
-    weights_data = {
-        "hiddenWeights": model.w1,
-        "hiddenBiases": model.b1,
-        "outputWeights": model.w2,
-        "outputBias": model.b2
-    }
+    os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
+    with open(OUT_PATH, "w") as f:
+        json.dump({
+            "hiddenWeights": W1.tolist(),
+            "hiddenBiases": b1.tolist(),
+            "outputWeights": w2.tolist(),
+            "outputBias": float(b2),
+        }, f)
+    print(f"Saved trained NNUE weights to {OUT_PATH}")
 
-    with open(out_path, "w") as f:
-        json.dump(weights_data, f)
-
-    print(f"Successfully saved trained NNUE weights to {out_path}")
 
 if __name__ == "__main__":
-    train()
+    main()
