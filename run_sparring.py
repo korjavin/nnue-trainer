@@ -20,11 +20,14 @@ def main():
 
     print("Starting Go bot...")
     gobot_log = open("gobot.log", "w")
+    gobot_env = os.environ.copy()
+    gobot_env["BACKEND_URL"] = "ws://localhost:8080/ws?bot=true&namePrefix=GoBot"
     gobot_process = subprocess.Popen(
         ["./gobot"],
         cwd="../virusgame/bot-templates/go",
         stdout=gobot_log,
         stderr=gobot_log,
+        env=gobot_env,
         preexec_fn=os.setsid
     )
 
@@ -32,11 +35,14 @@ def main():
 
     print("Starting Java bot...")
     java_log = open("java_bot.log", "w")
+    java_env = os.environ.copy()
+    java_env["BACKEND_URL"] = "ws://localhost:8080/ws?bot=true&namePrefix=JavaBot"
     java_process = subprocess.Popen(
         ["./mvnw", "spring-boot:run"],
         cwd=".",
         stdout=java_log,
         stderr=java_log,
+        env=java_env,
         preexec_fn=os.setsid
     )
 
