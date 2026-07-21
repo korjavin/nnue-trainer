@@ -192,6 +192,8 @@ public class NNUETrainer {
 
   public static class TrainingExample {
     public final float[] features;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("eval")
     public final float target;
 
     public TrainingExample(float[] features, float target) {

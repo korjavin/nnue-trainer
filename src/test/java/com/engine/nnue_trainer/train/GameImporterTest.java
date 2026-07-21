@@ -71,4 +71,53 @@ public class GameImporterTest {
     assertEquals(1, result.skippedDuplicates());
     assertEquals(1, result.examples().size());
   }
+
+  @Test
+  public void replayGameDiscountedLabelMode() throws Exception {
+    String pgn =
+        "["
+            + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]},"
+            + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":10,\"col\":10}]}"
+            + "]";
+
+    GameImporter.ImportOptions options =
+        new GameImporter.ImportOptions(
+            null, null, false, GameImporter.LabelMode.DISCOUNTED, 0.5, 0.9);
+
+    List<NNUETrainer.TrainingExample> examples = new GameImporter().replayGame(pgn, 1, options);
+    assertEquals(2, examples.size());
+
+    // total turns = 2
+    // turn 0: player 1, result 1 => outcome 1.0, distance = 1, target = 1.0 * 0.9^1 = 0.9
+    assertEquals(0.9f, examples.get(0).target, 0.001f);
+
+    // turn 1: player 2, result 1 => outcome -1.0, distance = 0, target = -1.0 * 0.9^0 = -1.0
+    assertEquals(-1.0f, examples.get(1).target, 0.001f);
+  }
+
+  @Test
+  public void replayGameTdLeafLabelMode() throws Exception {
+    String pgn =
+        "["
+            + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1,\"score\":100.0}]},"
+            + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":10,\"col\":10,\"score\":200.0}]}"
+            + "]";
+
+    GameImporter.ImportOptions options =
+        new GameImporter.ImportOptions(
+            null, null, false, GameImporter.LabelMode.TD_LEAF, 0.5, 0.98);
+
+    List<NNUETrainer.TrainingExample> examples = new GameImporter().replayGame(pgn, 1, options);
+    assertEquals(2, examples.size());
+
+    // turn 0: player 1, result 1 => outcome 1.0, search_eval = 0.1, distance = 1
+    // currentLambda = 0.5^1 = 0.5
+    // target = (1 - 0.5) * 0.1 + 0.5 * 1.0 = 0.55
+    assertEquals(0.55f, examples.get(0).target, 0.001f);
+
+    // turn 1: player 2, result 1 => outcome -1.0, search_eval = 0.2, distance = 0
+    // currentLambda = 0.5^0 = 1.0
+    // target = (1 - 1.0) * 0.2 + 1.0 * (-1.0) = -1.0
+    assertEquals(-1.0f, examples.get(1).target, 0.001f);
+  }
 }
