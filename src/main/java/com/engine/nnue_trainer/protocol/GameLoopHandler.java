@@ -86,8 +86,9 @@ public class GameLoopHandler {
       JsonNode snapshot = node.get("snapshot");
       int currentPlayer = snapshot.get("currentPlayer").asInt();
       boolean gameOver = snapshot.get("gameOver").asBoolean();
+      int movesLeft = snapshot.has("movesLeft") ? snapshot.get("movesLeft").asInt() : 0;
 
-      if (!gameOver && currentPlayer == myPlayerIndex) {
+      if (!gameOver && currentPlayer == myPlayerIndex && movesLeft > 0) {
         Board board = parseBoardFromSnapshot(snapshot);
         boolean canPlaceNeutral = !snapshot.get("neutralUsed").get(myPlayerIndex - 1).asBoolean();
         makeMove(board, canPlaceNeutral);
