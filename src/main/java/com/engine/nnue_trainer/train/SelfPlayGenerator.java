@@ -94,7 +94,8 @@ public class SelfPlayGenerator {
           chosenAction = legalActions.get(random.nextInt(legalActions.size()));
         } else {
           // Exploitation
-          chosenAction = engine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true).bestAction;
+          chosenAction =
+              SearchEngine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true).bestAction;
           if (chosenAction == null) {
             chosenAction = legalActions.get(0); // fallback
           }

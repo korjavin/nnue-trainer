@@ -1,6 +1,5 @@
 package com.engine.nnue_trainer.protocol;
 
-import com.engine.nnue_trainer.search.SearchEngine;
 import java.net.URI;
 import java.net.URISyntaxException;
 import org.java_websocket.client.WebSocketClient;
@@ -11,18 +10,11 @@ public class BotWebSocketClient extends WebSocketClient {
   private final HandshakeHandler handshakeHandler;
   private final GameLoopHandler gameLoopHandler;
 
-  public BotWebSocketClient(URI serverUri, SearchEngine searchEngine) {
-    super(serverUri);
-    MessageSender sender = this::send;
-    this.handshakeHandler = new HandshakeHandler(sender);
-    this.gameLoopHandler = new GameLoopHandler(sender, searchEngine);
-  }
-
   public BotWebSocketClient(URI serverUri) {
     super(serverUri);
     MessageSender sender = this::send;
     this.handshakeHandler = new HandshakeHandler(sender);
-    this.gameLoopHandler = new GameLoopHandler(sender, new SearchEngine());
+    this.gameLoopHandler = new GameLoopHandler(sender);
   }
 
   public BotWebSocketClient() throws URISyntaxException {

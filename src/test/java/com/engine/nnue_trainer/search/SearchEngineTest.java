@@ -136,7 +136,7 @@ public class SearchEngineTest {
     board.setCell(2, 1, new Cell(2, CellKind.NORMAL));
 
     // With 1ms limit, it should timeout very quickly but return a valid move safely.
-    SearchResult result = new SearchEngine().findBestActionWithTimeLimit(board, 1, 1, false);
+    SearchResult result = SearchEngine.findBestActionWithTimeLimit(board, 1, 1, false);
 
     // Just verify that we got a legal action and it didn't throw an exception or crash
     org.junit.jupiter.api.Assertions.assertNotNull(result.bestAction);
