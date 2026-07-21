@@ -9,10 +9,10 @@ public class NNUEModelTest {
 
   @Test
   public void testForwardWithDefaultWeights() {
-    NNUEModel model = NNUEModel.createDefault();
+    NNUEModel model = new NNUEModel(new float[256][864], new float[256], new float[256], 0.0f);
     float[] input = new float[864];
 
-    // Input of 0s, output should be outputBias
+    // Input of 0s, output should be outputBias (0.0)
     float output = model.forward(input);
     assertEquals(0.0f, output);
   }

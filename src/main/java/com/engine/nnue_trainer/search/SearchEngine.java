@@ -142,8 +142,8 @@ public class SearchEngine {
       if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
     }
 
-    if (nnueModel != null) {
-      float[] features = BoardFeatureMapper.map(board, player);
+    if (nnueModel != null && board.rows == 12 && board.cols == 12) {
+      float[] features = BoardFeatureMapper.map(board, originalPlayer);
       return nnueModel.forward(features);
     }
 
