@@ -89,4 +89,69 @@ public class BaseConnectionSearchTest {
     assertFalse(connected[0 * 3 + 0]);
     assertFalse(connected[0 * 3 + 1]);
   }
+
+  @Test
+  public void testDiagonalConnectivity() {
+    Board board = new Board(5, 5);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(2, 2, new Cell(1, CellKind.NORMAL));
+    board.setCell(3, 3, new Cell(1, CellKind.NORMAL));
+
+    boolean[] connected = BaseConnectionSearch.connected(1, board);
+
+    assertTrue(connected[0 * 5 + 0]);
+    assertTrue(connected[1 * 5 + 1]);
+    assertTrue(connected[2 * 5 + 2]);
+    assertTrue(connected[3 * 5 + 3]);
+  }
+
+  @Test
+  public void testDisconnectionByNeutralCells() {
+    Board board = new Board(5, 5);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    // Cut off by neutral cell
+    board.setCell(0, 2, new Cell(0, CellKind.NEUTRAL));
+    board.setCell(0, 3, new Cell(1, CellKind.NORMAL));
+
+    boolean[] connected = BaseConnectionSearch.connected(1, board);
+
+    assertTrue(connected[0 * 5 + 0]);
+    assertTrue(connected[0 * 5 + 1]);
+    assertFalse(connected[0 * 5 + 2]);
+    assertFalse(connected[0 * 5 + 3]); // Disconnected
+  }
+
+  @Test
+  public void testDisconnectionByOpponentCells() {
+    Board board = new Board(5, 5);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(1, 0, new Cell(1, CellKind.NORMAL));
+    // Cut off by opponent cell
+    board.setCell(2, 0, new Cell(2, CellKind.NORMAL));
+    board.setCell(3, 0, new Cell(1, CellKind.NORMAL));
+
+    boolean[] connected = BaseConnectionSearch.connected(1, board);
+
+    assertTrue(connected[0 * 5 + 0]);
+    assertTrue(connected[1 * 5 + 0]);
+    assertFalse(connected[2 * 5 + 0]);
+    assertFalse(connected[3 * 5 + 0]); // Disconnected
+  }
+
+  @Test
+  public void testEmptyBaseConnection() {
+    Board board = new Board(5, 5);
+    // Base is empty
+    board.setCell(0, 0, new Cell(0, CellKind.EMPTY));
+    board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+
+    boolean[] connected = BaseConnectionSearch.connected(1, board);
+
+    assertFalse(connected[0 * 5 + 0]);
+    assertFalse(connected[0 * 5 + 1]);
+    assertFalse(connected[1 * 5 + 1]);
+  }
 }
