@@ -10,40 +10,77 @@ import org.junit.jupiter.api.Test;
 public class BoardFeatureMapperTest {
 
   @Test
-  public void testMapping() {
+  public void testMappingPerspectivePlayer1() {
     Board board = new Board(12, 12);
 
     board.setCell(0, 0, new Cell(0, CellKind.EMPTY));
     board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
-    board.setCell(0, 2, new Cell(2, CellKind.BASE));
-    board.setCell(0, 3, new Cell(3, CellKind.FORTIFIED));
-    board.setCell(0, 4, new Cell(0, CellKind.NEUTRAL));
+    board.setCell(0, 2, new Cell(2, CellKind.NORMAL));
+    board.setCell(0, 3, new Cell(1, CellKind.FORTIFIED));
+    board.setCell(0, 4, new Cell(2, CellKind.FORTIFIED));
+    board.setCell(0, 5, new Cell(0, CellKind.NEUTRAL));
+    board.setCell(0, 6, new Cell(1, CellKind.BASE)); // Base acts as empty in current mapping
 
-    float[] features = BoardFeatureMapper.map(board);
+    float[] features = BoardFeatureMapper.map(board, 1);
 
-    assertEquals(2016, features.length);
+    assertEquals(864, features.length);
 
-    // Empty cell (index 0)
-    int cellIndex00 = 0 * 12 + 0;
-    assertEquals(1.0f, features[cellIndex00 * 14 + 0]);
+    // Empty cell -> 0
+    int idx00 = 0 * 12 + 0;
+    assertEquals(1.0f, features[idx00 * 6 + 0]);
 
-    // Normal piece Player 1 (index 1)
-    int cellIndex01 = 0 * 12 + 1;
-    assertEquals(1.0f, features[cellIndex01 * 14 + 1]);
+    // Normal Us -> 1
+    int idx01 = 0 * 12 + 1;
+    assertEquals(1.0f, features[idx01 * 6 + 1]);
 
-    // Base Player 2 (index 4 + 2 = 6)
-    int cellIndex02 = 0 * 12 + 2;
-    assertEquals(1.0f, features[cellIndex02 * 14 + 6]);
+    // Normal Them -> 2
+    int idx02 = 0 * 12 + 2;
+    assertEquals(1.0f, features[idx02 * 6 + 2]);
 
-    // Fortified Player 3 (index 8 + 3 = 11)
-    int cellIndex03 = 0 * 12 + 3;
-    assertEquals(1.0f, features[cellIndex03 * 14 + 11]);
+    // Fortified Us -> 3
+    int idx03 = 0 * 12 + 3;
+    assertEquals(1.0f, features[idx03 * 6 + 3]);
 
-    // Neutral cell (index 13)
-    int cellIndex04 = 0 * 12 + 4;
-    assertEquals(1.0f, features[cellIndex04 * 14 + 13]);
+    // Fortified Them -> 4
+    int idx04 = 0 * 12 + 4;
+    assertEquals(1.0f, features[idx04 * 6 + 4]);
 
-    // Assert that a missing state is indeed 0
-    assertEquals(0.0f, features[cellIndex04 * 14 + 0]);
+    // Neutral -> 5
+    int idx05 = 0 * 12 + 5;
+    assertEquals(1.0f, features[idx05 * 6 + 5]);
+
+    // Base -> 0 (unmapped)
+    int idx06 = 0 * 12 + 6;
+    assertEquals(1.0f, features[idx06 * 6 + 0]);
+  }
+
+  @Test
+  public void testMappingPerspectivePlayer2() {
+    Board board = new Board(12, 12);
+
+    board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(0, 2, new Cell(2, CellKind.NORMAL));
+    board.setCell(0, 3, new Cell(1, CellKind.FORTIFIED));
+    board.setCell(0, 4, new Cell(2, CellKind.FORTIFIED));
+
+    float[] features = BoardFeatureMapper.map(board, 2);
+
+    assertEquals(864, features.length);
+
+    // Normal Them (Player 1) -> 2
+    int idx01 = 0 * 12 + 1;
+    assertEquals(1.0f, features[idx01 * 6 + 2]);
+
+    // Normal Us (Player 2) -> 1
+    int idx02 = 0 * 12 + 2;
+    assertEquals(1.0f, features[idx02 * 6 + 1]);
+
+    // Fortified Them (Player 1) -> 4
+    int idx03 = 0 * 12 + 3;
+    assertEquals(1.0f, features[idx03 * 6 + 4]);
+
+    // Fortified Us (Player 2) -> 3
+    int idx04 = 0 * 12 + 4;
+    assertEquals(1.0f, features[idx04 * 6 + 3]);
   }
 }
