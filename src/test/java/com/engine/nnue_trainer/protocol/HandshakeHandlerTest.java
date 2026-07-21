@@ -71,7 +71,7 @@ public class HandshakeHandlerTest {
 
     String sentMessage = messageCaptor.getValue();
     assertTrue(sentMessage.contains("\"type\":\"challenge\""));
-    assertTrue(sentMessage.contains("\"opponentId\":\"user-1\""));
+    assertTrue(sentMessage.contains("\"targetUserId\":\"user-1\""));
     assertTrue(sentMessage.contains("\"rows\":12"));
     assertTrue(sentMessage.contains("\"cols\":12"));
   }
