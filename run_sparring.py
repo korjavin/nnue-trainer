@@ -6,34 +6,37 @@ import sys
 
 def main():
     print("Starting Go backend server...")
+    server_log = open("server.log", "w")
     # use preexec_fn=os.setsid to start process in new session so we can kill the entire process group
     backend_process = subprocess.Popen(
         ["./server"],
         cwd="../virusgame/backend",
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=server_log,
+        stderr=server_log,
         preexec_fn=os.setsid
     )
 
     time.sleep(3) # Wait for backend to start
 
     print("Starting Go bot...")
+    gobot_log = open("gobot.log", "w")
     gobot_process = subprocess.Popen(
         ["./gobot"],
         cwd="../virusgame/bot-templates/go",
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=gobot_log,
+        stderr=gobot_log,
         preexec_fn=os.setsid
     )
 
     time.sleep(3) # Wait for go bot to connect
 
     print("Starting Java bot...")
+    java_log = open("java_bot.log", "w")
     java_process = subprocess.Popen(
         ["./mvnw", "spring-boot:run"],
         cwd=".",
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=java_log,
+        stderr=java_log,
         preexec_fn=os.setsid
     )
 
