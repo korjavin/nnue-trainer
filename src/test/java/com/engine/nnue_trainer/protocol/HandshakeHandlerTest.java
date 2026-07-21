@@ -1,5 +1,6 @@
 package com.engine.nnue_trainer.protocol;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -39,8 +40,8 @@ public class HandshakeHandlerTest {
 
     // Verify it contains the right type and lobbyId
     // The exact serialization might depend on Jackson settings, but should contain these at least
-    assert (sentMessage.contains("\"type\":\"join_lobby\""));
-    assert (sentMessage.contains("\"lobbyId\":\"lobby-5678\""));
+    assertTrue(sentMessage.contains("\"type\":\"join_lobby\""));
+    assertTrue(sentMessage.contains("\"lobbyId\":\"lobby-5678\""));
   }
 
   @Test
@@ -52,11 +53,41 @@ public class HandshakeHandlerTest {
   }
 
   @Test
-  public void testHandleUsersUpdateMessage() {
+  public void testHandleUsersUpdateMessageEmpty() {
     String usersUpdateJson = "{\"type\":\"users_update\",\"users\":[]}";
     handshakeHandler.handleMessage(usersUpdateJson);
 
     verify(messageSender, never()).send(anyString());
+  }
+
+  @Test
+  public void testHandleUsersUpdateMessageChallengesGoBot() {
+    String usersUpdateJson =
+        "{\"type\":\"users_update\",\"users\":[{\"id\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
+    handshakeHandler.handleMessage(usersUpdateJson);
+
+    ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+    verify(messageSender, times(1)).send(messageCaptor.capture());
+
+    String sentMessage = messageCaptor.getValue();
+    assertTrue(sentMessage.contains("\"type\":\"challenge\""));
+    assertTrue(sentMessage.contains("\"opponentId\":\"user-1\""));
+    assertTrue(sentMessage.contains("\"rows\":12"));
+    assertTrue(sentMessage.contains("\"cols\":12"));
+  }
+
+  @Test
+  public void testHandleUsersUpdateMessageRateLimits() {
+    String usersUpdateJson =
+        "{\"type\":\"users_update\",\"users\":[{\"id\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
+
+    // First message should trigger challenge
+    handshakeHandler.handleMessage(usersUpdateJson);
+    verify(messageSender, times(1)).send(anyString());
+
+    // Second message immediately after should be rate limited
+    handshakeHandler.handleMessage(usersUpdateJson);
+    verify(messageSender, times(1)).send(anyString()); // Still only 1 invocation
   }
 
   @Test
@@ -69,8 +100,8 @@ public class HandshakeHandlerTest {
     verify(messageSender, times(1)).send(messageCaptor.capture());
 
     String sent = messageCaptor.getValue();
-    assert (sent.contains("\"type\":\"accept_challenge\""));
-    assert (sent.contains("\"challengeId\":\"chall-123\""));
+    assertTrue(sent.contains("\"type\":\"accept_challenge\""));
+    assertTrue(sent.contains("\"challengeId\":\"chall-123\""));
   }
 
   @Test
