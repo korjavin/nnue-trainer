@@ -64,4 +64,45 @@ public class MoveValidatorTest {
     board.setCell(2, 2, new Cell(0, CellKind.NEUTRAL));
     assertFalse(MoveValidator.isValidMove(1, new Pos(2, 2), board));
   }
+
+  @Test
+  public void testNonAdjacentCell() {
+    Board board = createConnectedBoard();
+    // (1, 1) is connected. (3, 3) is not adjacent (it's 2 spaces away diagonally)
+    assertFalse(MoveValidator.isValidMove(1, new Pos(3, 3), board));
+
+    // (1, 1) is connected. (0, 3) is not adjacent.
+    assertFalse(MoveValidator.isValidMove(1, new Pos(0, 3), board));
+  }
+
+  @Test
+  public void testCaptureEnemyBaseAdjacent() {
+    Board board = createConnectedBoard(); // P1 has connected base at (0,0) and normal at (1,1)
+
+    // Enemy base at (2, 2) which is adjacent to (1, 1)
+    board.setCell(2, 2, new Cell(2, CellKind.BASE));
+
+    // Player 1 can capture adjacent enemy base? Actually MoveValidator says:
+    // targetCell.kind != CellKind.NORMAL -> returns false.
+    // Wait, let's verify MoveValidator implementation.
+    // Ah, MoveValidator:
+    // if (targetCell.kind != CellKind.EMPTY) {
+    //   if (targetCell.kind != CellKind.NORMAL || targetCell.owner == player) {
+    //     return false;
+    //   }
+    // }
+    // Thus it is FALSE for CellKind.BASE! So you can never capture a base directly with a normal
+    // move?
+    // Let me test this expected behavior based on the current implementation.
+    assertFalse(MoveValidator.isValidMove(1, new Pos(2, 2), board));
+  }
+
+  @Test
+  public void testCaptureEnemyBaseNonAdjacent() {
+    Board board = createConnectedBoard();
+    board.setCell(4, 4, new Cell(2, CellKind.BASE));
+
+    // Not adjacent to (1, 1)
+    assertFalse(MoveValidator.isValidMove(1, new Pos(4, 4), board));
+  }
 }
