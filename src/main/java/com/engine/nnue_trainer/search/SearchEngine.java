@@ -263,10 +263,11 @@ public class SearchEngine {
     return boards;
   }
 
-  public static Action findBestAction(Board board, int player, int depth, boolean canPlaceNeutral) {
+  public static SearchResult findBestAction(
+      Board board, int player, int depth, boolean canPlaceNeutral) {
     List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
     if (actions.isEmpty()) {
-      return null;
+      return new SearchResult(null, Float.NEGATIVE_INFINITY, depth, 0, 0);
     }
 
     long startTime = System.currentTimeMillis();
@@ -304,20 +305,23 @@ public class SearchEngine {
     System.out.println("Position Evaluation: " + bestValue);
     System.out.println("==========================");
 
-    return bestAction;
+    return new SearchResult(bestAction, bestValue, depth, nodesEvaluated, elapsedTime);
   }
 
-  public static Action findBestActionWithTimeLimit(
+  public static SearchResult findBestActionWithTimeLimit(
       Board board, int player, long timeLimitMs, boolean canPlaceNeutral) {
     long startTime = System.currentTimeMillis();
+    nodesEvaluated = 0;
     Action globalBestAction = null;
+    float globalBestScore = Float.NEGATIVE_INFINITY;
+    int maxDepthReached = 0;
 
     SearchEngine engine = new SearchEngine();
 
     // We get the legal actions once
     List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
     if (actions.isEmpty()) {
-      return null;
+      return new SearchResult(null, Float.NEGATIVE_INFINITY, 0, 0, 0);
     }
 
     // Fallback: simply pick the first available action in case depth 1 doesn't even finish
@@ -349,6 +353,8 @@ public class SearchEngine {
         // we can safely update the global best action.
         if (bestActionAtDepth != null) {
           globalBestAction = bestActionAtDepth;
+          globalBestScore = bestValueAtDepth;
+          maxDepthReached = depth;
         }
       } catch (SearchTimeoutException e) {
         // Time is up, break out of IDDFS loop
@@ -356,6 +362,9 @@ public class SearchEngine {
       }
     }
 
-    return globalBestAction;
+    long elapsedTime = System.currentTimeMillis() - startTime;
+
+    return new SearchResult(
+        globalBestAction, globalBestScore, maxDepthReached, nodesEvaluated, elapsedTime);
   }
 }

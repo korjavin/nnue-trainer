@@ -7,6 +7,7 @@ import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.SearchResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -137,8 +138,10 @@ public class GameLoopHandler {
   }
 
   private void makeMove(Board board, boolean canPlaceNeutral) {
-    Action bestAction =
+    SearchResult searchResult =
         SearchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 1000, canPlaceNeutral);
+    Action bestAction = searchResult.bestAction;
+
     if (bestAction == null) {
       System.out.println("No legal actions available.");
       return;
@@ -147,6 +150,12 @@ public class GameLoopHandler {
     try {
       ObjectNode response = objectMapper.createObjectNode();
       response.put("gameId", currentGameId);
+
+      // Append diagnostics payload
+      response.put("score", searchResult.score);
+      response.put("depth", searchResult.depth);
+      response.put("nodesEvaluated", searchResult.nodesEvaluated);
+      response.put("timeMs", searchResult.timeMs);
 
       if (bestAction instanceof MoveAction) {
         MoveAction move = (MoveAction) bestAction;

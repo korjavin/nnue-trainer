@@ -53,5 +53,9 @@ public class GameLoopHandlerTest {
     String sentMessage = messageCaptor.getValue();
     assertTrue(sentMessage.contains("\"type\":\"move\""));
     assertTrue(sentMessage.contains("\"gameId\":\"game-123\""));
+    assertTrue(sentMessage.contains("\"score\""));
+    assertTrue(sentMessage.contains("\"depth\""));
+    assertTrue(sentMessage.contains("\"nodesEvaluated\""));
+    assertTrue(sentMessage.contains("\"timeMs\""));
   }
 }
