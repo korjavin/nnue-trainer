@@ -73,6 +73,14 @@ public class HandshakeHandler {
   }
 
   private void handleUsersUpdate(UsersUpdateMessage usersUpdateMessage) {
+    String challengerMode = System.getenv("CHALLENGER_MODE");
+    if (challengerMode == null) {
+      challengerMode = System.getProperty("CHALLENGER_MODE");
+    }
+    if (!"true".equalsIgnoreCase(challengerMode)) {
+      return;
+    }
+
     long currentTime = System.currentTimeMillis();
     if (currentTime - lastChallengeTime < 10000) {
       return; // Rate limit challenges to at most once every 10 seconds

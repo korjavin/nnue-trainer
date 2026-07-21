@@ -14,6 +14,7 @@ public class HandshakeHandlerTest {
 
   @BeforeEach
   public void setup() {
+    System.setProperty("CHALLENGER_MODE", "true");
     messageSender = mock(MessageSender.class);
     handshakeHandler = new HandshakeHandler(messageSender);
   }
@@ -108,6 +109,16 @@ public class HandshakeHandlerTest {
   public void testHandleInvalidJson() {
     String invalidJson = "invalid json";
     handshakeHandler.handleMessage(invalidJson);
+
+    verify(messageSender, never()).send(anyString());
+  }
+
+  @Test
+  public void testHandleUsersUpdateMessageDoesNotChallengeIfDisabled() {
+    System.setProperty("CHALLENGER_MODE", "false");
+    String usersUpdateJson =
+        "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
+    handshakeHandler.handleMessage(usersUpdateJson);
 
     verify(messageSender, never()).send(anyString());
   }

@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
     environment:
       - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws?bot=true&namePrefix=JavaBot}
+      - CHALLENGER_MODE=${CHALLENGER_MODE:-false}
 
 networks:
   virusgame-network:
