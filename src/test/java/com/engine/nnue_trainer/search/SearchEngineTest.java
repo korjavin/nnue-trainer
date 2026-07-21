@@ -2,6 +2,7 @@ package com.engine.nnue_trainer.search;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.engine.nnue_trainer.board.Action;
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
@@ -108,6 +109,22 @@ public class SearchEngineTest {
     // 3 leaves should be evaluated: child1_1, child1_2, child2_1.
     // child2_2 is pruned.
     assertEquals(3, engine.nodesEvaluated);
+  }
+
+  @Test
+  public void testFindBestActionWithTimeLimit_timeout() {
+    Board board = new Board(3, 3);
+    // Set up a simple non-terminal board
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(2, 2, new Cell(2, CellKind.BASE));
+    board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(2, 1, new Cell(2, CellKind.NORMAL));
+
+    // With 1ms limit, it should timeout very quickly but return a valid move safely.
+    Action action = SearchEngine.findBestActionWithTimeLimit(board, 1, 1, false);
+
+    // Just verify that we got a legal action and it didn't throw an exception or crash
+    org.junit.jupiter.api.Assertions.assertNotNull(action);
   }
 
   @Test
