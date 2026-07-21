@@ -49,11 +49,15 @@ public class NNUEModel {
     return cachedDefaultInstance;
   }
 
-  private static class WeightsData {
+  public static class WeightsData {
     public float[][] hiddenWeights;
     public float[] hiddenBiases;
     public float[] outputWeights;
     public float outputBias;
+  }
+
+  public static synchronized void setCachedInstance(NNUEModel model) {
+    cachedDefaultInstance = model;
   }
 
   public float forward(float[] input) {
