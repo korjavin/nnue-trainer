@@ -2,9 +2,12 @@ package com.engine.nnue_trainer.search;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.engine.nnue_trainer.board.Action;
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
+import com.engine.nnue_trainer.board.MoveAction;
+import com.engine.nnue_trainer.board.Pos;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -127,5 +130,43 @@ public class SearchEngineTest {
     // player 2 is maximizing
     float score2 = engine.evaluate(board, 2, true);
     assertEquals(-1.0f, score2); // 1 - 2 = -1
+  }
+
+  @Test
+  public void testMoveOrdering() {
+    SearchEngine engine = new SearchEngine();
+    Board board = new Board(5, 5);
+
+    // Player 1 is playing, opponent is Player 2
+    int player = 1;
+
+    // Set up opponent base
+    board.setCell(4, 4, new Cell(2, CellKind.BASE));
+
+    // Set up opponent normal cell
+    board.setCell(2, 2, new Cell(2, CellKind.NORMAL));
+
+    // Create a list of actions to test
+    List<Action> actions = new ArrayList<>();
+
+    Action neutralMove = new MoveAction(new Pos(0, 0)); // Empty space (Score 0)
+    Action adjacentToBase = new MoveAction(new Pos(3, 4)); // Adjacent to base (Score 100)
+    Action captureNormal = new MoveAction(new Pos(2, 2)); // Capture normal cell (Score 1000)
+    Action captureBase = new MoveAction(new Pos(4, 4)); // Capture base (Score 10000)
+
+    actions.add(neutralMove);
+    actions.add(captureNormal);
+    actions.add(adjacentToBase);
+    actions.add(captureBase);
+
+    // Order actions
+    List<Action> orderedActions = engine.orderActions(actions, board, player);
+
+    // Assert correct order
+    assertEquals(4, orderedActions.size());
+    assertEquals(captureBase, orderedActions.get(0));
+    assertEquals(captureNormal, orderedActions.get(1));
+    assertEquals(adjacentToBase, orderedActions.get(2));
+    assertEquals(neutralMove, orderedActions.get(3));
   }
 }

@@ -192,8 +192,48 @@ public class SearchEngine {
     return nextBoard;
   }
 
+  protected List<Action> orderActions(List<Action> actions, Board board, int player) {
+    int opponent = getOpponent(player);
+
+    actions.sort(
+        (a1, a2) -> {
+          int score1 = scoreAction(a1, board, opponent);
+          int score2 = scoreAction(a2, board, opponent);
+          return Integer.compare(score2, score1);
+        });
+    return actions;
+  }
+
+  private int scoreAction(Action action, Board board, int opponent) {
+    if (action instanceof MoveAction) {
+      Pos target = ((MoveAction) action).target;
+      Cell targetCell = board.getCell(target.row, target.col);
+
+      if (targetCell != null && targetCell.owner == opponent) {
+        if (targetCell.kind == CellKind.BASE) {
+          return 10000;
+        } else if (targetCell.kind == CellKind.NORMAL) {
+          return 1000;
+        }
+      }
+
+      // Check for adjacency to opponent base
+      for (int dr = -1; dr <= 1; dr++) {
+        for (int dc = -1; dc <= 1; dc++) {
+          if (dr == 0 && dc == 0) continue;
+          Cell adjCell = board.getCell(target.row + dr, target.col + dc);
+          if (adjCell != null && adjCell.owner == opponent && adjCell.kind == CellKind.BASE) {
+            return 100;
+          }
+        }
+      }
+    }
+    return 0;
+  }
+
   protected List<Board> generateNextBoards(Board board, int player, boolean maximizingPlayer) {
     List<Action> actions = MoveGenerator.getLegalActions(player, board, false);
+    actions = orderActions(actions, board, player);
     List<Board> boards = new ArrayList<>();
     for (Action action : actions) {
       boards.add(applyAction(board, player, action));
@@ -208,6 +248,8 @@ public class SearchEngine {
     }
 
     SearchEngine engine = new SearchEngine();
+    actions = engine.orderActions(actions, board, player);
+
     Action bestAction = null;
     float bestValue = Float.NEGATIVE_INFINITY;
 
