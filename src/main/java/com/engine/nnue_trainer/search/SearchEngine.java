@@ -300,9 +300,23 @@ public class SearchEngine {
       boolean maximizingPlayer,
       long startTime,
       long timeLimitMs) {
+    return quiescenceSearch(
+        board, accumulator, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs, 0);
+  }
 
-    if (System.currentTimeMillis() - startTime >= timeLimitMs) {
-      throw new SearchTimeoutException();
+  public float quiescenceSearch(
+      Board board,
+      Accumulator accumulator,
+      float alpha,
+      float beta,
+      int player,
+      boolean maximizingPlayer,
+      long startTime,
+      long timeLimitMs,
+      int qsDepth) {
+
+    if (qsDepth >= 6 || System.currentTimeMillis() - startTime >= timeLimitMs) {
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
 
     float standPat = evaluate(board, accumulator, player, maximizingPlayer);
@@ -342,7 +356,15 @@ public class SearchEngine {
 
         float eval =
             quiescenceSearch(
-                child, childAcc, alpha, beta, getOpponent(player), false, startTime, timeLimitMs);
+                child,
+                childAcc,
+                alpha,
+                beta,
+                getOpponent(player),
+                false,
+                startTime,
+                timeLimitMs,
+                qsDepth + 1);
         maxEval = Math.max(maxEval, eval);
         alpha = Math.max(alpha, eval);
         if (beta <= alpha) break;
@@ -360,7 +382,15 @@ public class SearchEngine {
 
         float eval =
             quiescenceSearch(
-                child, childAcc, alpha, beta, getOpponent(player), true, startTime, timeLimitMs);
+                child,
+                childAcc,
+                alpha,
+                beta,
+                getOpponent(player),
+                true,
+                startTime,
+                timeLimitMs,
+                qsDepth + 1);
         minEval = Math.min(minEval, eval);
         beta = Math.min(beta, eval);
         if (beta <= alpha) break;
