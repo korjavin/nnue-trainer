@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 import json
 import os
@@ -77,7 +78,15 @@ def map_board_to_features(board, active_player, rows=12, cols=12):
     return features
 
 def main():
-    db_path = "/Users/iv/Projects/virusgame/backend/data/games.db"
+    parser = argparse.ArgumentParser(description="Import games and prepare dataset.")
+    parser.add_argument('--label-mode', choices=['outcome', 'td_leaf', 'discounted'], default='outcome', help='Label computation mode')
+    parser.add_argument('--lambda-val', type=float, default=0.5, help='Lambda for TD-leaf (weight of outcome)')
+    parser.add_argument('--gamma-val', type=float, default=0.98, help='Gamma for discounted rewards')
+    parser.add_argument('--db-path', type=str, default="/Users/iv/Projects/virusgame/backend/data/games.db")
+    parser.add_argument('--output-path', type=str, default="/Users/iv/Projects/nnue-trainer/dataset.json")
+    args = parser.parse_args()
+
+    db_path = args.db_path
     if not os.path.exists(db_path):
         print(f"Error: {db_path} not found.")
         return
@@ -109,7 +118,9 @@ def main():
             print(f"Error decoding PGN for game {game_id}: {e}")
             continue
 
-        for turn_data in turns:
+        total_turns = len(turns)
+
+        for turn_idx, turn_data in enumerate(turns):
             player = turn_data['player']
             moves = turn_data.get('moves', [])
 
@@ -132,7 +143,27 @@ def main():
 
             # Map the board state to feature vector from active_player's perspective
             features = map_board_to_features(board, player)
-            target = 1.0 if result == player else -1.0
+            outcome = 1.0 if result == player else -1.0
+            if result == 0:
+                outcome = 0.0
+
+            if args.label_mode == 'outcome':
+                target = outcome
+            elif args.label_mode == 'discounted':
+                # Scale target outcome by decay factor gamma^(total_turns - turn_index)
+                target = outcome * (args.gamma_val ** (total_turns - 1 - turn_idx))
+            elif args.label_mode == 'td_leaf':
+                # Calculate position label as (1 - lambda) * search_eval + lambda * final_outcome
+                # For positions near game end, weight final outcome higher (lambda decays with turn distance).
+                # We can implement lambda decay as lambda_eff = max(lambda_val, 1.0 - distance_to_end * step) or just linearly interpolate.
+                # A simple approach: lambda_eff = lambda_val + (1.0 - lambda_val) * (turn_idx / (total_turns - 1)) if total_turns > 1 else 1.0
+                if total_turns > 1:
+                    lambda_eff = args.lambda_val + (1.0 - args.lambda_val) * (turn_idx / (total_turns - 1))
+                else:
+                    lambda_eff = 1.0
+                search_eval = turn_data.get('eval', turn_data.get('score', 0.0))
+                # Search eval might be in pawn advantage or similar, but let's assume it's normalized to [-1, 1]
+                target = (1.0 - lambda_eff) * search_eval + lambda_eff * outcome
 
             dataset.append({
                 'features': features,
@@ -141,11 +172,10 @@ def main():
 
     conn.close()
 
-    output_path = "/Users/iv/Projects/nnue-trainer/dataset.json"
-    with open(output_path, "w") as f:
+    with open(args.output_path, "w") as f:
         json.dump(dataset, f)
 
-    print(f"Successfully generated dataset with {len(dataset)} position records at {output_path}")
+    print(f"Successfully generated dataset with {len(dataset)} position records at {args.output_path}")
 
 if __name__ == "__main__":
     main()

@@ -68,7 +68,14 @@ public class GameImporter {
             skippedDuplicates++;
             continue;
           }
-          examples.addAll(replayGame(gameId, pgnContent, result));
+          examples.addAll(
+              replayGame(
+                  gameId,
+                  pgnContent,
+                  result,
+                  options.labelMode(),
+                  options.lambdaVal(),
+                  options.gammaVal()));
           importedGames++;
         }
       }
@@ -79,10 +86,22 @@ public class GameImporter {
 
   public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result)
       throws IOException {
-    return replayGame(-1L, pgnContent, result);
+    return replayGame(-1L, pgnContent, result, LabelMode.OUTCOME, 0.5f, 0.98f);
   }
 
-  private List<NNUETrainer.TrainingExample> replayGame(long gameId, String pgnContent, int result)
+  public List<NNUETrainer.TrainingExample> replayGame(
+      String pgnContent, int result, LabelMode labelMode, float lambdaVal, float gammaVal)
+      throws IOException {
+    return replayGame(-1L, pgnContent, result, labelMode, lambdaVal, gammaVal);
+  }
+
+  private List<NNUETrainer.TrainingExample> replayGame(
+      long gameId,
+      String pgnContent,
+      int result,
+      LabelMode labelMode,
+      float lambdaVal,
+      float gammaVal)
       throws IOException {
     JsonNode turns;
     try {
@@ -97,7 +116,9 @@ public class GameImporter {
     List<NNUETrainer.TrainingExample> examples = new ArrayList<>();
     Board board = initialBoard();
 
-    for (JsonNode turn : turns) {
+    int totalTurns = turns.size();
+    for (int turnIdx = 0; turnIdx < totalTurns; turnIdx++) {
+      JsonNode turn = turns.get(turnIdx);
       int player = requiredInt(turn, "player", "Player");
       JsonNode moves = turn.get("moves");
       if (moves == null) {
@@ -113,9 +134,27 @@ public class GameImporter {
         }
       }
 
+      float outcome = target(result, player);
+      float targetVal = outcome;
+
+      if (labelMode == LabelMode.DISCOUNTED) {
+        targetVal = outcome * (float) Math.pow(gammaVal, totalTurns - 1 - turnIdx);
+      } else if (labelMode == LabelMode.TD_LEAF) {
+        float lambdaEff = lambdaVal;
+        if (totalTurns > 1) {
+          lambdaEff = lambdaVal + (1.0f - lambdaVal) * ((float) turnIdx / (totalTurns - 1));
+        }
+        float searchEval = 0.0f;
+        if (turn.has("eval")) {
+          searchEval = (float) turn.get("eval").asDouble();
+        } else if (turn.has("score")) {
+          searchEval = (float) turn.get("score").asDouble();
+        }
+        targetVal = (1.0f - lambdaEff) * searchEval + lambdaEff * outcome;
+      }
+
       examples.add(
-          new NNUETrainer.TrainingExample(
-              BoardFeatureMapper.map(board, player), target(result, player)));
+          new NNUETrainer.TrainingExample(BoardFeatureMapper.map(board, player), targetVal));
     }
 
     return examples;
@@ -175,7 +214,23 @@ public class GameImporter {
     return result == player ? 1.0f : -1.0f;
   }
 
-  public record ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {}
+  public record ImportOptions(
+      Path dbPath,
+      String minStartedAt,
+      boolean deduplicatePgn,
+      LabelMode labelMode,
+      float lambdaVal,
+      float gammaVal) {
+    public ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {
+      this(dbPath, minStartedAt, deduplicatePgn, LabelMode.OUTCOME, 0.5f, 0.98f);
+    }
+  }
+
+  public enum LabelMode {
+    OUTCOME,
+    TD_LEAF,
+    DISCOUNTED
+  }
 
   public record ImportResult(
       List<NNUETrainer.TrainingExample> examples, int importedGames, int skippedDuplicates) {}

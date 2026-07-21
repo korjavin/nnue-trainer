@@ -71,4 +71,47 @@ public class GameImporterTest {
     assertEquals(1, result.skippedDuplicates());
     assertEquals(1, result.examples().size());
   }
+
+  @Test
+  public void replayGameTdLeafLabeling() throws Exception {
+    String pgn =
+        "["
+            + "{\"player\":1,\"eval\":0.6,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]},"
+            + "{\"player\":2,\"eval\":-0.4,\"moves\":[{\"type\":\"place\",\"row\":10,\"col\":10}]}"
+            + "]";
+
+    // result = 1 (player 1 wins), outcome = 1.0 for P1, -1.0 for P2
+    // totalTurns = 2
+    // Turn 0 (P1): lambdaEff = 0.5 + 0.5*(0/1) = 0.5
+    //   target = 0.5 * 0.6 + 0.5 * 1.0 = 0.8
+    // Turn 1 (P2): lambdaEff = 0.5 + 0.5*(1/1) = 1.0
+    //   target = 0.0 * (-0.4) + 1.0 * (-1.0) = -1.0
+
+    List<NNUETrainer.TrainingExample> examples =
+        new GameImporter().replayGame(pgn, 1, GameImporter.LabelMode.TD_LEAF, 0.5f, 0.98f);
+
+    assertEquals(2, examples.size());
+    assertEquals(0.8f, examples.get(0).target, 0.001f);
+    assertEquals(-1.0f, examples.get(1).target, 0.001f);
+  }
+
+  @Test
+  public void replayGameDiscountedLabeling() throws Exception {
+    String pgn =
+        "["
+            + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]},"
+            + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":10,\"col\":10}]}"
+            + "]";
+
+    // result = 1, outcome = 1.0 for P1, -1.0 for P2
+    // Turn 0 (P1): target = 1.0 * (0.98 ^ (2 - 1 - 0)) = 0.98
+    // Turn 1 (P2): target = -1.0 * (0.98 ^ (2 - 1 - 1)) = -1.0
+
+    List<NNUETrainer.TrainingExample> examples =
+        new GameImporter().replayGame(pgn, 1, GameImporter.LabelMode.DISCOUNTED, 0.5f, 0.98f);
+
+    assertEquals(2, examples.size());
+    assertEquals(0.98f, examples.get(0).target, 0.001f);
+    assertEquals(-1.0f, examples.get(1).target, 0.001f);
+  }
 }
