@@ -46,6 +46,22 @@ public class SearchEngine {
    */
   public float alphaBeta(
       Board board, int depth, float alpha, float beta, int player, boolean maximizingPlayer) {
+    return alphaBeta(board, depth, alpha, beta, player, maximizingPlayer, 0, Long.MAX_VALUE);
+  }
+
+  public float alphaBeta(
+      Board board,
+      int depth,
+      float alpha,
+      float beta,
+      int player,
+      boolean maximizingPlayer,
+      long startTime,
+      long timeLimitMs) {
+    if (System.currentTimeMillis() - startTime >= timeLimitMs) {
+      throw new SearchTimeoutException();
+    }
+
     if (depth == 0 || isTerminal(board)) {
       return evaluate(board, player, maximizingPlayer);
     }
@@ -61,7 +77,9 @@ public class SearchEngine {
       float maxEval = Float.NEGATIVE_INFINITY;
       for (Board child : nextBoards) {
         // Opponent's turn next, so maximizingPlayer becomes false.
-        float eval = alphaBeta(child, depth - 1, alpha, beta, getOpponent(player), false);
+        float eval =
+            alphaBeta(
+                child, depth - 1, alpha, beta, getOpponent(player), false, startTime, timeLimitMs);
         maxEval = Math.max(maxEval, eval);
         alpha = Math.max(alpha, eval);
         if (beta <= alpha) {
@@ -73,7 +91,9 @@ public class SearchEngine {
       float minEval = Float.POSITIVE_INFINITY;
       for (Board child : nextBoards) {
         // Maximizing player's turn next, so maximizingPlayer becomes true.
-        float eval = alphaBeta(child, depth - 1, alpha, beta, getOpponent(player), true);
+        float eval =
+            alphaBeta(
+                child, depth - 1, alpha, beta, getOpponent(player), true, startTime, timeLimitMs);
         minEval = Math.min(minEval, eval);
         beta = Math.min(beta, eval);
         if (beta <= alpha) {
@@ -285,5 +305,57 @@ public class SearchEngine {
     System.out.println("==========================");
 
     return bestAction;
+  }
+
+  public static Action findBestActionWithTimeLimit(
+      Board board, int player, long timeLimitMs, boolean canPlaceNeutral) {
+    long startTime = System.currentTimeMillis();
+    Action globalBestAction = null;
+
+    SearchEngine engine = new SearchEngine();
+
+    // We get the legal actions once
+    List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
+    if (actions.isEmpty()) {
+      return null;
+    }
+
+    // Fallback: simply pick the first available action in case depth 1 doesn't even finish
+    globalBestAction = actions.get(0);
+
+    for (int depth = 1; depth <= 20; depth++) {
+      try {
+        Action bestActionAtDepth = null;
+        float bestValueAtDepth = Float.NEGATIVE_INFINITY;
+
+        for (Action action : actions) {
+          Board child = applyAction(board, player, action);
+          float value =
+              engine.alphaBeta(
+                  child,
+                  depth - 1,
+                  Float.NEGATIVE_INFINITY,
+                  Float.POSITIVE_INFINITY,
+                  3 - player,
+                  false,
+                  startTime,
+                  timeLimitMs);
+          if (value > bestValueAtDepth) {
+            bestValueAtDepth = value;
+            bestActionAtDepth = action;
+          }
+        }
+        // If we completed this depth without throwing SearchTimeoutException,
+        // we can safely update the global best action.
+        if (bestActionAtDepth != null) {
+          globalBestAction = bestActionAtDepth;
+        }
+      } catch (SearchTimeoutException e) {
+        // Time is up, break out of IDDFS loop
+        break;
+      }
+    }
+
+    return globalBestAction;
   }
 }
