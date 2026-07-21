@@ -18,13 +18,17 @@ def main():
 
     time.sleep(3) # Wait for backend to start
 
-    print("Starting Go bot...")
+    print("Starting Go bot (real bot-hoster, pool of 1)...")
     gobot_log = open("gobot.log", "w")
     gobot_env = os.environ.copy()
-    gobot_env["BACKEND_URL"] = "ws://localhost:8080/ws?bot=true&namePrefix=GoBot"
+    # Use the real bot-hoster (backend/cmd/bot-hoster) with its actual search AI,
+    # not the bot-templates/go stub. It accepts 1v1 challenges when idle.
+    gobot_env["BACKEND_URL"] = "ws://localhost:8080/ws"
+    gobot_env["BOT_POOL_SIZE"] = "1"
+    gobot_env["BOT_NAME_PREFIX"] = "GoBot"
     gobot_process = subprocess.Popen(
-        ["./gobot"],
-        cwd="../virusgame/bot-templates/go",
+        ["./bot-hoster"],
+        cwd="../virusgame/backend",
         stdout=gobot_log,
         stderr=gobot_log,
         env=gobot_env,

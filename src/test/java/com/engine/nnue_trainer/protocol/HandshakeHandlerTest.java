@@ -63,7 +63,7 @@ public class HandshakeHandlerTest {
   @Test
   public void testHandleUsersUpdateMessageChallengesGoBot() {
     String usersUpdateJson =
-        "{\"type\":\"users_update\",\"users\":[{\"id\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
+        "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
     handshakeHandler.handleMessage(usersUpdateJson);
 
     ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
@@ -79,7 +79,7 @@ public class HandshakeHandlerTest {
   @Test
   public void testHandleUsersUpdateMessageRateLimits() {
     String usersUpdateJson =
-        "{\"type\":\"users_update\",\"users\":[{\"id\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
+        "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
 
     // First message should trigger challenge
     handshakeHandler.handleMessage(usersUpdateJson);

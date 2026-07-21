@@ -1,9 +1,12 @@
 package com.engine.nnue_trainer.protocol.messages;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ChallengeMessage extends BaseMessage {
+  // Server (backend types.go) reads the challenge target from JSON field "targetUserId".
+  @JsonProperty("targetUserId")
   private String opponentId;
   private int rows;
   private int cols;

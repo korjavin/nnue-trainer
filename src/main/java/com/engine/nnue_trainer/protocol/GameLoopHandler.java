@@ -32,6 +32,8 @@ public class GameLoopHandler {
         this.currentGameId = node.get("gameId").asText();
         this.myPlayerIndex = node.get("yourPlayer").asInt();
         System.out.println("Game started: gameId=" + currentGameId + ", myPlayer=" + myPlayerIndex);
+        // game_start carries the initial snapshot; player 1 must move off it to start play.
+        handleSnapshot(node);
       } else if ("move_made".equals(type)) {
         int player = node.get("player").asInt();
         if (player != myPlayerIndex) {

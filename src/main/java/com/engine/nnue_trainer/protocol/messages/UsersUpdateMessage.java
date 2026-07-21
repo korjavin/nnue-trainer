@@ -26,10 +26,12 @@ public class UsersUpdateMessage extends BaseMessage {
     private String username;
     private boolean inGame;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("userId")
     public String getId() {
       return id;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("userId")
     public void setId(String id) {
       this.id = id;
     }
