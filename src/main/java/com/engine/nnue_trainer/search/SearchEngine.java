@@ -18,6 +18,7 @@ import java.util.List;
 public class SearchEngine {
 
   private NNUEModel nnueModel;
+  private boolean isCustomModel = false;
   private int nodesEvaluated = 0;
 
   // Search state
@@ -27,11 +28,13 @@ public class SearchEngine {
 
   public SearchEngine() {
     this.nnueModel = NNUEModel.createDefault();
+    this.isCustomModel = false;
     initSearchState();
   }
 
   public SearchEngine(NNUEModel nnueModel) {
     this.nnueModel = nnueModel;
+    this.isCustomModel = true;
     initSearchState();
   }
 
@@ -627,6 +630,13 @@ public class SearchEngine {
     long startTime = System.currentTimeMillis();
     nodesEvaluated = 0;
 
+    if (!isCustomModel) {
+      Action randomOpening = OpeningBook.getRandomOpeningMove(board, player, canPlaceNeutral);
+      if (randomOpening != null) {
+        return new SearchResult(randomOpening, 0.0f, 1, 0, System.currentTimeMillis() - startTime);
+      }
+    }
+
     actions = orderActions(actions, board, player, null, depth);
 
     Action bestAction = null;
@@ -721,10 +731,11 @@ public class SearchEngine {
     float globalBestScore = Float.NEGATIVE_INFINITY;
     int maxDepthReached = 0;
 
-    // Check if we are in opening phase and should pick a random opening move
-    Action randomOpening = OpeningBook.getRandomOpeningMove(board, player, canPlaceNeutral);
-    if (randomOpening != null) {
-      return new SearchResult(randomOpening, 0.0f, 1, 0, System.currentTimeMillis() - startTime);
+    if (!isCustomModel) {
+      Action randomOpening = OpeningBook.getRandomOpeningMove(board, player, canPlaceNeutral);
+      if (randomOpening != null) {
+        return new SearchResult(randomOpening, 0.0f, 1, 0, System.currentTimeMillis() - startTime);
+      }
     }
 
     // We get the legal actions once
