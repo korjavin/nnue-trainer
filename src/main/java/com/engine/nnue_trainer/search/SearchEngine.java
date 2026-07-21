@@ -19,7 +19,7 @@ public class SearchEngine {
   private NNUEModel nnueModel;
 
   public SearchEngine() {
-    this.nnueModel = null;
+    this.nnueModel = NNUEModel.createDefault();
   }
 
   public SearchEngine(NNUEModel nnueModel) {

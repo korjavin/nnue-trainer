@@ -1,5 +1,8 @@
 package com.engine.nnue_trainer.nnue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+
 public class NNUEModel {
   private final float[][] hiddenWeights;
   private final float[] hiddenBiases;
@@ -15,6 +18,19 @@ public class NNUEModel {
   }
 
   public static NNUEModel createDefault() {
+    try {
+      ObjectMapper mapper = new ObjectMapper();
+      InputStream is = NNUEModel.class.getResourceAsStream("/nnue_weights.json");
+      if (is != null) {
+        WeightsData data = mapper.readValue(is, WeightsData.class);
+        System.out.println("Loaded trained NNUE weights from nnue_weights.json");
+        return new NNUEModel(
+            data.hiddenWeights, data.hiddenBiases, data.outputWeights, data.outputBias);
+      }
+    } catch (Exception e) {
+      System.err.println("Failed to load nnue_weights.json: " + e.getMessage());
+    }
+
     int inputSize = 864;
     int hiddenSize = 256;
     float[][] hiddenWeights = new float[hiddenSize][inputSize];
@@ -23,6 +39,13 @@ public class NNUEModel {
     float outputBias = 0.0f;
 
     return new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, outputBias);
+  }
+
+  private static class WeightsData {
+    public float[][] hiddenWeights;
+    public float[] hiddenBiases;
+    public float[] outputWeights;
+    public float outputBias;
   }
 
   public float forward(float[] input) {
