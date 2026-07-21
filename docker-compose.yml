@@ -1,0 +1,18 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  nnue-trainer-bot:
+    # The image tag will be replaced by the GitHub Actions workflow in the deploy branch
+    image: ghcr.io/korjavin/nnue-trainer:latest
+    container_name: nnue-trainer-bot
+    networks:
+      - virusgame-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws?bot=true&namePrefix=JavaBot}
+
+networks:
+  virusgame-network:
+    name: ${NETWORK_NAME:-virusgame-network}
+    external: true
