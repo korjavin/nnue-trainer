@@ -17,15 +17,22 @@ public class NNUEModel {
     this.outputBias = outputBias;
   }
 
-  public static NNUEModel createDefault() {
+  private static NNUEModel cachedDefaultInstance = null;
+
+  public static synchronized NNUEModel createDefault() {
+    if (cachedDefaultInstance != null) {
+      return cachedDefaultInstance;
+    }
     try {
       ObjectMapper mapper = new ObjectMapper();
       InputStream is = NNUEModel.class.getResourceAsStream("/nnue_weights.json");
       if (is != null) {
         WeightsData data = mapper.readValue(is, WeightsData.class);
         System.out.println("Loaded trained NNUE weights from nnue_weights.json");
-        return new NNUEModel(
-            data.hiddenWeights, data.hiddenBiases, data.outputWeights, data.outputBias);
+        cachedDefaultInstance =
+            new NNUEModel(
+                data.hiddenWeights, data.hiddenBiases, data.outputWeights, data.outputBias);
+        return cachedDefaultInstance;
       }
     } catch (Exception e) {
       System.err.println("Failed to load nnue_weights.json: " + e.getMessage());
@@ -38,7 +45,8 @@ public class NNUEModel {
     float[] outputWeights = new float[hiddenSize];
     float outputBias = 0.0f;
 
-    return new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, outputBias);
+    cachedDefaultInstance = new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, outputBias);
+    return cachedDefaultInstance;
   }
 
   private static class WeightsData {
