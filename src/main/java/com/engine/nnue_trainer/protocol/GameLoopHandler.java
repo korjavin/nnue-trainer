@@ -18,8 +18,11 @@ public class GameLoopHandler {
   private int myPlayerIndex = -1;
   private String currentGameId = "";
 
-  public GameLoopHandler(MessageSender messageSender) {
+  private SearchEngine searchEngine;
+
+  public GameLoopHandler(MessageSender messageSender, SearchEngine searchEngine) {
     this.messageSender = messageSender;
+    this.searchEngine = searchEngine;
   }
 
   public void handleMessage(String jsonMessage) {
@@ -141,7 +144,7 @@ public class GameLoopHandler {
 
   private void makeMove(Board board, boolean canPlaceNeutral) {
     SearchResult searchResult =
-        SearchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 1000, canPlaceNeutral);
+        searchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 1000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
 
     if (bestAction == null) {

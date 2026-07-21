@@ -1,0 +1,1 @@
+sed -i 's/SearchEngine.findBestActionWithTimeLimit(board, 1, 10, true)/new SearchEngine().findBestActionWithTimeLimit(board, 1, 10, true)/' src/test/java/com/engine/nnue_trainer/search/SearchEngineTest.java

@@ -8,6 +8,7 @@ public class ChallengeMessage extends BaseMessage {
   // Server (backend types.go) reads the challenge target from JSON field "targetUserId".
   @JsonProperty("targetUserId")
   private String opponentId;
+
   private int rows;
   private int cols;
 

@@ -15,7 +15,8 @@ public class GameLoopHandlerTest {
   @BeforeEach
   public void setup() {
     messageSender = mock(MessageSender.class);
-    gameLoopHandler = new GameLoopHandler(messageSender);
+    gameLoopHandler =
+        new GameLoopHandler(messageSender, new com.engine.nnue_trainer.search.SearchEngine());
   }
 
   @Test

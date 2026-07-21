@@ -1,0 +1,4 @@
+sed -i 's/public BotWebSocketClient(URI serverUri)/import com.engine.nnue_trainer.search.SearchEngine;\n\n  public BotWebSocketClient(URI serverUri)/' src/main/java/com/engine/nnue_trainer/protocol/BotWebSocketClient.java
+sed -i 's/this.gameLoopHandler = new GameLoopHandler(sender);/this.gameLoopHandler = new GameLoopHandler(sender, new SearchEngine());/' src/main/java/com/engine/nnue_trainer/protocol/BotWebSocketClient.java
+sed -i 's/SearchEngine.findBestAction(board, currentPlayer, 2, true)/engine.findBestAction(board, currentPlayer, 2, true)/' src/main/java/com/engine/nnue_trainer/train/PeriodicRetrainer.java
+sed -i 's/SearchEngine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true)/engine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true)/' src/main/java/com/engine/nnue_trainer/train/SelfPlayGenerator.java

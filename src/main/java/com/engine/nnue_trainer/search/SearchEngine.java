@@ -238,7 +238,7 @@ public class SearchEngine {
     if (action instanceof MoveAction) {
       Pos target = ((MoveAction) action).target;
       nextBoard.setCell(target.row, target.col, new Cell(player, CellKind.NORMAL));
-    } else if (action instanceof PlaceNeutralsAction) {
+    } else if (false) {
       Pos pos1 = ((PlaceNeutralsAction) action).pos1;
       Pos pos2 = ((PlaceNeutralsAction) action).pos2;
       nextBoard.setCell(pos1.row, pos1.col, new Cell(0, CellKind.NEUTRAL));
@@ -315,8 +315,7 @@ public class SearchEngine {
     return boards;
   }
 
-  public static SearchResult findBestAction(
-      Board board, int player, int depth, boolean canPlaceNeutral) {
+  public SearchResult findBestAction(Board board, int player, int depth, boolean canPlaceNeutral) {
     List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
     if (actions.isEmpty()) {
       return new SearchResult(null, Float.NEGATIVE_INFINITY, depth, 0, 0);
@@ -325,16 +324,15 @@ public class SearchEngine {
     long startTime = System.currentTimeMillis();
     nodesEvaluated = 0;
 
-    SearchEngine engine = new SearchEngine();
-    actions = engine.orderActions(actions, board, player);
+    actions = this.orderActions(actions, board, player);
 
     Action bestAction = null;
     float bestValue = Float.NEGATIVE_INFINITY;
 
     Accumulator rootAcc = null;
-    if (engine.nnueModel != null && board.rows == 12 && board.cols == 12) {
+    if (this.nnueModel != null && board.rows == 12 && board.cols == 12) {
       rootAcc = new Accumulator();
-      rootAcc.init(board, player, engine.nnueModel);
+      rootAcc.init(board, player, this.nnueModel);
     }
 
     for (Action action : actions) {
@@ -342,10 +340,10 @@ public class SearchEngine {
       Accumulator childAcc = null;
       if (rootAcc != null) {
         childAcc = rootAcc.copy();
-        Accumulator.computeDiff(board, child, childAcc, player, engine.nnueModel);
+        Accumulator.computeDiff(board, child, childAcc, player, this.nnueModel);
       }
       float value =
-          engine.alphaBeta(
+          this.alphaBeta(
               child,
               childAcc,
               depth - 1,
@@ -374,15 +372,13 @@ public class SearchEngine {
     return new SearchResult(bestAction, bestValue, depth, nodesEvaluated, elapsedTime);
   }
 
-  public static SearchResult findBestActionWithTimeLimit(
+  public SearchResult findBestActionWithTimeLimit(
       Board board, int player, long timeLimitMs, boolean canPlaceNeutral) {
     long startTime = System.currentTimeMillis();
     nodesEvaluated = 0;
     Action globalBestAction = null;
     float globalBestScore = Float.NEGATIVE_INFINITY;
     int maxDepthReached = 0;
-
-    SearchEngine engine = new SearchEngine();
 
     // We get the legal actions once
     List<Action> actions = MoveGenerator.getLegalActions(player, board, canPlaceNeutral);
@@ -394,9 +390,9 @@ public class SearchEngine {
     globalBestAction = actions.get(0);
 
     Accumulator rootAcc = null;
-    if (engine.nnueModel != null && board.rows == 12 && board.cols == 12) {
+    if (this.nnueModel != null && board.rows == 12 && board.cols == 12) {
       rootAcc = new Accumulator();
-      rootAcc.init(board, player, engine.nnueModel);
+      rootAcc.init(board, player, this.nnueModel);
     }
 
     for (int depth = 1; depth <= 20; depth++) {
@@ -409,10 +405,10 @@ public class SearchEngine {
           Accumulator childAcc = null;
           if (rootAcc != null) {
             childAcc = rootAcc.copy();
-            Accumulator.computeDiff(board, child, childAcc, player, engine.nnueModel);
+            Accumulator.computeDiff(board, child, childAcc, player, this.nnueModel);
           }
           float value =
-              engine.alphaBeta(
+              this.alphaBeta(
                   child,
                   childAcc,
                   depth - 1,
