@@ -8,7 +8,7 @@ def main():
     print("Starting Go backend server...")
     # use preexec_fn=os.setsid to start process in new session so we can kill the entire process group
     backend_process = subprocess.Popen(
-        ["go", "run", "main.go"],
+        ["./server"],
         cwd="../virusgame/backend",
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -18,11 +18,9 @@ def main():
     time.sleep(3) # Wait for backend to start
 
     print("Starting Go bot...")
-    # Use glob to run the go bot
     gobot_process = subprocess.Popen(
-        "go run bot-templates/go/*.go",
-        cwd="../virusgame",
-        shell=True,
+        ["./gobot"],
+        cwd="../virusgame/bot-templates/go",
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         preexec_fn=os.setsid
