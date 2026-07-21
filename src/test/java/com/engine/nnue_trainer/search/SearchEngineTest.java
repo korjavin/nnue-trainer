@@ -42,6 +42,19 @@ public class SearchEngineTest {
       }
       return super.evaluate(board, player, maximizingPlayer);
     }
+
+    @Override
+    protected float evaluate(
+        Board board,
+        com.engine.nnue_trainer.nnue.Accumulator accumulator,
+        int player,
+        boolean maximizingPlayer) {
+      nodesEvaluated++;
+      if (evaluationMap.containsKey(board)) {
+        return evaluationMap.get(board);
+      }
+      return super.evaluate(board, accumulator, player, maximizingPlayer);
+    }
   }
 
   @Test
