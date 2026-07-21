@@ -61,7 +61,7 @@ public class PeriodicRetrainerTest {
     createDb(db);
     return new PeriodicRetrainer(
         liveEngine,
-        new PeriodicRetrainer.Config(db, null, tempDir.resolve("out"), 1, 1, 1, 0.55, 3L),
+        new PeriodicRetrainer.Config(db, null, tempDir.resolve("out"), 1, 1, 1, 0.55, 3L, null),
         new GameImporter(),
         evaluator,
         Executors.newSingleThreadScheduledExecutor());

@@ -11,15 +11,33 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 public class SelfPlayGenerator {
 
   private static final int DEFAULT_GAMES = 50;
   private static final int MAX_TURNS = 100;
-  private static final double EPSILON = 0.1;
-  private static final int SEARCH_DEPTH = 2; // configurable, standard minimax depth
+
+  public record Config(
+      int numGames,
+      double epsilon,
+      int earlyPlies,
+      int searchDepth,
+      long timeLimitMs,
+      String outputPath) {
+    public Config() {
+      this(DEFAULT_GAMES, 0.1, 6, 2, 0, "src/main/resources/self_play_data.json");
+    }
+  }
+
+  public record GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio, String datasetPath) {
+      public int totalRecords() {
+          return dataset.size();
+      }
+  }
 
   public static class TrainingRecord {
     public float[] features;
@@ -56,13 +74,21 @@ public class SelfPlayGenerator {
       outputPath = args[1];
     }
 
-    System.out.println("Starting self-play generation for " + numGames + " games...");
+    Config config = new Config(numGames, 0.1, 6, 2, 0, outputPath);
+    generateGames(config);
+  }
+
+  public static GenerationResult generateGames(Config config) {
+    System.out.println("Starting self-play generation for " + config.numGames() + " games...");
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = new Random();
     SearchEngine engine = new SearchEngine();
 
-    for (int game = 1; game <= numGames; game++) {
-      System.out.println("Simulating game " + game + "/" + numGames);
+    Set<Board> uniqueBoards = new HashSet<>();
+    int totalBoards = 0;
+
+    for (int game = 1; game <= config.numGames(); game++) {
+      System.out.println("Simulating game " + game + "/" + config.numGames());
       List<TurnData> turns = new ArrayList<>();
       Board board = new Board(12, 12);
 
@@ -75,7 +101,11 @@ public class SelfPlayGenerator {
 
       for (int turn = 0; turn < MAX_TURNS; turn++) {
         // Collect board snapshot BEFORE move
-        turns.add(new TurnData(copyBoard(board), currentPlayer));
+        Board copiedBoard = copyBoard(board);
+        turns.add(new TurnData(copiedBoard, currentPlayer));
+
+        uniqueBoards.add(copiedBoard);
+        totalBoards++;
 
         List<Action> legalActions = MoveGenerator.getLegalActions(currentPlayer, board, true);
         if (legalActions.isEmpty()) {
@@ -89,13 +119,17 @@ public class SelfPlayGenerator {
         }
 
         Action chosenAction = null;
-        if (random.nextDouble() < EPSILON) {
+        if (turn <= config.earlyPlies() && random.nextDouble() < config.epsilon()) {
           // Exploration
           chosenAction = legalActions.get(random.nextInt(legalActions.size()));
         } else {
           // Exploitation
-          chosenAction =
-              SearchEngine.findBestAction(board, currentPlayer, SEARCH_DEPTH, true).bestAction;
+          if (config.timeLimitMs() > 0) {
+            chosenAction = SearchEngine.findBestActionWithTimeLimit(board, currentPlayer, config.timeLimitMs(), true).bestAction;
+          } else {
+            chosenAction = SearchEngine.findBestAction(board, currentPlayer, config.searchDepth(), true).bestAction;
+          }
+
           if (chosenAction == null) {
             chosenAction = legalActions.get(0); // fallback
           }
@@ -112,9 +146,6 @@ public class SelfPlayGenerator {
         currentPlayer = 3 - currentPlayer;
       }
 
-      // If loop ended and winner is still 0, it's a draw (reached MAX_TURNS or no terminal
-      // condition met)
-
       // Process collected turns to dataset
       for (TurnData turnData : turns) {
         float target = 0.0f;
@@ -126,8 +157,13 @@ public class SelfPlayGenerator {
       }
     }
 
+    double distinctGameRatio = totalBoards > 0 ? (double) uniqueBoards.size() / totalBoards : 0.0;
     System.out.println("Generation complete. Total records: " + dataset.size());
-    saveDataset(dataset, outputPath);
+    System.out.printf("Distinct game ratio: %.2f%%\n", distinctGameRatio * 100);
+
+    saveDataset(dataset, config.outputPath());
+
+    return new GenerationResult(dataset, distinctGameRatio, config.outputPath());
   }
 
   private static int determineWinner(Board board) {

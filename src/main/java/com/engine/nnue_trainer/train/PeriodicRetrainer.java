@@ -16,6 +16,8 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -58,13 +60,23 @@ public class PeriodicRetrainer implements AutoCloseable {
     GameImporter.ImportResult importResult =
         importer.importGames(
             new GameImporter.ImportOptions(config.dbPath(), config.minStartedAt(), true));
-    if (importResult.examples().size() < config.minExamples()) {
+
+    List<NNUETrainer.TrainingExample> examples = new ArrayList<>(importResult.examples());
+
+    if (config.selfPlayConfig() != null) {
+      SelfPlayGenerator.GenerationResult spResult = SelfPlayGenerator.generateGames(config.selfPlayConfig());
+      for (SelfPlayGenerator.TrainingRecord record : spResult.dataset()) {
+          examples.add(new NNUETrainer.TrainingExample(record.features, record.target));
+      }
+    }
+
+    if (examples.size() < config.minExamples()) {
       return RetrainingResult.skipped(
-          importResult.examples().size(), "not enough examples for retraining");
+          examples.size(), "not enough examples for retraining");
     }
 
     NNUETrainer trainer = new NNUETrainer(config.seed());
-    NNUETrainer.TrainingResult trainingResult = trainer.train(importResult.examples());
+    NNUETrainer.TrainingResult trainingResult = trainer.train(examples);
     NNUEModel candidate = trainer.createModel();
     NNUEModel current = liveSearchEngine.getNnueModel();
     EvaluationResult evaluation = evaluator.evaluate(current, candidate);
@@ -73,7 +85,7 @@ public class PeriodicRetrainer implements AutoCloseable {
       return new RetrainingResult(
           false,
           false,
-          importResult.examples().size(),
+          examples.size(),
           trainingResult.finalMse(),
           evaluation,
           "candidate rejected by gauntlet");
@@ -85,11 +97,11 @@ public class PeriodicRetrainer implements AutoCloseable {
     Path latestWeights = config.outputDir().resolve("nnue_weights.json");
     trainer.saveWeights(versionedWeights);
     trainer.saveWeights(latestWeights);
-    writeMetadata(runId, importResult, trainingResult, evaluation, versionedWeights);
+    writeMetadata(runId, importResult, trainingResult, evaluation, versionedWeights, examples.size());
     liveSearchEngine.setNnueModel(candidate);
 
     return new RetrainingResult(
-        true, true, importResult.examples().size(), trainingResult.finalMse(), evaluation, runId);
+        true, true, examples.size(), trainingResult.finalMse(), evaluation, runId);
   }
 
   private void runOnceSafely() {
@@ -191,14 +203,15 @@ public class PeriodicRetrainer implements AutoCloseable {
       GameImporter.ImportResult importResult,
       NNUETrainer.TrainingResult trainingResult,
       EvaluationResult evaluation,
-      Path weightsPath)
+      Path weightsPath,
+      int totalExamples)
       throws IOException {
     Metadata metadata = new Metadata();
     metadata.runId = runId;
     metadata.seed = config.seed();
     metadata.dbPath = config.dbPath().toString();
     metadata.minStartedAt = config.minStartedAt();
-    metadata.examples = importResult.examples().size();
+    metadata.examples = totalExamples;
     metadata.importedGames = importResult.importedGames();
     metadata.skippedDuplicateGames = importResult.skippedDuplicates();
     metadata.finalMse = trainingResult.finalMse();
@@ -230,7 +243,8 @@ public class PeriodicRetrainer implements AutoCloseable {
       int gauntletGames,
       int searchDepth,
       double promotionWinRate,
-      long seed) {}
+      long seed,
+      SelfPlayGenerator.Config selfPlayConfig) {}
 
   public record EvaluationResult(int candidateWins, int currentWins, int draws) {
     public boolean promoted(double winRateThreshold) {
