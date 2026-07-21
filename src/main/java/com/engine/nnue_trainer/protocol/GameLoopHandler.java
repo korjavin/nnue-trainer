@@ -141,8 +141,18 @@ public class GameLoopHandler {
 
   private void makeMove(Board board, boolean canPlaceNeutral) {
     SearchResult searchResult =
-        SearchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 1000, canPlaceNeutral);
+        SearchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
+
+    System.out.println(
+        "[SEARCH] depth="
+            + searchResult.depth
+            + " nodes="
+            + searchResult.nodesEvaluated
+            + " timeMs="
+            + searchResult.timeMs
+            + " score="
+            + searchResult.score);
 
     if (bestAction == null) {
       System.out.println("No legal actions available.");
