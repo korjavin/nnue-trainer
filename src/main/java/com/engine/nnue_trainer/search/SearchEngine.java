@@ -88,7 +88,7 @@ public class SearchEngine {
   }
 
   /** Terminal check: if either player has lost their base. */
-  protected boolean isTerminal(Board board) {
+  public boolean isTerminal(Board board) {
     boolean hasBases = false;
     boolean player1Base = false;
     boolean player2Base = false;
