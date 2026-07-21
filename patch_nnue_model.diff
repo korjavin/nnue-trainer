@@ -1,0 +1,60 @@
+<<<<<<< SEARCH
+  public float forward(float[] input) {
+    if (input.length != 864) {
+      throw new IllegalArgumentException("Input array must have length 864");
+    }
+
+    int hiddenSize = hiddenWeights.length;
+    float[] hiddenLayer = new float[hiddenSize];
+
+    for (int i = 0; i < hiddenSize; i++) {
+      float sum = hiddenBiases[i];
+      for (int j = 0; j < 864; j++) {
+        sum += hiddenWeights[i][j] * input[j];
+      }
+      // Clipped ReLU
+      hiddenLayer[i] = Math.max(0.0f, Math.min(127.0f, sum));
+    }
+
+    float output = outputBias;
+    for (int i = 0; i < hiddenSize; i++) {
+      output += outputWeights[i] * hiddenLayer[i];
+    }
+
+    return output;
+  }
+=======
+  public float forward(float[] input) {
+    if (input.length != 864) {
+      throw new IllegalArgumentException("Input array must have length 864");
+    }
+
+    int hiddenSize = hiddenWeights.length;
+    float[] hiddenLayer = new float[hiddenSize];
+
+    for (int i = 0; i < hiddenSize; i++) {
+      float sum = hiddenBiases[i];
+      for (int j = 0; j < 864; j++) {
+        sum += hiddenWeights[i][j] * input[j];
+      }
+      // Clipped ReLU
+      hiddenLayer[i] = Math.max(0.0f, Math.min(127.0f, sum));
+    }
+
+    float output = outputBias;
+    for (int i = 0; i < hiddenSize; i++) {
+      output += outputWeights[i] * hiddenLayer[i];
+    }
+
+    return output;
+  }
+
+  public float forward(Accumulator accumulator) {
+    float[] hiddenLayer = accumulator.getClippedReLUActivation();
+    float output = outputBias;
+    for (int i = 0; i < hiddenLayer.length; i++) {
+      output += outputWeights[i] * hiddenLayer[i];
+    }
+    return output;
+  }
+>>>>>>> REPLACE

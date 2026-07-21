@@ -81,6 +81,15 @@ public class NNUEModel {
     return output;
   }
 
+  public float forward(Accumulator accumulator) {
+    float[] hiddenLayer = accumulator.getClippedReLUActivation();
+    float output = outputBias;
+    for (int i = 0; i < hiddenLayer.length; i++) {
+      output += outputWeights[i] * hiddenLayer[i];
+    }
+    return output;
+  }
+
   public float[][] getHiddenWeights() {
     return hiddenWeights;
   }

@@ -9,6 +9,7 @@ import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.MoveGenerator;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.board.Pos;
+import com.engine.nnue_trainer.nnue.Accumulator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import java.util.ArrayList;
@@ -58,28 +59,57 @@ public class SearchEngine {
       boolean maximizingPlayer,
       long startTime,
       long timeLimitMs) {
+    return alphaBeta(
+        board, null, depth, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs);
+  }
+
+  public float alphaBeta(
+      Board board,
+      Accumulator accumulator,
+      int depth,
+      float alpha,
+      float beta,
+      int player,
+      boolean maximizingPlayer,
+      long startTime,
+      long timeLimitMs) {
     if (System.currentTimeMillis() - startTime >= timeLimitMs) {
       throw new SearchTimeoutException();
     }
 
     if (depth == 0 || isTerminal(board)) {
-      return evaluate(board, player, maximizingPlayer);
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
 
     List<Board> nextBoards = generateNextBoards(board, player, maximizingPlayer);
 
     // If there are no moves available, we treat it as terminal
     if (nextBoards.isEmpty()) {
-      return evaluate(board, player, maximizingPlayer);
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
+
+    int originalPlayer = maximizingPlayer ? player : getOpponent(player);
 
     if (maximizingPlayer) {
       float maxEval = Float.NEGATIVE_INFINITY;
       for (Board child : nextBoards) {
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
+        }
         // Opponent's turn next, so maximizingPlayer becomes false.
         float eval =
             alphaBeta(
-                child, depth - 1, alpha, beta, getOpponent(player), false, startTime, timeLimitMs);
+                child,
+                childAcc,
+                depth - 1,
+                alpha,
+                beta,
+                getOpponent(player),
+                false,
+                startTime,
+                timeLimitMs);
         maxEval = Math.max(maxEval, eval);
         alpha = Math.max(alpha, eval);
         if (beta <= alpha) {
@@ -90,10 +120,23 @@ public class SearchEngine {
     } else {
       float minEval = Float.POSITIVE_INFINITY;
       for (Board child : nextBoards) {
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
+        }
         // Maximizing player's turn next, so maximizingPlayer becomes true.
         float eval =
             alphaBeta(
-                child, depth - 1, alpha, beta, getOpponent(player), true, startTime, timeLimitMs);
+                child,
+                childAcc,
+                depth - 1,
+                alpha,
+                beta,
+                getOpponent(player),
+                true,
+                startTime,
+                timeLimitMs);
         minEval = Math.min(minEval, eval);
         beta = Math.min(beta, eval);
         if (beta <= alpha) {
@@ -127,8 +170,13 @@ public class SearchEngine {
     return !player1Base || !player2Base;
   }
 
-  /** Evaluation function: simple count of pieces owned by the player, penalized if base is lost. */
   protected float evaluate(Board board, int player, boolean maximizingPlayer) {
+    return evaluate(board, null, player, maximizingPlayer);
+  }
+
+  /** Evaluation function: simple count of pieces owned by the player, penalized if base is lost. */
+  protected float evaluate(
+      Board board, Accumulator accumulator, int player, boolean maximizingPlayer) {
     nodesEvaluated++;
     int originalPlayer = maximizingPlayer ? player : getOpponent(player);
     int opponent = getOpponent(originalPlayer);
@@ -165,8 +213,12 @@ public class SearchEngine {
     }
 
     if (nnueModel != null && board.rows == 12 && board.cols == 12) {
-      float[] features = BoardFeatureMapper.map(board, originalPlayer);
-      return nnueModel.forward(features);
+      if (accumulator != null) {
+        return nnueModel.forward(accumulator);
+      } else {
+        float[] features = BoardFeatureMapper.map(board, originalPlayer);
+        return nnueModel.forward(features);
+      }
     }
 
     return myPieces - oppPieces;
@@ -278,16 +330,30 @@ public class SearchEngine {
     Action bestAction = null;
     float bestValue = Float.NEGATIVE_INFINITY;
 
+    Accumulator rootAcc = null;
+    if (engine.nnueModel != null && board.rows == 12 && board.cols == 12) {
+      rootAcc = new Accumulator();
+      rootAcc.init(board, player, engine.nnueModel);
+    }
+
     for (Action action : actions) {
       Board child = applyAction(board, player, action);
+      Accumulator childAcc = null;
+      if (rootAcc != null) {
+        childAcc = rootAcc.copy();
+        Accumulator.computeDiff(board, child, childAcc, player, engine.nnueModel);
+      }
       float value =
           engine.alphaBeta(
               child,
+              childAcc,
               depth - 1,
               Float.NEGATIVE_INFINITY,
               Float.POSITIVE_INFINITY,
               3 - player,
-              false);
+              false,
+              startTime,
+              Long.MAX_VALUE);
       if (value > bestValue) {
         bestValue = value;
         bestAction = action;
@@ -323,6 +389,12 @@ public class SearchEngine {
     // Fallback: simply pick the first available action in case depth 1 doesn't even finish
     globalBestAction = actions.get(0);
 
+    Accumulator rootAcc = null;
+    if (engine.nnueModel != null && board.rows == 12 && board.cols == 12) {
+      rootAcc = new Accumulator();
+      rootAcc.init(board, player, engine.nnueModel);
+    }
+
     for (int depth = 1; depth <= 20; depth++) {
       try {
         Action bestActionAtDepth = null;
@@ -330,9 +402,15 @@ public class SearchEngine {
 
         for (Action action : actions) {
           Board child = applyAction(board, player, action);
+          Accumulator childAcc = null;
+          if (rootAcc != null) {
+            childAcc = rootAcc.copy();
+            Accumulator.computeDiff(board, child, childAcc, player, engine.nnueModel);
+          }
           float value =
               engine.alphaBeta(
                   child,
+                  childAcc,
                   depth - 1,
                   Float.NEGATIVE_INFINITY,
                   Float.POSITIVE_INFINITY,

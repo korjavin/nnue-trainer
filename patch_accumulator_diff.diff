@@ -1,0 +1,17 @@
+<<<<<<< SEARCH
+  public static int getFeatureState(Cell cell, int activePlayer) {
+=======
+  public static void computeDiff(Board oldBoard, Board newBoard, Accumulator accumulator, int activePlayer, NNUEModel model) {
+    for (int r = 0; r < oldBoard.rows; r++) {
+      for (int c = 0; c < oldBoard.cols; c++) {
+        Cell oldCell = oldBoard.getCell(r, c);
+        Cell newCell = newBoard.getCell(r, c);
+        int oldState = getFeatureState(oldCell, activePlayer);
+        int newState = getFeatureState(newCell, activePlayer);
+        accumulator.update(r, c, oldState, newState, model);
+      }
+    }
+  }
+
+  public static int getFeatureState(Cell cell, int activePlayer) {
+>>>>>>> REPLACE
