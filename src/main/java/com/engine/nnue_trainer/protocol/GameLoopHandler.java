@@ -31,21 +31,45 @@ public class GameLoopHandler {
         this.currentGameId = node.get("gameId").asText();
         this.myPlayerIndex = node.get("yourPlayer").asInt();
         System.out.println("Game started: gameId=" + currentGameId + ", myPlayer=" + myPlayerIndex);
-      } else if ("move_made".equals(type)
-          || "neutrals_placed".equals(type)
-          || "turn_change".equals(type)) {
+      } else if ("move_made".equals(type)) {
+        int player = node.get("player").asInt();
+        if (player != myPlayerIndex) {
+          int row = node.get("row").asInt();
+          int col = node.get("col").asInt();
+          System.out.println("Opponent played Move at (" + row + ", " + col + ")");
+        }
+        handleSnapshot(node);
+      } else if ("neutrals_placed".equals(type)) {
+        int player = node.get("player").asInt();
+        if (player != myPlayerIndex) {
+          JsonNode cells = node.get("cells");
+          if (cells != null && cells.isArray() && cells.size() >= 2) {
+            System.out.println(
+                "Opponent placed Neutrals at "
+                    + "("
+                    + cells.get(0).get("row").asInt()
+                    + ", "
+                    + cells.get(0).get("col").asInt()
+                    + ") and "
+                    + "("
+                    + cells.get(1).get("row").asInt()
+                    + ", "
+                    + cells.get(1).get("col").asInt()
+                    + ")");
+          } else {
+            System.out.println("Opponent placed Neutrals");
+          }
+        }
+        handleSnapshot(node);
+      } else if ("turn_change".equals(type)) {
         if (node.has("snapshot")) {
           JsonNode snapshot = node.get("snapshot");
           int currentPlayer = snapshot.get("currentPlayer").asInt();
-          boolean gameOver = snapshot.get("gameOver").asBoolean();
-
-          if (!gameOver && currentPlayer == myPlayerIndex) {
-            Board board = parseBoardFromSnapshot(snapshot);
-            boolean canPlaceNeutral =
-                !snapshot.get("neutralUsed").get(myPlayerIndex - 1).asBoolean();
-            makeMove(board, canPlaceNeutral);
-          }
+          int movesLeft = snapshot.get("movesLeft").asInt();
+          System.out.println(
+              "Turn changed: Player " + currentPlayer + "'s turn (Moves left: " + movesLeft + ")");
         }
+        handleSnapshot(node);
       } else if ("game_end".equals(type)) {
         System.out.println("Game ended. Winner: player " + node.get("winner").asInt());
         this.currentGameId = "";
@@ -54,6 +78,20 @@ public class GameLoopHandler {
     } catch (Exception e) {
       System.err.println("Error in GameLoopHandler: " + e.getMessage());
       e.printStackTrace();
+    }
+  }
+
+  private void handleSnapshot(JsonNode node) {
+    if (node.has("snapshot")) {
+      JsonNode snapshot = node.get("snapshot");
+      int currentPlayer = snapshot.get("currentPlayer").asInt();
+      boolean gameOver = snapshot.get("gameOver").asBoolean();
+
+      if (!gameOver && currentPlayer == myPlayerIndex) {
+        Board board = parseBoardFromSnapshot(snapshot);
+        boolean canPlaceNeutral = !snapshot.get("neutralUsed").get(myPlayerIndex - 1).asBoolean();
+        makeMove(board, canPlaceNeutral);
+      }
     }
   }
 

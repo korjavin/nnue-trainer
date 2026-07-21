@@ -28,7 +28,7 @@ public class BotWebSocketClient extends WebSocketClient {
 
   @Override
   public void onMessage(String message) {
-    System.out.println("Received message: " + message);
+    // System.out.println("Received message: " + message);
     handshakeHandler.handleMessage(message);
     gameLoopHandler.handleMessage(message);
   }
