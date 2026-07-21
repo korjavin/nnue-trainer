@@ -14,7 +14,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = WelcomeMessage.class, name = "welcome"),
   @JsonSubTypes.Type(value = BotWantedMessage.class, name = "bot_wanted"),
   @JsonSubTypes.Type(value = JoinLobbyMessage.class, name = "join_lobby"),
-  @JsonSubTypes.Type(value = ChallengeReceivedMessage.class, name = "challenge_received")
+  @JsonSubTypes.Type(value = ChallengeReceivedMessage.class, name = "challenge_received"),
+  @JsonSubTypes.Type(value = UsersUpdateMessage.class, name = "users_update"),
+  @JsonSubTypes.Type(value = ChallengeMessage.class, name = "challenge")
 })
 public abstract class BaseMessage {
   private String type;
