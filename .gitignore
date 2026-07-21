@@ -42,3 +42,4 @@ dataset.json
 # Python venv and run logs
 .venv/
 *.log
+__pycache__/
