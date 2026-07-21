@@ -164,7 +164,13 @@ public class GameLoopHandler {
       response.put("gameId", currentGameId);
 
       // Append diagnostics payload
-      response.put("score", searchResult.score);
+      double scoreToSend = searchResult.score;
+      if (scoreToSend == Float.POSITIVE_INFINITY) {
+        scoreToSend = 1000000.0;
+      } else if (scoreToSend == Float.NEGATIVE_INFINITY) {
+        scoreToSend = -1000000.0;
+      }
+      response.put("score", scoreToSend * 1000.0);
       response.put("depth", searchResult.depth);
       response.put("nodesEvaluated", searchResult.nodesEvaluated);
       response.put("timeMs", searchResult.timeMs);
