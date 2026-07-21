@@ -15,11 +15,17 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 public class GameLoopHandler {
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final MessageSender messageSender;
+  private final SearchEngine searchEngine;
   private int myPlayerIndex = -1;
   private String currentGameId = "";
 
   public GameLoopHandler(MessageSender messageSender) {
+    this(messageSender, new SearchEngine());
+  }
+
+  public GameLoopHandler(MessageSender messageSender, SearchEngine searchEngine) {
     this.messageSender = messageSender;
+    this.searchEngine = searchEngine;
   }
 
   public void handleMessage(String jsonMessage) {
@@ -141,7 +147,8 @@ public class GameLoopHandler {
 
   private void makeMove(Board board, boolean canPlaceNeutral) {
     SearchResult searchResult =
-        SearchEngine.findBestActionWithTimeLimit(board, myPlayerIndex, 5000, canPlaceNeutral);
+        searchEngine.findBestActionWithTimeLimitUsingModel(
+            board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
 
     System.out.println(

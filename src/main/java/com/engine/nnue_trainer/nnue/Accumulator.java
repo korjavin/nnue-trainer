@@ -6,7 +6,7 @@ import com.engine.nnue_trainer.board.CellKind;
 import java.util.Arrays;
 
 public class Accumulator {
-  private final float[] accum;
+  private float[] accum;
 
   public Accumulator() {
     this.accum = new float[256];
@@ -20,10 +20,10 @@ public class Accumulator {
     float[][] hiddenWeights = model.getHiddenWeights();
     float[] hiddenBiases = model.getHiddenBiases();
 
-    System.arraycopy(hiddenBiases, 0, accum, 0, 256);
+    this.accum = Arrays.copyOf(hiddenBiases, hiddenBiases.length);
 
     float[] features = BoardFeatureMapper.map(board, perspectivePlayer);
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < accum.length; i++) {
       float sum = 0;
       for (int j = 0; j < 864; j++) {
         if (features[j] != 0.0f) {
@@ -40,7 +40,7 @@ public class Accumulator {
     float[][] hiddenWeights = model.getHiddenWeights();
     int cellIndex = row * 12 + col;
 
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < accum.length; i++) {
       // oldState 0 is also mapped to cellIndex * 6 + 0
       accum[i] -= hiddenWeights[i][cellIndex * 6 + oldState];
       accum[i] += hiddenWeights[i][cellIndex * 6 + newState];
@@ -48,8 +48,8 @@ public class Accumulator {
   }
 
   public float[] getClippedReLUActivation() {
-    float[] activation = new float[256];
-    for (int i = 0; i < 256; i++) {
+    float[] activation = new float[accum.length];
+    for (int i = 0; i < accum.length; i++) {
       activation[i] = Math.max(0.0f, Math.min(127.0f, accum[i]));
     }
     return activation;

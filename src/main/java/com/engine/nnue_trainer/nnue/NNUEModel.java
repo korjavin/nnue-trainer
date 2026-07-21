@@ -1,7 +1,9 @@
 package com.engine.nnue_trainer.nnue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 
 public class NNUEModel {
   private final float[][] hiddenWeights;
@@ -49,11 +51,21 @@ public class NNUEModel {
     return cachedDefaultInstance;
   }
 
-  private static class WeightsData {
+  public static class WeightsData {
     public float[][] hiddenWeights;
     public float[] hiddenBiases;
     public float[] outputWeights;
     public float outputBias;
+  }
+
+  public static NNUEModel fromWeightsData(WeightsData data) {
+    return new NNUEModel(
+        data.hiddenWeights, data.hiddenBiases, data.outputWeights, data.outputBias);
+  }
+
+  public static NNUEModel load(Path path) throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    return fromWeightsData(mapper.readValue(path.toFile(), WeightsData.class));
   }
 
   public float forward(float[] input) {

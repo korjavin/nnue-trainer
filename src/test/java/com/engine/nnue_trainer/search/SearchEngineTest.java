@@ -8,6 +8,7 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.Pos;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -143,6 +144,20 @@ public class SearchEngineTest {
   }
 
   @Test
+  public void testFindBestActionUsesInjectedModel() {
+    Board board = new Board(12, 12);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+
+    NNUEModel model = modelFavoringOwnNormalAt(1, 1);
+    SearchEngine engine = new SearchEngine(model);
+
+    Action action = engine.findBestActionUsingModel(board, 1, 1, false).bestAction;
+
+    assertEquals(new MoveAction(new Pos(1, 1)), action);
+  }
+
+  @Test
   public void testEvaluate_pieceCount() {
     SearchEngine engine = new SearchEngine();
     Board board = new Board(2, 2);
@@ -197,5 +212,14 @@ public class SearchEngineTest {
     assertEquals(captureNormal, orderedActions.get(1));
     assertEquals(adjacentToBase, orderedActions.get(2));
     assertEquals(neutralMove, orderedActions.get(3));
+  }
+
+  private static NNUEModel modelFavoringOwnNormalAt(int row, int col) {
+    float[][] hiddenWeights = new float[1][864];
+    float[] hiddenBiases = new float[1];
+    float[] outputWeights = new float[] {10.0f};
+    int featureIndex = (row * 12 + col) * 6 + 1;
+    hiddenWeights[0][featureIndex] = 1.0f;
+    return new NNUEModel(hiddenWeights, hiddenBiases, outputWeights, 0.0f);
   }
 }
