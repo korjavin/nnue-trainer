@@ -17,6 +17,7 @@ import java.util.List;
 public class SearchEngine {
 
   private NNUEModel nnueModel;
+  private static int nodesEvaluated = 0;
 
   public SearchEngine() {
     this.nnueModel = NNUEModel.createDefault();
@@ -108,6 +109,7 @@ public class SearchEngine {
 
   /** Evaluation function: simple count of pieces owned by the player, penalized if base is lost. */
   protected float evaluate(Board board, int player, boolean maximizingPlayer) {
+    nodesEvaluated++;
     int originalPlayer = maximizingPlayer ? player : getOpponent(player);
     int opponent = getOpponent(originalPlayer);
 
@@ -207,6 +209,9 @@ public class SearchEngine {
       return null;
     }
 
+    long startTime = System.currentTimeMillis();
+    nodesEvaluated = 0;
+
     SearchEngine engine = new SearchEngine();
     Action bestAction = null;
     float bestValue = Float.NEGATIVE_INFINITY;
@@ -226,6 +231,17 @@ public class SearchEngine {
         bestAction = action;
       }
     }
+
+    long elapsedTime = System.currentTimeMillis() - startTime;
+    System.out.println("=== Search Diagnostics ===");
+    System.out.println("Search Depth: " + depth);
+    System.out.println("Nodes Evaluated: " + nodesEvaluated);
+    System.out.println("Time Elapsed: " + elapsedTime + " ms");
+    String actionDesc = (bestAction != null) ? bestAction.toString() : "None";
+    System.out.println("Best Action: " + actionDesc);
+    System.out.println("Position Evaluation: " + bestValue);
+    System.out.println("==========================");
+
     return bestAction;
   }
 }
