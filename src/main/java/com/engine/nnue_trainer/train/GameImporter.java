@@ -27,6 +27,12 @@ import java.util.Locale;
 import java.util.Set;
 
 public class GameImporter {
+  public enum LabelMode {
+    OUTCOME,
+    TD_LEAF,
+    DISCOUNTED
+  }
+
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   public ImportResult importGames(Path dbPath) throws SQLException, IOException {
@@ -68,7 +74,7 @@ public class GameImporter {
             skippedDuplicates++;
             continue;
           }
-          examples.addAll(replayGame(gameId, pgnContent, result));
+          examples.addAll(replayGame(gameId, pgnContent, result, options));
           importedGames++;
         }
       }
@@ -79,11 +85,20 @@ public class GameImporter {
 
   public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result)
       throws IOException {
-    return replayGame(-1L, pgnContent, result);
+    return replayGame(
+        -1L,
+        pgnContent,
+        result,
+        new ImportOptions(null, null, false, LabelMode.OUTCOME, 0.5, 0.98));
   }
 
-  private List<NNUETrainer.TrainingExample> replayGame(long gameId, String pgnContent, int result)
-      throws IOException {
+  public List<NNUETrainer.TrainingExample> replayGame(
+      String pgnContent, int result, ImportOptions options) throws IOException {
+    return replayGame(-1L, pgnContent, result, options);
+  }
+
+  private List<NNUETrainer.TrainingExample> replayGame(
+      long gameId, String pgnContent, int result, ImportOptions options) throws IOException {
     JsonNode turns;
     try {
       turns = MAPPER.readTree(pgnContent);
@@ -97,25 +112,59 @@ public class GameImporter {
     List<NNUETrainer.TrainingExample> examples = new ArrayList<>();
     Board board = initialBoard();
 
-    for (JsonNode turn : turns) {
+    int totalTurns = turns.size();
+    for (int turnIndex = 0; turnIndex < totalTurns; turnIndex++) {
+      JsonNode turn = turns.get(turnIndex);
       int player = requiredInt(turn, "player", "Player");
       JsonNode moves = turn.get("moves");
       if (moves == null) {
         moves = turn.get("Moves");
       }
+
+      double searchEval = 0.0;
+      boolean foundScore = false;
       if (moves != null) {
         if (!moves.isArray()) {
           throw new IOException("moves must be an array for game " + gameId);
         }
         for (JsonNode move : moves) {
+          if (move.has("score")) {
+            searchEval = move.get("score").asDouble() / 1000.0;
+            foundScore = true;
+          } else if (move.has("Score")) {
+            searchEval = move.get("Score").asDouble() / 1000.0;
+            foundScore = true;
+          }
           Action action = parseAction(move);
           board = SearchEngine.applyAction(board, player, action);
         }
       }
 
+      if (options.labelMode() == LabelMode.TD_LEAF && !foundScore) {
+        throw new IOException(
+            "TD_LEAF mode requires 'score' in PGN, but none was found for game " + gameId);
+      }
+
+      if (!Double.isFinite(searchEval)) {
+        throw new IOException("Non-finite search eval found in game " + gameId);
+      }
+
+      searchEval = Math.max(-1.0, Math.min(1.0, searchEval));
+
+      float outcome = target(result, player);
+      float finalTarget = outcome;
+
+      if (options.labelMode() == LabelMode.TD_LEAF) {
+        int distance = totalTurns - turnIndex;
+        double currentLambda = Math.pow(options.lambdaVal(), distance);
+        finalTarget = (float) ((1.0 - currentLambda) * searchEval + currentLambda * outcome);
+      } else if (options.labelMode() == LabelMode.DISCOUNTED) {
+        int distance = totalTurns - turnIndex;
+        finalTarget = (float) (outcome * Math.pow(options.gammaVal(), distance));
+      }
+
       examples.add(
-          new NNUETrainer.TrainingExample(
-              BoardFeatureMapper.map(board, player), target(result, player)));
+          new NNUETrainer.TrainingExample(BoardFeatureMapper.map(board, player), finalTarget));
     }
 
     return examples;
@@ -175,7 +224,26 @@ public class GameImporter {
     return result == player ? 1.0f : -1.0f;
   }
 
-  public record ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {}
+  public record ImportOptions(
+      Path dbPath,
+      String minStartedAt,
+      boolean deduplicatePgn,
+      LabelMode labelMode,
+      double lambdaVal,
+      double gammaVal) {
+    public ImportOptions {
+      if (lambdaVal < 0.0 || lambdaVal > 1.0) {
+        throw new IllegalArgumentException("lambdaVal must be in [0, 1]");
+      }
+      if (gammaVal < 0.0 || gammaVal > 1.0) {
+        throw new IllegalArgumentException("gammaVal must be in [0, 1]");
+      }
+    }
+
+    public ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {
+      this(dbPath, minStartedAt, deduplicatePgn, LabelMode.OUTCOME, 0.5, 0.98);
+    }
+  }
 
   public record ImportResult(
       List<NNUETrainer.TrainingExample> examples, int importedGames, int skippedDuplicates) {}

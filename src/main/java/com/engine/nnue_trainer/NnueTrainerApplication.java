@@ -60,7 +60,10 @@ public class NnueTrainerApplication {
                 gauntletGames,
                 searchDepth,
                 promotionWinRate,
-                seed));
+                seed,
+                com.engine.nnue_trainer.train.GameImporter.LabelMode.OUTCOME,
+                0.5,
+                0.98));
     retrainer.start(Duration.ofMinutes(1), Duration.ofHours(24));
   }
 }
