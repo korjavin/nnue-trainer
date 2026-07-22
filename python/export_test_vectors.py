@@ -30,13 +30,19 @@ def main():
 
     # Generate 20 test vectors
     for _ in range(20):
-        # Simulate realistic features: mostly 0s, some 1s.
-        # 864 features
+        # Simulate realistic features: exactly one feature active per cell
+        # 144 cells, 6 features per cell (864 features total)
         features = np.zeros(864, dtype=np.float32)
-        # Randomly activate some features (say 5 to 30)
-        num_active = rng.integers(5, 30)
-        active_indices = rng.choice(864, size=num_active, replace=False)
-        features[active_indices] = 1.0
+
+        for cell_idx in range(144):
+            # Pick a state uniformly at random (0 to 5)
+            # Or make it mostly state 0 (EMPTY) and occasionally others
+            if rng.random() < 0.7:
+                state = 0
+            else:
+                state = rng.integers(1, 6)
+
+            features[cell_idx * 6 + state] = 1.0
 
         expected_out = forward(W1, b1, w2, b2, features)
 
