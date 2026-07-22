@@ -96,10 +96,14 @@ after this lands (see Post-Completion) — do NOT attempt long training/eval loo
 - [x] run `./mvnw test` — green — full suite 73/73
 
 ### Task 4: Verify pipeline (mechanism gate, NOT strength)
-- [ ] `./mvnw test` all green; export format unchanged (loads in `NNUEModel`/`NNUEModelTest`)
-- [ ] one SMALL smoke: few self-play games at shallow depth → train few epochs → weights written;
+- [x] `./mvnw test` all green; export format unchanged (loads in `NNUEModel`/`NNUEModelTest`)
+      — full suite 73/73 green, NNUEModelTest 4/4
+- [x] one SMALL smoke: few self-play games at shallow depth → train few epochs → weights written;
       confirm `train.py` prints val MSE vs the constant-predictor floor without error
-- [ ] `./mvnw spotless:check` clean
+      — `td_leaf_pass.sh` with NUM_GAMES=4 SEARCH_DEPTH=2 TD_LAMBDA=0.5 → 605 positions, weights
+      written; `train.py --sweep` prints floor 0.279 vs best val MSE 0.013 (no error). Smoke-run
+      weights reverted to keep the ntd.8 distill warm-start intact.
+- [x] `./mvnw spotless:check` clean — BUILD SUCCESS
 
 ### Task 5: Update plan notes
 - [ ] record the smoke val MSE and the exact iterate-commands for the maintainer
