@@ -164,6 +164,9 @@ def main():
     X, y = load_data()
     Xtr, ytr, Xval, yval = split(X, y)
     print(f"Loaded {len(y)} positions | train={len(ytr)} val={len(yval)}")
+    # Label-noise floor: best constant predictor on val = predict mean(train).
+    floor = float(((yval - ytr.mean()) ** 2).mean())
+    print(f"Constant-predictor val MSE (label-noise upper bound): {floor:.5f}")
     val, tr, weights = train(Xtr, ytr, Xval, yval, verbose=True)
     print(f"Best: train MSE {tr:.5f}  val MSE {val:.5f}")
     export(weights)

@@ -95,7 +95,7 @@ public class SelfPlayGenerator {
     config.numGames = envInt("NUM_GAMES", config.numGames);
     config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
     config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
-    config.seed = envInt("SEED", (int) config.seed);
+    config.seed = envLong("SEED", config.seed);
     config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
     String mode = System.getenv("LABEL_MODE");
     if (mode != null && !mode.isBlank()) {
@@ -121,6 +121,11 @@ public class SelfPlayGenerator {
   private static int envInt(String key, int fallback) {
     String v = System.getenv(key);
     return (v == null || v.isBlank()) ? fallback : Integer.parseInt(v.trim());
+  }
+
+  private static long envLong(String key, long fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Long.parseLong(v.trim());
   }
 
   private static double envDouble(String key, double fallback) {
