@@ -59,11 +59,14 @@ after this lands (see Post-Completion) — do NOT attempt long training/eval loo
 ## Implementation Steps
 
 ### Task 1: Fix Python pipeline portability
-- [ ] replace hardcoded `/Users/iv/...` paths in `train.py` (`DATASET`, `OUT_PATH`) and
+- [x] replace hardcoded `/Users/iv/...` paths in `train.py` (`DATASET`, `OUT_PATH`) and
       `make_distill_dataset.py` (`OUT`) with repo-relative paths (resolve from the script location)
       and/or CLI args, defaulting to `./dataset.json` and `./src/main/resources/nnue_weights.json`
-- [ ] verify `train.py` runs on a tiny dataset on Linux (numpy already present)
-- [ ] no test framework needed here; a successful tiny run is the check
+      — now resolved from `__file__`, overridable via `DATASET`/`OUT_PATH` env (train.py) and
+      argv[2]/`OUT` env (make_distill_dataset.py)
+- [x] verify `train.py` runs on a tiny dataset on Linux (numpy already present) — 40-row tiny
+      dataset trains + exports the 4-key weights JSON (hidden=256) without error
+- [x] no test framework needed here; a successful tiny run is the check
 
 ### Task 2: TD-leaf labeling in SelfPlayGenerator
 - [ ] add a labeling mode to `SelfPlayGenerator.Config` (e.g. `LabelMode { OUTCOME, TD_LEAF }`,

@@ -29,8 +29,12 @@ VAL_FRAC = 0.15
 WEIGHT_DECAY = 0.0
 PATIENCE = 6          # early stop after this many epochs with no val improvement
 
-DATASET = "/Users/iv/Projects/nnue-trainer/dataset.json"
-OUT_PATH = "/Users/iv/Projects/nnue-trainer/src/main/resources/nnue_weights.json"
+# Repo-relative defaults (this script lives at the repo root). Override with env
+# vars DATASET / OUT_PATH so the maintainer can point at any dataset/weights file.
+_REPO = os.path.dirname(os.path.abspath(__file__))
+DATASET = os.environ.get("DATASET", os.path.join(_REPO, "dataset.json"))
+OUT_PATH = os.environ.get(
+    "OUT_PATH", os.path.join(_REPO, "src/main/resources/nnue_weights.json"))
 
 
 def clipped_relu(x):
