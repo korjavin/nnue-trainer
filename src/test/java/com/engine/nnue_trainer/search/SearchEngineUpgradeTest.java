@@ -23,28 +23,28 @@ public class SearchEngineUpgradeTest {
     // First run (empty TT)
     long startTime1 = System.currentTimeMillis();
     float eval1 =
-        engine.alphaBeta(
+        engine.negamax(
             board,
             null,
             3,
             Float.NEGATIVE_INFINITY,
             Float.POSITIVE_INFINITY,
             1,
-            true,
+            1,
             startTime1,
             Long.MAX_VALUE);
 
     // Second run (populated TT)
     long startTime2 = System.currentTimeMillis();
     float eval2 =
-        engine.alphaBeta(
+        engine.negamax(
             board,
             null,
             3,
             Float.NEGATIVE_INFINITY,
             Float.POSITIVE_INFINITY,
             1,
-            true,
+            1,
             startTime2,
             Long.MAX_VALUE);
 

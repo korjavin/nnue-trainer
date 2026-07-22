@@ -10,47 +10,41 @@ import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 public class SearchEngineTest {
 
-  static class MockSearchEngine extends SearchEngine {
-    private final Map<Board, List<Board>> childrenMap = new HashMap<>();
-    private final Map<Board, Float> evaluationMap = new HashMap<>();
-    public int nodesEvaluated = 0;
+  @Test
+  public void testTTDoesNotChangeBestMove() {
+    Board board = new Board(5, 5);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(4, 4, new Cell(2, CellKind.BASE));
+    // Setup a very clear threat where player 1 has exactly one winning move (capture base).
+    board.setCell(3, 4, new Cell(1, CellKind.NORMAL));
 
-    public void addChild(Board parent, Board child) {
-      childrenMap.computeIfAbsent(parent, k -> new ArrayList<>()).add(child);
-    }
+    // First search with TT enabled
+    SearchEngine.USE_TT = true;
+    SearchEngine engineTT = new SearchEngine();
+    SearchResult resultTT = engineTT.findBestActionUsingModel(board, 1, 4, true);
 
-    public void setEvaluation(Board board, float eval) {
-      evaluationMap.put(board, eval);
-    }
+    // Second search with TT disabled
+    SearchEngine.USE_TT = false;
+    SearchEngine engineNoTT = new SearchEngine();
+    SearchResult resultNoTT = engineNoTT.findBestActionUsingModel(board, 1, 4, true);
 
-    @Override
-    protected float evaluate(Board board, int player, boolean maximizingPlayer) {
-      nodesEvaluated++;
-      if (evaluationMap.containsKey(board)) {
-        return evaluationMap.get(board);
-      }
-      return super.evaluate(board, player, maximizingPlayer);
-    }
+    // Restore TT to default just in case
+    SearchEngine.USE_TT = true;
 
-    @Override
-    protected float evaluate(
-        Board board,
-        com.engine.nnue_trainer.nnue.Accumulator accumulator,
-        int player,
-        boolean maximizingPlayer) {
-      nodesEvaluated++;
-      if (evaluationMap.containsKey(board)) {
-        return evaluationMap.get(board);
-      }
-      return super.evaluate(board, accumulator, player, maximizingPlayer);
-    }
+    assertEquals(
+        resultNoTT.score,
+        resultTT.score,
+        0.001f,
+        "Score should be exactly the same regardless of TT usage");
+    assertEquals(
+        resultNoTT.bestAction,
+        resultTT.bestAction,
+        "Best move should be exactly the same regardless of TT usage");
   }
 
   @Test
@@ -94,11 +88,11 @@ public class SearchEngineTest {
     // player 1 has 2 pieces, player 2 has 1 piece
 
     // player 1 is maximizing
-    float score = engine.evaluate(board, 1, true);
+    float score = engine.evaluate(board, 1);
     assertEquals(1.0f, score); // 2 - 1 = 1
 
     // player 2 is maximizing
-    float score2 = engine.evaluate(board, 2, true);
+    float score2 = engine.evaluate(board, 2);
     assertEquals(-1.0f, score2); // 1 - 2 = -1
   }
 
