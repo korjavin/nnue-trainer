@@ -17,7 +17,8 @@ import java.util.List;
 
 public class SearchEngine {
   // Debug toggles (system properties) for bisecting the #38 search regression (raz.2.3).
-  public static boolean USE_QUIESCENCE = !"false".equalsIgnoreCase(System.getProperty("USE_QUIESCENCE"));
+  public static boolean USE_QUIESCENCE =
+      !"false".equalsIgnoreCase(System.getProperty("USE_QUIESCENCE"));
   public static boolean USE_TT = !"false".equalsIgnoreCase(System.getProperty("USE_TT"));
 
   private NNUEModel nnueModel;
