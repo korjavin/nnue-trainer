@@ -34,8 +34,10 @@ public class SearchAB {
     NNUEModel model = NNUEModel.createDefault(); // distilled weights on the classpath
     SearchEngine neu = new SearchEngine(model);
     BaselineSearchEngine old = new BaselineSearchEngine(model);
-    Chooser newC = (b, p) -> neu.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
-    Chooser oldC = (b, p) -> old.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
+    Chooser newC =
+        (b, p) -> neu.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
+    Chooser oldC =
+        (b, p) -> old.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
 
     int newWins = 0, oldWins = 0, draws = 0;
     for (int g = 0; g < games; g++) {
