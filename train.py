@@ -155,8 +155,9 @@ def sweep():
 
 def main():
     if not os.path.exists(DATASET):
-        print(f"Error: {DATASET} not found. Run import_games.py first.")
-        return
+        # Exit non-zero so td_leaf_pass.sh (set -e) fails instead of reporting "done".
+        print(f"Error: {DATASET} not found. Run import_games.py first.", file=sys.stderr)
+        sys.exit(1)
     if "--sweep" in sys.argv:
         sweep()
         return

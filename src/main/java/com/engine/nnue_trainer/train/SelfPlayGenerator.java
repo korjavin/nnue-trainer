@@ -75,7 +75,7 @@ public class SelfPlayGenerator {
     }
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
     Config config = new Config();
     String outputPath = "src/main/resources/self_play_data.json";
 
@@ -134,6 +134,9 @@ public class SelfPlayGenerator {
   }
 
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
+    if (!Double.isFinite(config.tdLambda) || config.tdLambda < 0.0 || config.tdLambda > 1.0) {
+      throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
+    }
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
     SearchEngine engine;
@@ -313,19 +316,17 @@ public class SelfPlayGenerator {
     return copy;
   }
 
-  private static void saveDataset(List<TrainingRecord> dataset, String filepath) {
-    try {
-      File file = new File(filepath);
-      File parent = file.getParentFile();
-      if (parent != null) {
-        parent.mkdirs();
-      }
-      ObjectMapper mapper = new ObjectMapper();
-      mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
-      System.out.println("Dataset saved to " + filepath);
-    } catch (IOException e) {
-      System.err.println("Failed to save dataset to " + filepath);
-      e.printStackTrace();
+  private static void saveDataset(List<TrainingRecord> dataset, String filepath)
+      throws IOException {
+    // Let IOException propagate: a failed write must exit non-zero so td_leaf_pass.sh (set -e)
+    // stops instead of training against a stale/missing dataset.
+    File file = new File(filepath);
+    File parent = file.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
     }
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
+    System.out.println("Dataset saved to " + filepath);
   }
 }
