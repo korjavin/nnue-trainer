@@ -106,7 +106,30 @@ after this lands (see Post-Completion) — do NOT attempt long training/eval loo
 - [x] `./mvnw spotless:check` clean — BUILD SUCCESS
 
 ### Task 5: Update plan notes
-- [ ] record the smoke val MSE and the exact iterate-commands for the maintainer
+- [x] record the smoke val MSE and the exact iterate-commands for the maintainer
+      — see "Smoke result & iterate-commands" below
+
+## Smoke result & iterate-commands
+
+Smoke run (`NUM_GAMES=4 SEARCH_DEPTH=2 TD_LAMBDA=0.5 ./td_leaf_pass.sh`):
+- 605 self-play positions labeled in `TD_LEAF` mode (warm-started from `nnue_weights.json`).
+- `train.py --sweep` printed constant-predictor **floor 0.279** vs **best val MSE 0.013**,
+  weights exported without error. Smoke weights were reverted to preserve the ntd.8 distill warm-start.
+- This is a *mechanism* check only — 4 games / depth 2 is not a strength run.
+
+Exact iterate-commands for the maintainer (each pass bootstraps off the net the previous pass trained):
+
+```bash
+# one pass, smoke defaults (NUM_GAMES=10 SEARCH_DEPTH=2 TD_LAMBDA=0.5 SEED=1 MAX_TURNS=100)
+./td_leaf_pass.sh
+
+# a real pass — more games, deeper search, more outcome-weighting via lambda
+NUM_GAMES=200 SEARCH_DEPTH=4 TD_LAMBDA=0.3 SEED=2 ./td_leaf_pass.sh
+
+# repeat ./td_leaf_pass.sh to iterate (value iteration); sweep TD_LAMBDA / SEARCH_DEPTH.
+# OUTCOME-label baseline (old ±1 target): run the generator without LABEL_MODE=TD_LEAF.
+# Measure GoBot win-rate between passes with eval_java_vs_go.py (see Post-Completion).
+```
 
 ## Technical Details
 
