@@ -45,6 +45,12 @@ This file preserves conversation context and orchestrator state across sessions.
   * **Plan 37 (`nnue-trainer-raz.2.3.1` - P0 TT fix & negamax refactor -> PR target: `master`)**:
     - Session #1: `9357723369232559264`
     - Session #2: `5196517528715312877`
+  * **Plan 38 (`nnue-trainer-d4a.3.2` - Mine 5x5 pattern dictionary -> PR target: `v2` branch)**:
+    - Session #1: `12090841776819614107`
+    - Session #2: `17425447991618217011`
+  * **Plan 39 (`nnue-trainer-d4a.2.1` - PyTorch two-accumulator model -> PR target: `v2` branch)**:
+    - Session #1: `10284982357261027505`
+    - Session #2: `3635985451897463030`
 - **NNUE v2 Branch**: Created and pushed `v2` branch to origin for all NNUE v2 PRs.
 - **Completed Task `nnue-trainer-raz.2.2`**: Successfully integrated full search upgrades (Transposition Table with Zobrist hashing, Principal Variation Search with null-window re-searches, move ordering with killer moves & history heuristics, depth-limited quiescence search, and custom-model gated opening book) via PR #38. All 65 unit tests pass cleanly in GitHub Actions CI. Closed bead `nnue-trainer-raz.2.2`.
 - **Portainer CI/CD Deployment**: Added `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml` with secure non-root user setup, automatic image builds, tags, deploy branch pushes, and Portainer webhooks.
