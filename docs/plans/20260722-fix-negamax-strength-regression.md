@@ -71,17 +71,17 @@ is why CI stayed green on a broken bot. The real acceptance gate is the SearchAB
 ## Implementation Steps
 
 ### Task 1: Convert alphaBeta to correct negamax
-- [ ] rewrite `alphaBeta` in `SearchEngine.java` to a single negamax branch: score relative
+- [x] rewrite `alphaBeta` in `SearchEngine.java` to a single negamax branch: score relative
       to the side-to-move, children via `score = -alphaBeta(child, depth-1, -beta, -alpha,
       getOpponent(player), …)`, `alpha = max(alpha, score)`, cutoff on `alpha >= beta`
-- [ ] make the leaf return `evaluate(board, accumulator, player)` from the **side-to-move**
+- [x] make the leaf return `evaluate(board, accumulator, player)` from the **side-to-move**
       perspective (adjust `evaluate` sign so a position good for `player` is positive);
       remove the `maximizingPlayer` parameter throughout the signature and callers
-- [ ] apply the same negamax form to `quiescenceSearch`
-- [ ] keep `applyAction` / `Accumulator.computeDiff` frame consistent with the new
+- [x] apply the same negamax form to `quiescenceSearch`
+- [x] keep `applyAction` / `Accumulator.computeDiff` frame consistent with the new
       side-to-move convention
-- [ ] add a 1-ply sanity unit test (engine picks the obviously winning move)
-- [ ] run `./mvnw test` — must pass before next task
+- [x] add a 1-ply sanity unit test (engine picks the obviously winning move)
+- [x] run `./mvnw test` — must pass before next task
 
 ### Task 2: Fix TT store/probe for negamax bounds
 - [ ] store bounds in negamax convention: FLAG_EXACT when `alpha` improved within window,
