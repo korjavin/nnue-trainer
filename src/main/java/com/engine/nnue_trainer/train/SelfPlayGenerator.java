@@ -272,6 +272,11 @@ public class SelfPlayGenerator {
     if (!Float.isFinite(searchValue)) {
       searchValue = Float.isNaN(searchValue) ? 0f : Math.signum(searchValue);
     }
+    // Anchor to the ±1 outcome scale before blending: the net output is unbounded, and this label
+    // is
+    // re-fed as the next pass's training target (value iteration), so an out-of-range eval could
+    // otherwise drift the net higher pass-over-pass with nothing to bound it.
+    searchValue = Math.max(-1f, Math.min(1f, searchValue));
     double lambda = config.tdLambda;
     return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
   }
