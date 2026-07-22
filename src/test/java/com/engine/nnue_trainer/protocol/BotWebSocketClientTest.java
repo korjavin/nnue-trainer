@@ -59,11 +59,13 @@ class BotWebSocketClientTest {
   }
 
   @Test
-  void testOnClose() throws URISyntaxException {
+  void testOnCloseAfterShutdownDoesNotReconnect() throws URISyntaxException {
     BotWebSocketClient client = new BotWebSocketClient();
+    client.shutdown(); // intentional shutdown: close must NOT trigger a reconnect
     client.onClose(1000, "Normal Closure", false);
     assertTrue(
         outContent.toString().contains("Disconnected from WebSocket server: Normal Closure"));
+    assertFalse(outContent.toString().contains("Reconnecting"));
   }
 
   @Test
