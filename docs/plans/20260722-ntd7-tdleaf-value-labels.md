@@ -85,11 +85,15 @@ after this lands (see Post-Completion) — do NOT attempt long training/eval loo
 - [x] run `./mvnw test` — must pass before next task — full suite 73/73 green
 
 ### Task 3: Wire the one-pass pipeline + docs
-- [ ] provide a runnable path (a small script or documented commands) that: generates a TD-leaf
+- [x] provide a runnable path (a small script or documented commands) that: generates a TD-leaf
       self-play dataset (warm-started) → writes `dataset.json` → `train.py` → exports weights
-- [ ] make dataset/searchDepth/games/λ configurable via args or env, with sane small defaults
-- [ ] document the exact commands in the plan / a short README so the maintainer can iterate
-- [ ] run `./mvnw test` — green
+      — `td_leaf_pass.sh`: compile → `SelfPlayGenerator` (TD_LEAF) → `train.py` → weights export
+- [x] make dataset/searchDepth/games/λ configurable via args or env, with sane small defaults
+      — `SelfPlayGenerator.main` now reads `NUM_GAMES`/`SEARCH_DEPTH`/`TD_LAMBDA`/`SEED`/`MAX_TURNS`/
+      `OUT`/`LABEL_MODE` envs (env wins over positional args); script defaults to a fast smoke run
+- [x] document the exact commands in the plan / a short README so the maintainer can iterate
+      — added an "NNUE training pipeline (TD-leaf)" section to `README.md` with the iterate loop
+- [x] run `./mvnw test` — green — full suite 73/73
 
 ### Task 4: Verify pipeline (mechanism gate, NOT strength)
 - [ ] `./mvnw test` all green; export format unchanged (loads in `NNUEModel`/`NNUEModelTest`)

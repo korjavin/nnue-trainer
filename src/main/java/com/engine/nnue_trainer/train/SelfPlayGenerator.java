@@ -90,11 +90,42 @@ public class SelfPlayGenerator {
       outputPath = args[1];
     }
 
-    System.out.println("Starting self-play generation for " + config.numGames + " games...");
+    // Env overrides (used by td_leaf_pass.sh) — env wins over positional args so a shell
+    // wrapper can drive the whole TD-leaf pass without editing code.
+    config.numGames = envInt("NUM_GAMES", config.numGames);
+    config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
+    config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
+    config.seed = envInt("SEED", (int) config.seed);
+    config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
+    String mode = System.getenv("LABEL_MODE");
+    if (mode != null && !mode.isBlank()) {
+      config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
+    }
+    outputPath = System.getenv().getOrDefault("OUT", outputPath);
+
+    System.out.println(
+        "Starting self-play: games="
+            + config.numGames
+            + " depth="
+            + config.searchDepth
+            + " label="
+            + config.labelMode
+            + " lambda="
+            + config.tdLambda);
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
     saveDataset(result.dataset, outputPath);
+  }
+
+  private static int envInt(String key, int fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Integer.parseInt(v.trim());
+  }
+
+  private static double envDouble(String key, double fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Double.parseDouble(v.trim());
   }
 
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
