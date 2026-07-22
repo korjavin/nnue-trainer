@@ -6,7 +6,9 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveGenerator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.SearchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -19,6 +21,14 @@ import java.util.Set;
 
 public class SelfPlayGenerator {
 
+  /** How a training record's target is labeled. */
+  public enum LabelMode {
+    /** Final game outcome mapped to ±1 (the original noisy label). */
+    OUTCOME,
+    /** TD-leaf: our own search's negamax value, blended toward the outcome by {@code tdLambda}. */
+    TD_LEAF
+  }
+
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
@@ -27,6 +37,10 @@ public class SelfPlayGenerator {
     public int searchDepth = 2;
     public long timeLimitMs = 0;
     public long seed = 0;
+    public LabelMode labelMode = LabelMode.OUTCOME;
+
+    /** TD-leaf blend: 1 → pure outcome (subsumes OUTCOME), 0 → pure search bootstrap. */
+    public double tdLambda = 1.0;
   }
 
   public static class TrainingRecord {
@@ -52,14 +66,16 @@ public class SelfPlayGenerator {
   private static class TurnData {
     public Board board;
     public int activePlayer;
+    public boolean canPlaceNeutral;
 
-    public TurnData(Board board, int activePlayer) {
+    public TurnData(Board board, int activePlayer, boolean canPlaceNeutral) {
       this.board = board;
       this.activePlayer = activePlayer;
+      this.canPlaceNeutral = canPlaceNeutral;
     }
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
     Config config = new Config();
     String outputPath = "src/main/resources/self_play_data.json";
 
@@ -74,17 +90,66 @@ public class SelfPlayGenerator {
       outputPath = args[1];
     }
 
-    System.out.println("Starting self-play generation for " + config.numGames + " games...");
+    // Env overrides (used by td_leaf_pass.sh) — env wins over positional args so a shell
+    // wrapper can drive the whole TD-leaf pass without editing code.
+    config.numGames = envInt("NUM_GAMES", config.numGames);
+    config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
+    config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
+    config.seed = envLong("SEED", config.seed);
+    config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
+    String mode = System.getenv("LABEL_MODE");
+    if (mode != null && !mode.isBlank()) {
+      config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
+    }
+    outputPath = System.getenv().getOrDefault("OUT", outputPath);
+
+    System.out.println(
+        "Starting self-play: games="
+            + config.numGames
+            + " depth="
+            + config.searchDepth
+            + " label="
+            + config.labelMode
+            + " lambda="
+            + config.tdLambda);
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
     saveDataset(result.dataset, outputPath);
   }
 
+  private static int envInt(String key, int fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Integer.parseInt(v.trim());
+  }
+
+  private static long envLong(String key, long fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Long.parseLong(v.trim());
+  }
+
+  private static double envDouble(String key, double fallback) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? fallback : Double.parseDouble(v.trim());
+  }
+
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
+    if (!Double.isFinite(config.tdLambda) || config.tdLambda < 0.0 || config.tdLambda > 1.0) {
+      throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
+    }
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
-    SearchEngine engine = customEngine != null ? customEngine : new SearchEngine();
+    SearchEngine engine;
+    if (customEngine != null) {
+      engine = customEngine;
+    } else if (config.labelMode == LabelMode.TD_LEAF) {
+      // Warm-start engine: createDefault() loads nnue_weights.json (the ntd.8 distill), and the
+      // custom-model ctor sets isCustomModel=true so scoring searches don't short-circuit to the
+      // opening book (which would return score 0 for early positions).
+      engine = new SearchEngine(NNUEModel.createDefault());
+    } else {
+      engine = new SearchEngine();
+    }
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
@@ -105,7 +170,7 @@ public class SelfPlayGenerator {
         boolean canPlaceNeutral = true;
         for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
           // Collect board snapshot BEFORE move
-          turns.add(new TurnData(copyBoard(board), currentPlayer));
+          turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
 
           List<Action> legalActions =
               MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
@@ -159,10 +224,14 @@ public class SelfPlayGenerator {
 
       // Process collected turns to dataset
       for (TurnData turnData : turns) {
-        float target = 0.0f;
-        if (winner != 0) {
-          target = (winner == turnData.activePlayer) ? 1.0f : -1.0f;
-        }
+        float target =
+            computeTarget(
+                engine,
+                turnData.board,
+                turnData.activePlayer,
+                turnData.canPlaceNeutral,
+                winner,
+                config);
         float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
         dataset.add(new TrainingRecord(features, target));
 
@@ -174,6 +243,45 @@ public class SelfPlayGenerator {
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
     return new GenerationResult(dataset, distinctGameRatio);
+  }
+
+  /**
+   * Target label for one position, side-to-move ({@code activePlayer}) relative.
+   *
+   * <p>OUTCOME → final game result mapped to ±1 (0 if unfinished). TD_LEAF → {@code
+   * (1-λ)·searchValue + λ·outcome}, where {@code searchValue} is our own search's negamax score
+   * (already side-to-move relative). λ=1 reproduces OUTCOME; λ=0 is a pure search bootstrap.
+   */
+  static float computeTarget(
+      SearchEngine engine,
+      Board board,
+      int activePlayer,
+      boolean canPlaceNeutral,
+      int winner,
+      Config config) {
+    float outcome = 0.0f;
+    if (winner != 0) {
+      outcome = (winner == activePlayer) ? 1.0f : -1.0f;
+    }
+    if (config.labelMode != LabelMode.TD_LEAF) {
+      return outcome;
+    }
+
+    SearchResult result =
+        engine.findBestActionUsingModel(board, activePlayer, config.searchDepth, canPlaceNeutral);
+    float searchValue = result.score;
+    // A forced win/loss inside the search returns ±Infinity; collapse to ±1 (and a stray NaN to 0)
+    // so a non-finite score never poisons the dataset with a non-finite target.
+    if (!Float.isFinite(searchValue)) {
+      searchValue = Float.isNaN(searchValue) ? 0f : Math.signum(searchValue);
+    }
+    // Anchor to the ±1 outcome scale before blending: the net output is unbounded, and this label
+    // is
+    // re-fed as the next pass's training target (value iteration), so an out-of-range eval could
+    // otherwise drift the net higher pass-over-pass with nothing to bound it.
+    searchValue = Math.max(-1f, Math.min(1f, searchValue));
+    double lambda = config.tdLambda;
+    return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
   }
 
   private static int determineWinner(Board board) {
@@ -208,19 +316,17 @@ public class SelfPlayGenerator {
     return copy;
   }
 
-  private static void saveDataset(List<TrainingRecord> dataset, String filepath) {
-    try {
-      File file = new File(filepath);
-      File parent = file.getParentFile();
-      if (parent != null) {
-        parent.mkdirs();
-      }
-      ObjectMapper mapper = new ObjectMapper();
-      mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
-      System.out.println("Dataset saved to " + filepath);
-    } catch (IOException e) {
-      System.err.println("Failed to save dataset to " + filepath);
-      e.printStackTrace();
+  private static void saveDataset(List<TrainingRecord> dataset, String filepath)
+      throws IOException {
+    // Let IOException propagate: a failed write must exit non-zero so td_leaf_pass.sh (set -e)
+    // stops instead of training against a stale/missing dataset.
+    File file = new File(filepath);
+    File parent = file.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
     }
+    ObjectMapper mapper = new ObjectMapper();
+    mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
+    System.out.println("Dataset saved to " + filepath);
   }
 }

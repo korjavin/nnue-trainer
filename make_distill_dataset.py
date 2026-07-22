@@ -13,12 +13,16 @@ Run: .venv/bin/python make_distill_dataset.py /tmp/staticeval.jsonl
 Writes dataset.json and prints the mean/std used (record it for export sanity).
 """
 import json
+import os
 import sys
 import numpy as np
 from import_games import map_board_to_features
 
+# arg1 = source JSONL, arg2 (or env OUT) = output dataset, default repo-relative.
+_REPO = os.path.dirname(os.path.abspath(__file__))
 SRC = sys.argv[1] if len(sys.argv) > 1 else "/tmp/staticeval.jsonl"
-OUT = "/Users/iv/Projects/nnue-trainer/dataset.json"
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.environ.get(
+    "OUT", os.path.join(_REPO, "dataset.json"))
 
 
 def main():
