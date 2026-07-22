@@ -85,6 +85,9 @@ def main():
     java_log = open("java_bot.log", "w")
     jenv = os.environ.copy()
     jenv["BACKEND_URL"] = "ws://localhost:8080/ws?bot=true&namePrefix=JavaBot"
+    # master gates the Java bot's auto-challenge behind CHALLENGER_MODE (opt-in);
+    # the baseline GoBot only accepts, so JavaBot must initiate.
+    jenv["CHALLENGER_MODE"] = "true"
     java = subprocess.Popen(
         ["./mvnw", "spring-boot:run"], cwd=".",
         stdout=java_log, stderr=java_log, env=jenv, preexec_fn=os.setsid,
