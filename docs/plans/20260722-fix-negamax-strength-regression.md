@@ -84,14 +84,14 @@ is why CI stayed green on a broken bot. The real acceptance gate is the SearchAB
 - [x] run `./mvnw test` — must pass before next task
 
 ### Task 2: Fix TT store/probe for negamax bounds
-- [ ] store bounds in negamax convention: FLAG_EXACT when `alpha` improved within window,
+- [x] store bounds in negamax convention: FLAG_EXACT when `alpha` improved within window,
       FLAG_LOWER_BOUND on `score >= beta` (fail-high), FLAG_UPPER_BOUND when no move raised
       alpha (fail-low); score stored relative to side-to-move
-- [ ] probe symmetrically (return on EXACT; LOWER with `score >= beta`; UPPER with
+- [x] probe symmetrically (return on EXACT; LOWER with `score >= beta`; UPPER with
       `score <= alpha`); confirm `Zobrist.computeHash` keys by the side-to-move `player`
-- [ ] keep `testTTDoesNotChangeBestMove` passing (TT must never change the chosen move vs
-      `USE_TT=false` at equal depth)
-- [ ] run `./mvnw test` — must pass before next task
+- [x] keep `testTTDoesNotChangeBestMove` passing (TT must never change the chosen move vs
+      `USE_TT=false` at equal depth) — test added (was referenced but missing); TT on==off move
+- [x] run `./mvnw test` — must pass before next task (70/70 green)
 
 ### Task 3: Fix the root move selection frame
 - [ ] in `findBestActionWithTimeLimitUsingModel`, evaluate each child as

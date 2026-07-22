@@ -129,6 +129,40 @@ public class SearchEngineTest {
   }
 
   @Test
+  public void testTTDoesNotChangeBestMove() {
+    // TT is only an efficiency layer: at a fixed depth, searching with USE_TT on must pick the
+    // same move as with USE_TT off. A mismatch means the negamax bound flags (EXACT/LOWER/UPPER)
+    // are stored or probed in the wrong frame and the TT is corrupting the search.
+    boolean tt = SearchEngine.USE_TT;
+    try {
+      Board board = new Board(5, 5);
+      board.setCell(0, 0, new Cell(1, CellKind.BASE));
+      board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+      board.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+      board.setCell(4, 4, new Cell(2, CellKind.BASE));
+      board.setCell(4, 3, new Cell(2, CellKind.NORMAL));
+      board.setCell(3, 3, new Cell(2, CellKind.NORMAL));
+
+      int depth = 3;
+      SearchEngine.USE_TT = false;
+      Action noTt =
+          new SearchEngine(modelFavoringOwnNormalAt(1, 1))
+              .findBestActionUsingModel(board, 1, depth, false)
+              .bestAction;
+
+      SearchEngine.USE_TT = true;
+      Action withTt =
+          new SearchEngine(modelFavoringOwnNormalAt(1, 1))
+              .findBestActionUsingModel(board, 1, depth, false)
+              .bestAction;
+
+      assertEquals(noTt, withTt);
+    } finally {
+      SearchEngine.USE_TT = tt;
+    }
+  }
+
+  @Test
   public void testMoveOrdering() {
     SearchEngine engine = new SearchEngine();
     Board board = new Board(5, 5);
