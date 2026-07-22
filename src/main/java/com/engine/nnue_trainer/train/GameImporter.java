@@ -122,6 +122,7 @@ public class GameImporter {
       }
 
       double searchEval = 0.0;
+      boolean foundScore = false;
       if (moves != null) {
         if (!moves.isArray()) {
           throw new IOException("moves must be an array for game " + gameId);
@@ -129,23 +130,36 @@ public class GameImporter {
         for (JsonNode move : moves) {
           if (move.has("score")) {
             searchEval = move.get("score").asDouble() / 1000.0;
+            foundScore = true;
           } else if (move.has("Score")) {
             searchEval = move.get("Score").asDouble() / 1000.0;
+            foundScore = true;
           }
           Action action = parseAction(move);
           board = SearchEngine.applyAction(board, player, action);
         }
       }
 
+      if (options.labelMode() == LabelMode.TD_LEAF && !foundScore) {
+        throw new IOException(
+            "TD_LEAF mode requires 'score' in PGN, but none was found for game " + gameId);
+      }
+
+      if (!Double.isFinite(searchEval)) {
+        throw new IOException("Non-finite search eval found in game " + gameId);
+      }
+
+      searchEval = Math.max(-1.0, Math.min(1.0, searchEval));
+
       float outcome = target(result, player);
       float finalTarget = outcome;
 
       if (options.labelMode() == LabelMode.TD_LEAF) {
-        int distance = totalTurns - turnIndex - 1;
+        int distance = totalTurns - turnIndex;
         double currentLambda = Math.pow(options.lambdaVal(), distance);
         finalTarget = (float) ((1.0 - currentLambda) * searchEval + currentLambda * outcome);
       } else if (options.labelMode() == LabelMode.DISCOUNTED) {
-        int distance = totalTurns - turnIndex - 1;
+        int distance = totalTurns - turnIndex;
         finalTarget = (float) (outcome * Math.pow(options.gammaVal(), distance));
       }
 
@@ -217,6 +231,15 @@ public class GameImporter {
       LabelMode labelMode,
       double lambdaVal,
       double gammaVal) {
+    public ImportOptions {
+      if (lambdaVal < 0.0 || lambdaVal > 1.0) {
+        throw new IllegalArgumentException("lambdaVal must be in [0, 1]");
+      }
+      if (gammaVal < 0.0 || gammaVal > 1.0) {
+        throw new IllegalArgumentException("gammaVal must be in [0, 1]");
+      }
+    }
+
     public ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {
       this(dbPath, minStartedAt, deduplicatePgn, LabelMode.OUTCOME, 0.5, 0.98);
     }

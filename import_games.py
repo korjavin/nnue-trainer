@@ -81,8 +81,13 @@ def main():
     parser = argparse.ArgumentParser(description="Import games and generate NNUE dataset.")
     parser.add_argument("--label-mode", choices=["outcome", "td_leaf", "discounted"], default="outcome", help="Label generation mode.")
     parser.add_argument("--lambda-val", type=float, default=0.5, help="Lambda value for td_leaf mode (weight of outcome).")
+    parser.add_argument("--allow-missing-scores", action="store_true", help="Allow missing scores (eval defaults to 0).")
     parser.add_argument("--gamma-val", type=float, default=0.98, help="Gamma value for discounted mode (decay factor).")
     args = parser.parse_args()
+    if not (0.0 <= args.lambda_val <= 1.0):
+        raise ValueError("lambda-val must be in [0, 1]")
+    if not (0.0 <= args.gamma_val <= 1.0):
+        raise ValueError("gamma-val must be in [0, 1]")
 
     db_path = os.environ.get("DB_PATH", "/Users/iv/Projects/virusgame/backend/data/games.db")
     if not os.path.exists(db_path):
@@ -124,11 +129,20 @@ def main():
 
             # Extract search_eval from turn data or move objects
             search_eval = 0.0
+            found_score = False
             for move in moves:
                 if 'score' in move:
                     search_eval = move['score'] / 1000.0
+                    found_score = True
                 elif 'Score' in move:
                     search_eval = move['Score'] / 1000.0
+                    found_score = True
+
+            if args.label_mode == "td_leaf" and not found_score:
+                raise ValueError(f"TD_LEAF mode requires 'score' in PGN, but none was found in game {game_id}")
+
+            # Clamp eval
+            search_eval = max(-1.0, min(1.0, search_eval))
 
             for move in moves:
                 m_type = move.get('type')
@@ -158,11 +172,11 @@ def main():
 
             target = outcome
             if args.label_mode == "td_leaf":
-                distance = total_turns - turn_index - 1
+                distance = total_turns - turn_index
                 current_lambda = args.lambda_val ** distance
                 target = (1.0 - current_lambda) * search_eval + current_lambda * outcome
             elif args.label_mode == "discounted":
-                distance = total_turns - turn_index - 1
+                distance = total_turns - turn_index
                 target = outcome * (args.gamma_val ** distance)
 
             dataset.append({

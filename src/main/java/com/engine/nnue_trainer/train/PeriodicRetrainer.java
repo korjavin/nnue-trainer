@@ -57,7 +57,13 @@ public class PeriodicRetrainer implements AutoCloseable {
   public RetrainingResult retrainOnce() throws SQLException, IOException {
     GameImporter.ImportResult importResult =
         importer.importGames(
-            new GameImporter.ImportOptions(config.dbPath(), config.minStartedAt(), true));
+            new GameImporter.ImportOptions(
+                config.dbPath(),
+                config.minStartedAt(),
+                true,
+                config.labelMode() != null ? config.labelMode() : GameImporter.LabelMode.OUTCOME,
+                config.labelMode() != null ? config.lambdaVal() : 0.5,
+                config.labelMode() != null ? config.gammaVal() : 0.98));
 
     // Generate self-play dataset
     SelfPlayGenerator.Config spConfig = new SelfPlayGenerator.Config();
@@ -223,8 +229,16 @@ public class PeriodicRetrainer implements AutoCloseable {
     metadata.seed = config.seed();
     metadata.dbPath = config.dbPath().toString();
     metadata.minStartedAt = config.minStartedAt();
+<<<<<<< HEAD
     metadata.examples = importResult.examples().size() + spResult.dataset.size();
     metadata.importedGames = importResult.importedGames() + spConfig.numGames;
+=======
+    metadata.labelMode = config.labelMode();
+    metadata.lambdaVal = config.lambdaVal();
+    metadata.gammaVal = config.gammaVal();
+    metadata.examples = importResult.examples().size();
+    metadata.importedGames = importResult.importedGames();
+>>>>>>> 0ea4def (Address PR feedback)
     metadata.skippedDuplicateGames = importResult.skippedDuplicates();
     metadata.finalMse = trainingResult.finalMse();
     metadata.candidateWins = evaluation.candidateWins();
@@ -255,7 +269,10 @@ public class PeriodicRetrainer implements AutoCloseable {
       int gauntletGames,
       int searchDepth,
       double promotionWinRate,
-      long seed) {}
+      long seed,
+      GameImporter.LabelMode labelMode,
+      double lambdaVal,
+      double gammaVal) {}
 
   public record EvaluationResult(int candidateWins, int currentWins, int draws) {
     public boolean promoted(double winRateThreshold) {
@@ -281,6 +298,9 @@ public class PeriodicRetrainer implements AutoCloseable {
     public long seed;
     public String dbPath;
     public String minStartedAt;
+    public GameImporter.LabelMode labelMode;
+    public double lambdaVal;
+    public double gammaVal;
     public int examples;
     public int importedGames;
     public int skippedDuplicateGames;
