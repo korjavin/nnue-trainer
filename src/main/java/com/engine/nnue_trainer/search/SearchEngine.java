@@ -67,10 +67,10 @@ public class SearchEngine {
    * Executes alpha-beta negamax search.
    *
    * <p>Scores are always relative to the side to move ({@code player}): a position good for the
-   * side to move is positive. The parent therefore negates the child's returned score
-   * ({@code score = -alphaBeta(child, -beta, -alpha, opponent)}). The static evaluation is computed
-   * from a single fixed {@code perspective} (the root player, so the incremental NNUE accumulator
-   * can stay valid down the whole tree); the leaf flips that fixed score to the side-to-move frame.
+   * side to move is positive. The parent therefore negates the child's returned score ({@code score
+   * = -alphaBeta(child, -beta, -alpha, opponent)}). The static evaluation is computed from a single
+   * fixed {@code perspective} (the root player, so the incremental NNUE accumulator can stay valid
+   * down the whole tree); the leaf flips that fixed score to the side-to-move frame.
    *
    * @param board The current state of the board.
    * @param accumulator Incremental NNUE accumulator (in {@code perspective}'s frame), or null.
@@ -326,8 +326,9 @@ public class SearchEngine {
   }
 
   /**
-   * Static evaluation from {@code player}'s perspective: positive is good for {@code player}. Simple
-   * count of pieces owned by the player, penalized if base is lost, or the NNUE forward pass.
+   * Static evaluation from {@code player}'s perspective: positive is good for {@code player}.
+   * Simple count of pieces owned by the player, penalized if base is lost, or the NNUE forward
+   * pass.
    */
   protected float evaluate(Board board, Accumulator accumulator, int player) {
     nodesEvaluated++;
@@ -563,18 +564,39 @@ public class SearchEngine {
       if (firstMove) {
         value =
             -alphaBeta(
-                child, childAcc, depth - 1, -beta, -alpha, 3 - player, player, startTime,
+                child,
+                childAcc,
+                depth - 1,
+                -beta,
+                -alpha,
+                3 - player,
+                player,
+                startTime,
                 Long.MAX_VALUE);
         firstMove = false;
       } else {
         value =
             -alphaBeta(
-                child, childAcc, depth - 1, -alpha - 1.0f, -alpha, 3 - player, player, startTime,
+                child,
+                childAcc,
+                depth - 1,
+                -alpha - 1.0f,
+                -alpha,
+                3 - player,
+                player,
+                startTime,
                 Long.MAX_VALUE);
         if (value > alpha && value < beta) {
           value =
               -alphaBeta(
-                  child, childAcc, depth - 1, -beta, -alpha, 3 - player, player, startTime,
+                  child,
+                  childAcc,
+                  depth - 1,
+                  -beta,
+                  -alpha,
+                  3 - player,
+                  player,
+                  startTime,
                   Long.MAX_VALUE);
         }
       }
@@ -653,18 +675,39 @@ public class SearchEngine {
           if (firstMove) {
             value =
                 -alphaBeta(
-                    child, childAcc, depth - 1, -beta, -alpha, 3 - player, player, startTime,
+                    child,
+                    childAcc,
+                    depth - 1,
+                    -beta,
+                    -alpha,
+                    3 - player,
+                    player,
+                    startTime,
                     timeLimitMs);
             firstMove = false;
           } else {
             value =
                 -alphaBeta(
-                    child, childAcc, depth - 1, -alpha - 1.0f, -alpha, 3 - player, player, startTime,
+                    child,
+                    childAcc,
+                    depth - 1,
+                    -alpha - 1.0f,
+                    -alpha,
+                    3 - player,
+                    player,
+                    startTime,
                     timeLimitMs);
             if (value > alpha && value < beta) {
               value =
                   -alphaBeta(
-                      child, childAcc, depth - 1, -beta, -alpha, 3 - player, player, startTime,
+                      child,
+                      childAcc,
+                      depth - 1,
+                      -beta,
+                      -alpha,
+                      3 - player,
+                      player,
+                      startTime,
                       timeLimitMs);
             }
           }
