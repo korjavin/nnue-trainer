@@ -94,13 +94,15 @@ is why CI stayed green on a broken bot. The real acceptance gate is the SearchAB
 - [x] run `./mvnw test` — must pass before next task (70/70 green)
 
 ### Task 3: Fix the root move selection frame
-- [ ] in `findBestActionWithTimeLimitUsingModel`, evaluate each child as
+- [x] in `findBestActionWithTimeLimitUsingModel`, evaluate each child as
       `score = -alphaBeta(child, depth-1, -beta, -alpha, getOpponent(player), …)` and select
       the **max** `score` — so the root chooses the move best for `player`, not the opponent
-- [ ] keep iterative deepening, PVS/null-window, move ordering, opening book, and the
-      time-limit fallback (`bestAction = actions.get(0)`) intact
-- [ ] confirm both root overloads (if two remain) use the identical corrected convention
-- [ ] run `./mvnw test` — must pass before next task
+      (done in negamax rewrite: lines 651-679; child searched as `-alphaBeta(child,...,3-player,player,...)`)
+- [x] keep iterative deepening, PVS/null-window, move ordering, opening book, and the
+      time-limit fallback (`bestAction = actions.get(0)`) intact — all preserved
+- [x] confirm both root overloads (if two remain) use the identical corrected convention —
+      `findBestActionUsingModel` (560-589) and `findBestActionWithTimeLimitUsingModel` (651-679) match
+- [x] run `./mvnw test` — must pass before next task (70/70 green)
 
 ### Task 4: Verify acceptance criteria (STRENGTH GATE)
 - [ ] `./mvnw -q compile`
