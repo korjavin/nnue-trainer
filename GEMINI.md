@@ -51,6 +51,15 @@ This file preserves conversation context and orchestrator state across sessions.
   * **Plan 39 (`nnue-trainer-d4a.2.1` - PyTorch two-accumulator model -> PR target: `v2` branch)**:
     - Session #1: `10284982357261027505`
     - Session #2: `3635985451897463030`
+  * **Plan 40 (`nnue-trainer-d4a.1.2` - Incremental accumulator updates -> PR target: `v2` branch)**:
+    - Session #1: `7433737713222888990`
+    - Session #2: `2802274240798687573`
+  * **Plan 41 (`nnue-trainer-d4a.3.3` - Sparse counted training examples -> PR target: `v2` branch)**:
+    - Session #1: `17716158242706314409`
+    - Session #2: `16793669902213194725`
+  * **Plan 42 (`nnue-trainer-d4a.1.3` - Opt-in evaluator & NPS benchmark -> PR target: `v2` branch)**:
+    - Session #1: `12002869452034855583`
+    - Session #2: `14715366349550102278`
 - **NNUE v2 Branch**: Created and pushed `v2` branch to origin for all NNUE v2 PRs.
 - **Completed Task `nnue-trainer-raz.2.2`**: Successfully integrated full search upgrades (Transposition Table with Zobrist hashing, Principal Variation Search with null-window re-searches, move ordering with killer moves & history heuristics, depth-limited quiescence search, and custom-model gated opening book) via PR #38. All 65 unit tests pass cleanly in GitHub Actions CI. Closed bead `nnue-trainer-raz.2.2`.
 - **Portainer CI/CD Deployment**: Added `Dockerfile`, `docker-compose.yml`, and `.github/workflows/deploy.yml` with secure non-root user setup, automatic image builds, tags, deploy branch pushes, and Portainer webhooks.
