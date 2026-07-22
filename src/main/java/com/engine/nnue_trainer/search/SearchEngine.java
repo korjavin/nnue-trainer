@@ -16,14 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SearchEngine {
-  // Debug toggles (system properties) for bisecting the #38 search regression (raz.2.3).
-  public static boolean USE_QUIESCENCE =
-      !"false".equalsIgnoreCase(System.getProperty("USE_QUIESCENCE"));
-  public static boolean USE_TT = !"false".equalsIgnoreCase(System.getProperty("USE_TT"));
 
   private NNUEModel nnueModel;
   private boolean isCustomModel = false;
-  private int nodesEvaluated = 0;
+  protected int nodesEvaluated = 0;
 
   // Search state
   private TranspositionTable tt;
@@ -64,23 +60,36 @@ public class SearchEngine {
   }
 
   /**
-   * Executes alpha-beta negamax search.
-   *
-   * <p>Scores are always relative to the side to move ({@code player}): a position good for the
-   * side to move is positive. The parent therefore negates the child's returned score ({@code score
-   * = -alphaBeta(child, -beta, -alpha, opponent)}). The static evaluation is computed from a single
-   * fixed {@code perspective} (the root player, so the incremental NNUE accumulator can stay valid
-   * down the whole tree); the leaf flips that fixed score to the side-to-move frame.
+   * Executes alpha-beta minimax search.
    *
    * @param board The current state of the board.
-   * @param accumulator Incremental NNUE accumulator (in {@code perspective}'s frame), or null.
    * @param depth The current search depth (starts at max and goes down to 0).
-   * @param alpha The lower bound of the search window (side-to-move relative).
-   * @param beta The upper bound of the search window (side-to-move relative).
-   * @param player The side to move at this node.
-   * @param perspective The fixed player whose frame the accumulator / evaluate() use.
-   * @return The negamax value of the board, relative to {@code player}.
+   * @param alpha The alpha value for pruning (best already explored option along path to root for
+   *     maximizer).
+   * @param beta The beta value for pruning (best already explored option along path to root for
+   *     minimizer).
+   * @param player The active player's ID (e.g. 1 or -1, or 1 or 2).
+   * @param maximizingPlayer True if the current node is a maximizing node.
+   * @return The evaluation score of the board.
    */
+  public float alphaBeta(
+      Board board, int depth, float alpha, float beta, int player, boolean maximizingPlayer) {
+    return alphaBeta(board, depth, alpha, beta, player, maximizingPlayer, 0, Long.MAX_VALUE);
+  }
+
+  public float alphaBeta(
+      Board board,
+      int depth,
+      float alpha,
+      float beta,
+      int player,
+      boolean maximizingPlayer,
+      long startTime,
+      long timeLimitMs) {
+    return alphaBeta(
+        board, null, depth, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs);
+  }
+
   public float alphaBeta(
       Board board,
       Accumulator accumulator,
@@ -88,153 +97,214 @@ public class SearchEngine {
       float alpha,
       float beta,
       int player,
-      int perspective,
+      boolean maximizingPlayer,
       long startTime,
       long timeLimitMs) {
     if (System.currentTimeMillis() - startTime >= timeLimitMs) {
       throw new SearchTimeoutException();
     }
 
-    // Key the TT by the side to move: negamax scores are side-to-move relative, so the same board
-    // with a different player to move is a different entry.
-    long zobristKey = Zobrist.computeHash(board, player);
-    float alphaOrig = alpha;
+    int originalPlayer = maximizingPlayer ? player : getOpponent(player);
+    long zobristKey = Zobrist.computeHash(board, originalPlayer);
 
-    // TT Probe (negamax bound convention).
-    TTEntry tte = USE_TT ? tt.probe(zobristKey) : null;
+    // TT Probe
+    TTEntry tte = tt.probe(zobristKey);
     Action ttMove = null;
     if (tte != null && tte.depth >= depth) {
       if (tte.flag == TTEntry.FLAG_EXACT) {
         return tte.score;
-      } else if (tte.flag == TTEntry.FLAG_LOWER_BOUND) {
-        alpha = Math.max(alpha, tte.score);
-      } else if (tte.flag == TTEntry.FLAG_UPPER_BOUND) {
-        beta = Math.min(beta, tte.score);
-      }
-      if (alpha >= beta) {
+      } else if (tte.flag == TTEntry.FLAG_LOWER_BOUND && tte.score >= beta) {
+        return tte.score;
+      } else if (tte.flag == TTEntry.FLAG_UPPER_BOUND && tte.score <= alpha) {
         return tte.score;
       }
       ttMove = tte.bestAction;
     }
 
     if (depth == 0 || isTerminal(board)) {
-      if (USE_QUIESCENCE) {
-        return quiescenceSearch(
-            board, accumulator, alpha, beta, player, perspective, startTime, timeLimitMs);
-      }
-      return leafEval(board, accumulator, player, perspective);
+      return quiescenceSearch(
+          board, accumulator, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs);
     }
 
     List<Action> actions = MoveGenerator.getLegalActions(player, board, false);
     if (actions.isEmpty()) {
-      return leafEval(board, accumulator, player, perspective);
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
 
     actions = orderActions(actions, board, player, ttMove, depth);
 
     float bestScore = Float.NEGATIVE_INFINITY;
+    if (!maximizingPlayer) {
+      bestScore = Float.POSITIVE_INFINITY;
+    }
+
     Action bestAction = null;
-    boolean firstMove = true;
+    byte ttFlag = maximizingPlayer ? TTEntry.FLAG_UPPER_BOUND : TTEntry.FLAG_LOWER_BOUND;
 
-    for (Action action : actions) {
-      Board child = applyAction(board, player, action);
-      Accumulator childAcc = null;
-      if (accumulator != null) {
-        childAcc = accumulator.copy();
-        Accumulator.computeDiff(board, child, childAcc, perspective, nnueModel);
-      }
+    if (maximizingPlayer) {
+      float maxEval = Float.NEGATIVE_INFINITY;
+      boolean firstMove = true;
+      for (Action action : actions) {
+        Board child = applyAction(board, player, action);
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
+        }
 
-      float score;
-      if (firstMove) {
-        // Full window search for the principal variation.
-        score =
-            -alphaBeta(
-                child,
-                childAcc,
-                depth - 1,
-                -beta,
-                -alpha,
-                getOpponent(player),
-                perspective,
-                startTime,
-                timeLimitMs);
-        firstMove = false;
-      } else {
-        // Null window (PVS) search.
-        score =
-            -alphaBeta(
-                child,
-                childAcc,
-                depth - 1,
-                -alpha - 1,
-                -alpha,
-                getOpponent(player),
-                perspective,
-                startTime,
-                timeLimitMs);
-        if (score > alpha && score < beta) { // Re-search on fail-high.
-          score =
-              -alphaBeta(
+        float eval;
+        if (firstMove) {
+          // Full window search for principal variation
+          eval =
+              alphaBeta(
                   child,
                   childAcc,
                   depth - 1,
-                  -beta,
-                  -alpha,
+                  alpha,
+                  beta,
                   getOpponent(player),
-                  perspective,
+                  false,
                   startTime,
                   timeLimitMs);
+          firstMove = false;
+        } else {
+          // Null window search
+          eval =
+              alphaBeta(
+                  child,
+                  childAcc,
+                  depth - 1,
+                  alpha,
+                  alpha + 1,
+                  getOpponent(player),
+                  false,
+                  startTime,
+                  timeLimitMs);
+          if (eval > alpha && eval < beta) { // Re-search if it failed high
+            eval =
+                alphaBeta(
+                    child,
+                    childAcc,
+                    depth - 1,
+                    eval,
+                    beta,
+                    getOpponent(player),
+                    false,
+                    startTime,
+                    timeLimitMs);
+          }
+        }
+
+        if (eval > maxEval) {
+          maxEval = eval;
+          bestAction = action;
+        }
+
+        if (eval > alpha) {
+          alpha = eval;
+          ttFlag = TTEntry.FLAG_EXACT;
+        }
+
+        if (alpha >= beta) {
+          ttFlag = TTEntry.FLAG_LOWER_BOUND; // Beta cutoff (fail-high)
+          if (!isCaptureOrThreat(board, player, action)) {
+            killerMoves.addKiller(depth, action);
+            historyTable.addBonus(player, action, depth);
+          }
+          break;
         }
       }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestAction = action;
-      }
-      if (score > alpha) {
-        alpha = score;
-      }
-      if (alpha >= beta) {
-        // Beta cutoff (fail-high).
-        if (!isCaptureOrThreat(board, player, action)) {
-          killerMoves.addKiller(depth, action);
-          historyTable.addBonus(player, action, depth);
+      bestScore = maxEval;
+    } else {
+      float minEval = Float.POSITIVE_INFINITY;
+      boolean firstMove = true;
+      for (Action action : actions) {
+        Board child = applyAction(board, player, action);
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
         }
-        break;
+
+        float eval;
+        if (firstMove) {
+          eval =
+              alphaBeta(
+                  child,
+                  childAcc,
+                  depth - 1,
+                  alpha,
+                  beta,
+                  getOpponent(player),
+                  true,
+                  startTime,
+                  timeLimitMs);
+          firstMove = false;
+        } else {
+          // Null window search
+          eval =
+              alphaBeta(
+                  child,
+                  childAcc,
+                  depth - 1,
+                  beta - 1,
+                  beta,
+                  getOpponent(player),
+                  true,
+                  startTime,
+                  timeLimitMs);
+          if (eval > alpha && eval < beta) {
+            eval =
+                alphaBeta(
+                    child,
+                    childAcc,
+                    depth - 1,
+                    alpha,
+                    eval,
+                    getOpponent(player),
+                    true,
+                    startTime,
+                    timeLimitMs);
+          }
+        }
+
+        if (eval < minEval) {
+          minEval = eval;
+          bestAction = action;
+        }
+
+        if (eval < beta) {
+          beta = eval;
+          ttFlag = TTEntry.FLAG_EXACT;
+        }
+
+        if (beta <= alpha) {
+          ttFlag = TTEntry.FLAG_UPPER_BOUND; // Alpha cutoff (fail-low)
+          if (!isCaptureOrThreat(board, player, action)) {
+            killerMoves.addKiller(depth, action);
+            historyTable.addBonus(player, action, depth);
+          }
+          break;
+        }
       }
+      bestScore = minEval;
     }
 
-    if (USE_TT) {
-      byte ttFlag;
-      if (bestScore <= alphaOrig) {
-        ttFlag = TTEntry.FLAG_UPPER_BOUND; // Fail-low: no move raised alpha.
-      } else if (bestScore >= beta) {
-        ttFlag = TTEntry.FLAG_LOWER_BOUND; // Fail-high: beta cutoff.
-      } else {
-        ttFlag = TTEntry.FLAG_EXACT;
-      }
-      tt.store(zobristKey, bestAction, bestScore, depth, ttFlag);
-    }
+    tt.store(zobristKey, bestAction, bestScore, depth, ttFlag);
     return bestScore;
   }
 
-  /** Static leaf value in the side-to-move ({@code player}) frame. */
-  private float leafEval(Board board, Accumulator accumulator, int player, int perspective) {
-    float e = evaluate(board, accumulator, perspective);
-    return (player == perspective) ? e : -e;
-  }
-
   public float quiescenceSearch(
       Board board,
       Accumulator accumulator,
       float alpha,
       float beta,
       int player,
-      int perspective,
+      boolean maximizingPlayer,
       long startTime,
       long timeLimitMs) {
     return quiescenceSearch(
-        board, accumulator, alpha, beta, player, perspective, startTime, timeLimitMs, 0);
+        board, accumulator, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs, 0);
   }
 
   public float quiescenceSearch(
@@ -243,19 +313,25 @@ public class SearchEngine {
       float alpha,
       float beta,
       int player,
-      int perspective,
+      boolean maximizingPlayer,
       long startTime,
       long timeLimitMs,
       int qsDepth) {
 
     if (qsDepth >= 6 || System.currentTimeMillis() - startTime >= timeLimitMs) {
-      return leafEval(board, accumulator, player, perspective);
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
 
-    // Negamax stand-pat: side-to-move relative.
-    float standPat = leafEval(board, accumulator, player, perspective);
-    if (standPat >= beta) return standPat;
-    if (standPat > alpha) alpha = standPat;
+    float standPat = evaluate(board, accumulator, player, maximizingPlayer);
+    if (maximizingPlayer) {
+      if (standPat >= beta) return beta;
+      if (alpha < standPat) alpha = standPat;
+    } else {
+      if (standPat <= alpha) return alpha;
+      if (beta > standPat) beta = standPat;
+    }
+
+    int originalPlayer = maximizingPlayer ? player : getOpponent(player);
 
     List<Action> actions = MoveGenerator.getLegalActions(player, board, false);
     List<Action> loudActions = new ArrayList<>();
@@ -271,31 +347,59 @@ public class SearchEngine {
 
     loudActions = orderActions(loudActions, board, player, null, 0);
 
-    float bestScore = standPat;
-    for (Action action : loudActions) {
-      Board child = applyAction(board, player, action);
-      Accumulator childAcc = null;
-      if (accumulator != null) {
-        childAcc = accumulator.copy();
-        Accumulator.computeDiff(board, child, childAcc, perspective, nnueModel);
-      }
+    if (maximizingPlayer) {
+      float maxEval = standPat;
+      for (Action action : loudActions) {
+        Board child = applyAction(board, player, action);
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
+        }
 
-      float score =
-          -quiescenceSearch(
-              child,
-              childAcc,
-              -beta,
-              -alpha,
-              getOpponent(player),
-              perspective,
-              startTime,
-              timeLimitMs,
-              qsDepth + 1);
-      if (score > bestScore) bestScore = score;
-      if (score > alpha) alpha = score;
-      if (alpha >= beta) break;
+        float eval =
+            quiescenceSearch(
+                child,
+                childAcc,
+                alpha,
+                beta,
+                getOpponent(player),
+                false,
+                startTime,
+                timeLimitMs,
+                qsDepth + 1);
+        maxEval = Math.max(maxEval, eval);
+        alpha = Math.max(alpha, eval);
+        if (beta <= alpha) break;
+      }
+      return maxEval;
+    } else {
+      float minEval = standPat;
+      for (Action action : loudActions) {
+        Board child = applyAction(board, player, action);
+        Accumulator childAcc = null;
+        if (accumulator != null) {
+          childAcc = accumulator.copy();
+          Accumulator.computeDiff(board, child, childAcc, originalPlayer, nnueModel);
+        }
+
+        float eval =
+            quiescenceSearch(
+                child,
+                childAcc,
+                alpha,
+                beta,
+                getOpponent(player),
+                true,
+                startTime,
+                timeLimitMs,
+                qsDepth + 1);
+        minEval = Math.min(minEval, eval);
+        beta = Math.min(beta, eval);
+        if (beta <= alpha) break;
+      }
+      return minEval;
     }
-    return bestScore;
   }
 
   protected int getOpponent(int player) {
@@ -321,18 +425,15 @@ public class SearchEngine {
     return !player1Base || !player2Base;
   }
 
-  protected float evaluate(Board board, int player) {
-    return evaluate(board, null, player);
+  protected float evaluate(Board board, int player, boolean maximizingPlayer) {
+    return evaluate(board, null, player, maximizingPlayer);
   }
 
-  /**
-   * Static evaluation from {@code player}'s perspective: positive is good for {@code player}.
-   * Simple count of pieces owned by the player, penalized if base is lost, or the NNUE forward
-   * pass.
-   */
-  protected float evaluate(Board board, Accumulator accumulator, int player) {
+  /** Evaluation function: simple count of pieces owned by the player, penalized if base is lost. */
+  protected float evaluate(
+      Board board, Accumulator accumulator, int player, boolean maximizingPlayer) {
     nodesEvaluated++;
-    int originalPlayer = player;
+    int originalPlayer = maximizingPlayer ? player : getOpponent(player);
     int opponent = getOpponent(originalPlayer);
 
     boolean myBaseAlive = false;
@@ -547,8 +648,6 @@ public class SearchEngine {
       rootAcc.init(board, player, nnueModel);
     }
 
-    float alpha = Float.NEGATIVE_INFINITY;
-    float beta = Float.POSITIVE_INFINITY;
     boolean firstMove = true;
     for (Action action : actions) {
       Board child = applyAction(board, player, action);
@@ -558,44 +657,42 @@ public class SearchEngine {
         Accumulator.computeDiff(board, child, childAcc, player, nnueModel);
       }
 
-      // Negamax root: value of the move for `player` is the negation of the child's value
-      // (which is relative to the opponent, the side to move at the child).
       float value;
       if (firstMove) {
         value =
-            -alphaBeta(
+            alphaBeta(
                 child,
                 childAcc,
                 depth - 1,
-                -beta,
-                -alpha,
+                Float.NEGATIVE_INFINITY,
+                Float.POSITIVE_INFINITY,
                 3 - player,
-                player,
+                false,
                 startTime,
                 Long.MAX_VALUE);
         firstMove = false;
       } else {
         value =
-            -alphaBeta(
+            alphaBeta(
                 child,
                 childAcc,
                 depth - 1,
-                -alpha - 1.0f,
-                -alpha,
+                Float.NEGATIVE_INFINITY,
+                bestValue + 1.0f, // Null window based on bestValue found so far
                 3 - player,
-                player,
+                false,
                 startTime,
                 Long.MAX_VALUE);
-        if (value > alpha && value < beta) {
+        if (value > bestValue) {
           value =
-              -alphaBeta(
+              alphaBeta(
                   child,
                   childAcc,
                   depth - 1,
-                  -beta,
-                  -alpha,
+                  value,
+                  Float.POSITIVE_INFINITY,
                   3 - player,
-                  player,
+                  false,
                   startTime,
                   Long.MAX_VALUE);
         }
@@ -605,12 +702,18 @@ public class SearchEngine {
         bestValue = value;
         bestAction = action;
       }
-      if (value > alpha) {
-        alpha = value;
-      }
     }
 
     long elapsedTime = System.currentTimeMillis() - startTime;
+    System.out.println("=== Search Diagnostics ===");
+    System.out.println("Search Depth: " + depth);
+    System.out.println("Nodes Evaluated: " + nodesEvaluated);
+    System.out.println("Time Elapsed: " + elapsedTime + " ms");
+    String actionDesc = (bestAction != null) ? bestAction.toString() : "None";
+    System.out.println("Best Action: " + actionDesc);
+    System.out.println("Position Evaluation: " + bestValue);
+    System.out.println("==========================");
+
     return new SearchResult(bestAction, bestValue, depth, nodesEvaluated, elapsedTime);
   }
 
@@ -659,8 +762,6 @@ public class SearchEngine {
 
         actions = orderActions(actions, board, player, bestActionPreviousIteration, depth);
 
-        float alpha = Float.NEGATIVE_INFINITY;
-        float beta = Float.POSITIVE_INFINITY;
         boolean firstMove = true;
         for (Action action : actions) {
           Board child = applyAction(board, player, action);
@@ -670,43 +771,46 @@ public class SearchEngine {
             Accumulator.computeDiff(board, child, childAcc, player, nnueModel);
           }
 
-          // Negamax root: negate the child's (opponent-relative) value.
           float value;
           if (firstMove) {
             value =
-                -alphaBeta(
+                alphaBeta(
                     child,
                     childAcc,
                     depth - 1,
-                    -beta,
-                    -alpha,
+                    Float.NEGATIVE_INFINITY,
+                    Float.POSITIVE_INFINITY,
                     3 - player,
-                    player,
+                    false,
                     startTime,
                     timeLimitMs);
             firstMove = false;
           } else {
+            float alpha =
+                bestValueAtDepth != Float.NEGATIVE_INFINITY
+                    ? bestValueAtDepth
+                    : Float.NEGATIVE_INFINITY;
             value =
-                -alphaBeta(
+                alphaBeta(
                     child,
                     childAcc,
                     depth - 1,
-                    -alpha - 1.0f,
-                    -alpha,
+                    alpha,
+                    alpha + 1.0f,
                     3 - player,
-                    player,
+                    false,
                     startTime,
                     timeLimitMs);
-            if (value > alpha && value < beta) {
+            if (value > alpha) {
               value =
-                  -alphaBeta(
+                  alphaBeta(
                       child,
                       childAcc,
                       depth - 1,
-                      -beta,
-                      -alpha,
+                      value,
+                      Float.POSITIVE_INFINITY,
                       3 - player,
-                      player,
+                      false,
                       startTime,
                       timeLimitMs);
             }
@@ -715,9 +819,6 @@ public class SearchEngine {
           if (value > bestValueAtDepth) {
             bestValueAtDepth = value;
             bestActionAtDepth = action;
-          }
-          if (value > alpha) {
-            alpha = value;
           }
         }
         // If we completed this depth without throwing SearchTimeoutException,
