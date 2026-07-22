@@ -11,13 +11,14 @@ import com.engine.nnue_trainer.search.baseline.BaselineSearchEngine;
 import java.util.List;
 
 /**
- * A/B: does the #38 search upgrade (TT/PVS/ordering/quiescence/book) actually play
- * STRONGER than the pre-#38 naive alpha-beta, holding the eval fixed? Both sides use
- * the same distilled NNUEModel and the same per-move time budget, so any win-rate
- * gap is pure search quality. Simplified self-play rules (1 action/turn, as in
- * SelfPlayGenerator) - consistent for both engines, so the comparison is fair.
+ * A/B: does the #38 search upgrade (TT/PVS/ordering/quiescence/book) actually play STRONGER than
+ * the pre-#38 naive alpha-beta, holding the eval fixed? Both sides use the same distilled NNUEModel
+ * and the same per-move time budget, so any win-rate gap is pure search quality. Simplified
+ * self-play rules (1 action/turn, as in SelfPlayGenerator) - consistent for both engines, so the
+ * comparison is fair.
  *
- * Run: ./mvnw -q compile && java -cp target/classes com.engine.nnue_trainer.train.SearchAB [games] [ms]
+ * <p>Run: ./mvnw -q compile && java -cp target/classes com.engine.nnue_trainer.train.SearchAB
+ * [games] [ms]
  */
 public class SearchAB {
 
@@ -33,8 +34,10 @@ public class SearchAB {
     NNUEModel model = NNUEModel.createDefault(); // distilled weights on the classpath
     SearchEngine neu = new SearchEngine(model);
     BaselineSearchEngine old = new BaselineSearchEngine(model);
-    Chooser newC = (b, p) -> neu.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
-    Chooser oldC = (b, p) -> old.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
+    Chooser newC =
+        (b, p) -> neu.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
+    Chooser oldC =
+        (b, p) -> old.findBestActionWithTimeLimitUsingModel(b, p, timeMs, true).bestAction;
 
     int newWins = 0, oldWins = 0, draws = 0;
     for (int g = 0; g < games; g++) {

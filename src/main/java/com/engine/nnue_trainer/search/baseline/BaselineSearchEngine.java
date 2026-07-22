@@ -1,8 +1,5 @@
 package com.engine.nnue_trainer.search.baseline;
 
-import com.engine.nnue_trainer.search.SearchResult;
-import com.engine.nnue_trainer.search.SearchTimeoutException;
-
 import com.engine.nnue_trainer.board.Action;
 import com.engine.nnue_trainer.board.BaseConnectionSearch;
 import com.engine.nnue_trainer.board.Board;
@@ -15,6 +12,8 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.Accumulator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
+import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.SearchTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -324,7 +323,8 @@ public class BaselineSearchEngine {
 
   public static SearchResult findBestAction(
       Board board, int player, int depth, boolean canPlaceNeutral) {
-    return new BaselineSearchEngine().findBestActionUsingModel(board, player, depth, canPlaceNeutral);
+    return new BaselineSearchEngine()
+        .findBestActionUsingModel(board, player, depth, canPlaceNeutral);
   }
 
   public SearchResult findBestActionUsingModel(
