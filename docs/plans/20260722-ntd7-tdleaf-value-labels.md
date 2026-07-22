@@ -69,17 +69,20 @@ after this lands (see Post-Completion) — do NOT attempt long training/eval loo
 - [x] no test framework needed here; a successful tiny run is the check
 
 ### Task 2: TD-leaf labeling in SelfPlayGenerator
-- [ ] add a labeling mode to `SelfPlayGenerator.Config` (e.g. `LabelMode { OUTCOME, TD_LEAF }`,
+- [x] add a labeling mode to `SelfPlayGenerator.Config` (e.g. `LabelMode { OUTCOME, TD_LEAF }`,
       plus a `tdLambda` blend in [0,1]) — default OUTCOME to preserve current behavior
-- [ ] in TD_LEAF mode, set each record's `target` to the position's search-backed value
+      — added `LabelMode` enum + `labelMode`/`tdLambda` fields, default OUTCOME/λ=1
+- [x] in TD_LEAF mode, set each record's `target` to the position's search-backed value
       (`SearchResult.score` from a depth-`searchDepth` search with the loaded net), oriented to the
       side to move; blend toward the final outcome by `tdLambda` (λ=1 → pure outcome, λ=0 → pure
       bootstrap) so the mode subsumes the old behavior at λ=1
-- [ ] load the warm-start net (`nnue_weights.json`) so bootstrapped targets come from the current
-      eval, not a random net
-- [ ] write `SelfPlayGeneratorTest` cases: TD_LEAF target equals the search value at λ=0, equals
-      ±outcome at λ=1, and has the correct side-to-move sign
-- [ ] run `./mvnw test` — must pass before next task
+      — `computeTarget()` does `(1-λ)·searchValue + λ·outcome`; ±Inf search values collapse to ±1
+- [x] load the warm-start net (`nnue_weights.json`) so bootstrapped targets come from the current
+      eval, not a random net — TD_LEAF path builds `new SearchEngine(NNUEModel.createDefault())`,
+      which loads `nnue_weights.json` and is a custom model (so scoring searches skip the opening book)
+- [x] write `SelfPlayGeneratorTest` cases: TD_LEAF target equals the search value at λ=0, equals
+      ±outcome at λ=1, and has the correct side-to-move sign — 3 new tests, all green
+- [x] run `./mvnw test` — must pass before next task — full suite 73/73 green
 
 ### Task 3: Wire the one-pass pipeline + docs
 - [ ] provide a runnable path (a small script or documented commands) that: generates a TD-leaf

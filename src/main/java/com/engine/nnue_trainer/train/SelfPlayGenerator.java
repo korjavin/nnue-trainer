@@ -6,7 +6,9 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveGenerator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.SearchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -19,6 +21,14 @@ import java.util.Set;
 
 public class SelfPlayGenerator {
 
+  /** How a training record's target is labeled. */
+  public enum LabelMode {
+    /** Final game outcome mapped to ±1 (the original noisy label). */
+    OUTCOME,
+    /** TD-leaf: our own search's negamax value, blended toward the outcome by {@code tdLambda}. */
+    TD_LEAF
+  }
+
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
@@ -27,6 +37,10 @@ public class SelfPlayGenerator {
     public int searchDepth = 2;
     public long timeLimitMs = 0;
     public long seed = 0;
+    public LabelMode labelMode = LabelMode.OUTCOME;
+
+    /** TD-leaf blend: 1 → pure outcome (subsumes OUTCOME), 0 → pure search bootstrap. */
+    public double tdLambda = 1.0;
   }
 
   public static class TrainingRecord {
@@ -52,10 +66,12 @@ public class SelfPlayGenerator {
   private static class TurnData {
     public Board board;
     public int activePlayer;
+    public boolean canPlaceNeutral;
 
-    public TurnData(Board board, int activePlayer) {
+    public TurnData(Board board, int activePlayer, boolean canPlaceNeutral) {
       this.board = board;
       this.activePlayer = activePlayer;
+      this.canPlaceNeutral = canPlaceNeutral;
     }
   }
 
@@ -84,7 +100,17 @@ public class SelfPlayGenerator {
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
-    SearchEngine engine = customEngine != null ? customEngine : new SearchEngine();
+    SearchEngine engine;
+    if (customEngine != null) {
+      engine = customEngine;
+    } else if (config.labelMode == LabelMode.TD_LEAF) {
+      // Warm-start engine: createDefault() loads nnue_weights.json (the ntd.8 distill), and the
+      // custom-model ctor sets isCustomModel=true so scoring searches don't short-circuit to the
+      // opening book (which would return score 0 for early positions).
+      engine = new SearchEngine(NNUEModel.createDefault());
+    } else {
+      engine = new SearchEngine();
+    }
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
@@ -105,7 +131,7 @@ public class SelfPlayGenerator {
         boolean canPlaceNeutral = true;
         for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
           // Collect board snapshot BEFORE move
-          turns.add(new TurnData(copyBoard(board), currentPlayer));
+          turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
 
           List<Action> legalActions =
               MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
@@ -159,10 +185,14 @@ public class SelfPlayGenerator {
 
       // Process collected turns to dataset
       for (TurnData turnData : turns) {
-        float target = 0.0f;
-        if (winner != 0) {
-          target = (winner == turnData.activePlayer) ? 1.0f : -1.0f;
-        }
+        float target =
+            computeTarget(
+                engine,
+                turnData.board,
+                turnData.activePlayer,
+                turnData.canPlaceNeutral,
+                winner,
+                config);
         float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
         dataset.add(new TrainingRecord(features, target));
 
@@ -174,6 +204,40 @@ public class SelfPlayGenerator {
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
     return new GenerationResult(dataset, distinctGameRatio);
+  }
+
+  /**
+   * Target label for one position, side-to-move ({@code activePlayer}) relative.
+   *
+   * <p>OUTCOME → final game result mapped to ±1 (0 if unfinished). TD_LEAF → {@code
+   * (1-λ)·searchValue + λ·outcome}, where {@code searchValue} is our own search's negamax score
+   * (already side-to-move relative). λ=1 reproduces OUTCOME; λ=0 is a pure search bootstrap.
+   */
+  static float computeTarget(
+      SearchEngine engine,
+      Board board,
+      int activePlayer,
+      boolean canPlaceNeutral,
+      int winner,
+      Config config) {
+    float outcome = 0.0f;
+    if (winner != 0) {
+      outcome = (winner == activePlayer) ? 1.0f : -1.0f;
+    }
+    if (config.labelMode != LabelMode.TD_LEAF) {
+      return outcome;
+    }
+
+    SearchResult result =
+        engine.findBestActionUsingModel(board, activePlayer, config.searchDepth, canPlaceNeutral);
+    float searchValue = result.score;
+    // A forced win/loss inside the search returns ±Infinity; collapse to ±1 so it never poisons the
+    // dataset with a non-finite target.
+    if (Float.isInfinite(searchValue)) {
+      searchValue = Math.signum(searchValue);
+    }
+    double lambda = config.tdLambda;
+    return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
   }
 
   private static int determineWinner(Board board) {
