@@ -31,25 +31,22 @@ public class SearchEngineTest {
     }
 
     @Override
-    protected float evaluate(Board board, int player, boolean maximizingPlayer) {
+    protected float evaluate(Board board, int player) {
       nodesEvaluated++;
       if (evaluationMap.containsKey(board)) {
         return evaluationMap.get(board);
       }
-      return super.evaluate(board, player, maximizingPlayer);
+      return super.evaluate(board, player);
     }
 
     @Override
     protected float evaluate(
-        Board board,
-        com.engine.nnue_trainer.nnue.Accumulator accumulator,
-        int player,
-        boolean maximizingPlayer) {
+        Board board, com.engine.nnue_trainer.nnue.Accumulator accumulator, int player) {
       nodesEvaluated++;
       if (evaluationMap.containsKey(board)) {
         return evaluationMap.get(board);
       }
-      return super.evaluate(board, accumulator, player, maximizingPlayer);
+      return super.evaluate(board, accumulator, player);
     }
   }
 
@@ -93,13 +90,76 @@ public class SearchEngineTest {
     board.setCell(1, 0, new Cell(2, CellKind.NORMAL));
     // player 1 has 2 pieces, player 2 has 1 piece
 
-    // player 1 is maximizing
-    float score = engine.evaluate(board, 1, true);
+    // from player 1's perspective
+    float score = engine.evaluate(board, 1);
     assertEquals(1.0f, score); // 2 - 1 = 1
 
-    // player 2 is maximizing
-    float score2 = engine.evaluate(board, 2, true);
+    // from player 2's perspective
+    float score2 = engine.evaluate(board, 2);
     assertEquals(-1.0f, score2); // 1 - 2 = -1
+  }
+
+  @Test
+  public void testPicksWinningCaptureAtOnePly() {
+    // Guards against the negamax sign inversion (engine "plays for the opponent"): at 1 ply the
+    // engine must pick the move that is best for the side to move, i.e. the capture.
+    boolean qs = SearchEngine.USE_QUIESCENCE;
+    boolean tt = SearchEngine.USE_TT;
+    SearchEngine.USE_QUIESCENCE = false; // pure 1-ply static eval, no recapture noise
+    SearchEngine.USE_TT = false;
+    try {
+      Board board = new Board(5, 5);
+      // Player 1: base + one connected normal.
+      board.setCell(0, 0, new Cell(1, CellKind.BASE));
+      board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+      // Player 2: base with a connected chain; (0,2) is capturable by player 1 from (0,1).
+      board.setCell(0, 4, new Cell(2, CellKind.BASE));
+      board.setCell(0, 3, new Cell(2, CellKind.NORMAL));
+      board.setCell(0, 2, new Cell(2, CellKind.NORMAL));
+
+      // Custom-model engine skips the opening book; 5x5 board skips NNUE -> piece-count eval.
+      SearchEngine engine = new SearchEngine(modelFavoringOwnNormalAt(1, 1));
+      Action best = engine.findBestActionUsingModel(board, 1, 1, false).bestAction;
+
+      assertEquals(new MoveAction(new Pos(0, 2)), best);
+    } finally {
+      SearchEngine.USE_QUIESCENCE = qs;
+      SearchEngine.USE_TT = tt;
+    }
+  }
+
+  @Test
+  public void testTTDoesNotChangeBestMove() {
+    // TT is only an efficiency layer: at a fixed depth, searching with USE_TT on must pick the
+    // same move as with USE_TT off. A mismatch means the negamax bound flags (EXACT/LOWER/UPPER)
+    // are stored or probed in the wrong frame and the TT is corrupting the search.
+    boolean tt = SearchEngine.USE_TT;
+    try {
+      Board board = new Board(5, 5);
+      board.setCell(0, 0, new Cell(1, CellKind.BASE));
+      board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+      board.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+      board.setCell(4, 4, new Cell(2, CellKind.BASE));
+      board.setCell(4, 3, new Cell(2, CellKind.NORMAL));
+      board.setCell(3, 3, new Cell(2, CellKind.NORMAL));
+
+      int depth = 3;
+      SearchEngine.USE_TT = false;
+      Action noTt =
+          new SearchEngine(modelFavoringOwnNormalAt(1, 1))
+              .findBestActionUsingModel(board, 1, depth, false)
+              .bestAction;
+
+      SearchEngine.USE_TT = true;
+      Action withTt =
+          new SearchEngine(modelFavoringOwnNormalAt(1, 1))
+              .findBestActionUsingModel(board, 1, depth, false)
+              .bestAction;
+
+      assertEquals(noTt, withTt);
+    } finally {
+      SearchEngine.USE_TT = tt;
+    }
   }
 
   @Test

@@ -30,7 +30,7 @@ public class SearchEngineUpgradeTest {
             Float.NEGATIVE_INFINITY,
             Float.POSITIVE_INFINITY,
             1,
-            true,
+            1,
             startTime1,
             Long.MAX_VALUE);
 
@@ -44,7 +44,7 @@ public class SearchEngineUpgradeTest {
             Float.NEGATIVE_INFINITY,
             Float.POSITIVE_INFINITY,
             1,
-            true,
+            1,
             startTime2,
             Long.MAX_VALUE);
 
