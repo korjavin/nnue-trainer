@@ -63,8 +63,11 @@ public class PeriodicRetrainer implements AutoCloseable {
     SelfPlayGenerator.Config spConfig = new SelfPlayGenerator.Config();
     spConfig.numGames =
         Math.max(10, config.minExamples() / 40); // Rough estimate for examples per game
+    spConfig.searchDepth = config.searchDepth();
+    spConfig.seed = config.seed();
+    SearchEngine isolatedEngine = new SearchEngine(liveSearchEngine.getNnueModel());
     SelfPlayGenerator.GenerationResult spResult =
-        SelfPlayGenerator.generate(spConfig, liveSearchEngine);
+        SelfPlayGenerator.generate(spConfig, isolatedEngine);
     System.out.println(
         "Generated "
             + spResult.dataset.size()
@@ -104,11 +107,12 @@ public class PeriodicRetrainer implements AutoCloseable {
     Path latestWeights = config.outputDir().resolve("nnue_weights.json");
     trainer.saveWeights(versionedWeights);
     trainer.saveWeights(latestWeights);
-    writeMetadata(runId, importResult, trainingResult, evaluation, versionedWeights);
+    writeMetadata(
+        runId, importResult, spResult, spConfig, trainingResult, evaluation, versionedWeights);
     liveSearchEngine.setNnueModel(candidate);
 
     return new RetrainingResult(
-        true, true, importResult.examples().size(), trainingResult.finalMse(), evaluation, runId);
+        true, true, combinedExamples.size(), trainingResult.finalMse(), evaluation, runId);
   }
 
   private void runOnceSafely() {
@@ -208,6 +212,8 @@ public class PeriodicRetrainer implements AutoCloseable {
   private void writeMetadata(
       String runId,
       GameImporter.ImportResult importResult,
+      SelfPlayGenerator.GenerationResult spResult,
+      SelfPlayGenerator.Config spConfig,
       NNUETrainer.TrainingResult trainingResult,
       EvaluationResult evaluation,
       Path weightsPath)
@@ -217,8 +223,8 @@ public class PeriodicRetrainer implements AutoCloseable {
     metadata.seed = config.seed();
     metadata.dbPath = config.dbPath().toString();
     metadata.minStartedAt = config.minStartedAt();
-    metadata.examples = importResult.examples().size();
-    metadata.importedGames = importResult.importedGames();
+    metadata.examples = importResult.examples().size() + spResult.dataset.size();
+    metadata.importedGames = importResult.importedGames() + spConfig.numGames;
     metadata.skippedDuplicateGames = importResult.skippedDuplicates();
     metadata.finalMse = trainingResult.finalMse();
     metadata.candidateWins = evaluation.candidateWins();

@@ -26,6 +26,7 @@ public class SelfPlayGenerator {
     public int exploreTurns = 6;
     public int searchDepth = 2;
     public long timeLimitMs = 0;
+    public long seed = 0;
   }
 
   public static class TrainingRecord {
@@ -82,7 +83,7 @@ public class SelfPlayGenerator {
 
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
     List<TrainingRecord> dataset = new ArrayList<>();
-    Random random = new Random();
+    Random random = config.seed != 0 ? new Random(config.seed) : new Random();
     SearchEngine engine = customEngine != null ? customEngine : new SearchEngine();
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
@@ -101,48 +102,58 @@ public class SelfPlayGenerator {
       int winner = 0;
 
       for (int turn = 0; turn < config.maxTurns; turn++) {
-        // Collect board snapshot BEFORE move
-        turns.add(new TurnData(copyBoard(board), currentPlayer));
+        boolean canPlaceNeutral = true;
+        for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
+          // Collect board snapshot BEFORE move
+          turns.add(new TurnData(copyBoard(board), currentPlayer));
 
-        List<Action> legalActions = MoveGenerator.getLegalActions(currentPlayer, board, true);
-        if (legalActions.isEmpty()) {
-          // Player has no moves, check if terminal
+          List<Action> legalActions =
+              MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
+          if (legalActions.isEmpty()) {
+            if (engine.isTerminal(board)) {
+              winner = determineWinner(board);
+            } else {
+              winner = 3 - currentPlayer;
+            }
+            break;
+          }
+
+          Action chosenAction = null;
+          if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
+            // Exploration
+            chosenAction = legalActions.get(random.nextInt(legalActions.size()));
+          } else {
+            // Exploitation
+            if (engine.getNnueModel() != null) {
+              chosenAction =
+                  engine.findBestActionUsingModel(
+                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                      .bestAction;
+            } else {
+              chosenAction =
+                  SearchEngine.findBestAction(
+                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                      .bestAction;
+            }
+            if (chosenAction == null) {
+              chosenAction = legalActions.get(0); // fallback
+            }
+          }
+
+          if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
+            canPlaceNeutral = false;
+            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+            break; // turn ends immediately on placement
+          } else {
+            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+          }
+
           if (engine.isTerminal(board)) {
             winner = determineWinner(board);
-          } else {
-            winner = 3 - currentPlayer; // Can't move -> loses? Treat as opponent wins if no moves
-          }
-          break;
-        }
-
-        Action chosenAction = null;
-        if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
-          // Exploration
-          chosenAction = legalActions.get(random.nextInt(legalActions.size()));
-        } else {
-          // Exploitation
-          if (engine.getNnueModel() != null) {
-            chosenAction =
-                engine.findBestActionUsingModel(board, currentPlayer, config.searchDepth, true)
-                    .bestAction;
-          } else {
-            chosenAction =
-                SearchEngine.findBestAction(board, currentPlayer, config.searchDepth, true)
-                    .bestAction;
-          }
-          if (chosenAction == null) {
-            chosenAction = legalActions.get(0); // fallback
+            break;
           }
         }
-
-        // Apply action
-        board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
-
-        if (engine.isTerminal(board)) {
-          winner = determineWinner(board);
-          break;
-        }
-
+        if (winner != 0) break;
         currentPlayer = 3 - currentPlayer;
       }
 
