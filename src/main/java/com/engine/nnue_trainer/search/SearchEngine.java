@@ -16,6 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SearchEngine {
+  // Debug toggles (system properties) for bisecting the #38 search regression (raz.2.3).
+  public static boolean USE_QUIESCENCE =
+      !"false".equalsIgnoreCase(System.getProperty("USE_QUIESCENCE"));
+  public static boolean USE_TT = !"false".equalsIgnoreCase(System.getProperty("USE_TT"));
 
   private NNUEModel nnueModel;
   private boolean isCustomModel = false;
@@ -108,7 +112,7 @@ public class SearchEngine {
     long zobristKey = Zobrist.computeHash(board, originalPlayer);
 
     // TT Probe
-    TTEntry tte = tt.probe(zobristKey);
+    TTEntry tte = USE_TT ? tt.probe(zobristKey) : null;
     Action ttMove = null;
     if (tte != null && tte.depth >= depth) {
       if (tte.flag == TTEntry.FLAG_EXACT) {
@@ -122,8 +126,11 @@ public class SearchEngine {
     }
 
     if (depth == 0 || isTerminal(board)) {
-      return quiescenceSearch(
-          board, accumulator, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs);
+      if (USE_QUIESCENCE) {
+        return quiescenceSearch(
+            board, accumulator, alpha, beta, player, maximizingPlayer, startTime, timeLimitMs);
+      }
+      return evaluate(board, accumulator, player, maximizingPlayer);
     }
 
     List<Action> actions = MoveGenerator.getLegalActions(player, board, false);
@@ -290,7 +297,9 @@ public class SearchEngine {
       bestScore = minEval;
     }
 
-    tt.store(zobristKey, bestAction, bestScore, depth, ttFlag);
+    if (USE_TT) {
+      tt.store(zobristKey, bestAction, bestScore, depth, ttFlag);
+    }
     return bestScore;
   }
 
@@ -705,15 +714,6 @@ public class SearchEngine {
     }
 
     long elapsedTime = System.currentTimeMillis() - startTime;
-    System.out.println("=== Search Diagnostics ===");
-    System.out.println("Search Depth: " + depth);
-    System.out.println("Nodes Evaluated: " + nodesEvaluated);
-    System.out.println("Time Elapsed: " + elapsedTime + " ms");
-    String actionDesc = (bestAction != null) ? bestAction.toString() : "None";
-    System.out.println("Best Action: " + actionDesc);
-    System.out.println("Position Evaluation: " + bestValue);
-    System.out.println("==========================");
-
     return new SearchResult(bestAction, bestValue, depth, nodesEvaluated, elapsedTime);
   }
 
