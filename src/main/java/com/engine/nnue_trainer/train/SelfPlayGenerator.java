@@ -267,10 +267,10 @@ public class SelfPlayGenerator {
     SearchResult result =
         engine.findBestActionUsingModel(board, activePlayer, config.searchDepth, canPlaceNeutral);
     float searchValue = result.score;
-    // A forced win/loss inside the search returns ±Infinity; collapse to ±1 so it never poisons the
-    // dataset with a non-finite target.
-    if (Float.isInfinite(searchValue)) {
-      searchValue = Math.signum(searchValue);
+    // A forced win/loss inside the search returns ±Infinity; collapse to ±1 (and a stray NaN to 0)
+    // so a non-finite score never poisons the dataset with a non-finite target.
+    if (!Float.isFinite(searchValue)) {
+      searchValue = Float.isNaN(searchValue) ? 0f : Math.signum(searchValue);
     }
     double lambda = config.tdLambda;
     return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
