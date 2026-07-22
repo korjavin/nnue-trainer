@@ -20,30 +20,45 @@ public class NNUEv2AccumulatorTest {
     Map<List<Integer>, Integer> patternDict = new HashMap<>();
 
     Integer[] pattern1Array = new Integer[25];
-    Arrays.fill(pattern1Array, 0);
-    pattern1Array[12] = 1; // Center is STM
-    pattern1Array[24] = 2; // (4,4) relative to (2,2) for player 1
+    Arrays.fill(pattern1Array, 12);
+    pattern1Array[12] = 0; // Center is STM normal (dist 0) -> 0 + 0 = 0
+    pattern1Array[24] = 10; // (4,4) is NSTM relative to (2,2) for P1 (dist 4) -> 6 + 4 = 10
     List<Integer> pattern1 = Arrays.asList(pattern1Array);
     patternDict.put(pattern1, 0);
 
     Integer[] pattern2Array = new Integer[25];
-    Arrays.fill(pattern2Array, 0);
-    pattern2Array[0] = 1; // (2,2) relative to (4,4) for player 1
-    pattern2Array[12] = 2; // Center is NSTM
+    Arrays.fill(pattern2Array, 12);
+    pattern2Array[0] = 10; // (2,2) is NSTM relative to (4,4) for P1 (dist 4) -> 6 + 4 = 10
+    pattern2Array[12] =
+        0; // Center is STM normal (dist 0) for P2 -> wait, NSTM center? P1 extracts for NSTM (P2).
+    // For P2, (4,4) is their own piece. STM normal (dist 0) is 0
     List<Integer> pattern2 = Arrays.asList(pattern2Array);
     patternDict.put(pattern2, 1);
 
+    // extractPattern for P1 at (4,4):
+    // cell at (2,2) is P1 (perspective P1 -> STM) -> 0+4 = 4
+    // cell at (4,4) is P2 (perspective P1 -> NSTM) -> 6+0 = 6
+    pattern2Array[0] = 4;
+    pattern2Array[12] = 6;
+    patternDict.put(pattern2, 1);
+
+    // extractPattern for P2 at (2,2):
+    // cell at (2,2) is P1 (perspective P2 -> NSTM) -> 6+0 = 6
+    // cell at (4,4) is P2 (perspective P2 -> STM) -> 0+4 = 4
     Integer[] pattern3Array = new Integer[25];
-    Arrays.fill(pattern3Array, 0);
-    pattern3Array[12] = 2; // (2,2) center for player 2
-    pattern3Array[24] = 1; // (4,4) relative to (2,2) for player 2
+    Arrays.fill(pattern3Array, 12);
+    pattern3Array[12] = 6;
+    pattern3Array[24] = 4;
     List<Integer> pattern3 = Arrays.asList(pattern3Array);
     patternDict.put(pattern3, 2);
 
+    // extractPattern for P2 at (4,4):
+    // cell at (2,2) is P1 (perspective P2 -> NSTM) -> 6+4 = 10
+    // cell at (4,4) is P2 (perspective P2 -> STM) -> 0+0 = 0
     Integer[] pattern4Array = new Integer[25];
-    Arrays.fill(pattern4Array, 0);
-    pattern4Array[0] = 2; // (2,2) relative to (4,4) for player 2
-    pattern4Array[12] = 1; // (4,4) center for player 2
+    Arrays.fill(pattern4Array, 12);
+    pattern4Array[0] = 10;
+    pattern4Array[12] = 0;
     List<Integer> pattern4 = Arrays.asList(pattern4Array);
     patternDict.put(pattern4, 3);
 
@@ -57,7 +72,10 @@ public class NNUEv2AccumulatorTest {
     hiddenWeights[2] = new float[] {5.0f, 6.0f};
     hiddenWeights[3] = new float[] {7.0f, 8.0f};
 
-    NNUEv2Accumulator accumulator = new NNUEv2Accumulator(patternDict, hiddenWeights, K, denseSize);
+    float[] hiddenBias = new float[] {100.0f, 200.0f};
+
+    NNUEv2Accumulator accumulator =
+        new NNUEv2Accumulator(patternDict, hiddenWeights, hiddenBias, K, denseSize);
 
     // Variable size board: 6x6
     Board board = new Board(6, 6);
@@ -77,9 +95,9 @@ public class NNUEv2AccumulatorTest {
 
     // patternNSTM at (2,2) for P2 is pattern 2 -> {5.0, 6.0}
     // patternNSTM at (4,4) for P2 is pattern 3 -> {7.0, 8.0}
-    // accumNSTM = {5.0 + 7.0, 6.0 + 8.0} = {12.0, 14.0}
+    // accumNSTM = {5.0 + 7.0 + 100.0, 6.0 + 8.0 + 200.0} = {112.0, 214.0}
 
-    float[] expected = new float[] {4.0f, 6.0f, 12.0f, 14.0f, 0.1f, 0.2f, 0.3f};
+    float[] expected = new float[] {104.0f, 206.0f, 112.0f, 214.0f, 0.1f, 0.2f, 0.3f};
     assertArrayEquals(expected, result, 1e-5f);
   }
 }

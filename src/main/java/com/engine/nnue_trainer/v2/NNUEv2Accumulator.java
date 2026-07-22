@@ -10,18 +10,30 @@ import java.util.Map;
 public class NNUEv2Accumulator {
   private final Map<List<Integer>, Integer> patternDict;
   private final float[][] hiddenWeights;
+  private final float[] hiddenBias;
   private final int K;
   private final int denseSize;
 
   public NNUEv2Accumulator(
-      Map<List<Integer>, Integer> patternDict, float[][] hiddenWeights, int K) {
-    this(patternDict, hiddenWeights, K, 14);
+      Map<List<Integer>, Integer> patternDict, float[][] hiddenWeights, float[] hiddenBias, int K) {
+    this(patternDict, hiddenWeights, hiddenBias, K, 14);
   }
 
   public NNUEv2Accumulator(
-      Map<List<Integer>, Integer> patternDict, float[][] hiddenWeights, int K, int denseSize) {
+      Map<List<Integer>, Integer> patternDict,
+      float[][] hiddenWeights,
+      float[] hiddenBias,
+      int K,
+      int denseSize) {
+    if (hiddenWeights != null && hiddenWeights.length > 0 && hiddenWeights[0].length != K) {
+      throw new IllegalArgumentException("hiddenWeights K dimension does not match expected K");
+    }
+    if (hiddenBias != null && hiddenBias.length != K) {
+      throw new IllegalArgumentException("hiddenBias dimension does not match expected K");
+    }
     this.patternDict = patternDict;
     this.hiddenWeights = hiddenWeights;
+    this.hiddenBias = hiddenBias;
     this.K = K;
     this.denseSize = denseSize;
   }
@@ -32,23 +44,29 @@ public class NNUEv2Accumulator {
 
     for (int r = row - 2; r <= row + 2; r++) {
       for (int c = col - 2; c <= col + 2; c++) {
+        int mDist = Math.abs(row - r) + Math.abs(col - c);
+
         if (board.isValidPos(r, c)) {
           Cell cell = board.getCell(r, c);
           if (cell == null) {
-            pattern[index] = 0;
-          } else if (cell.kind == CellKind.EMPTY || cell.kind == CellKind.BASE) {
-            pattern[index] = 0;
-          } else if (cell.kind == CellKind.NORMAL) {
-            pattern[index] = cell.owner == perspectivePlayer ? 1 : 2;
-          } else if (cell.kind == CellKind.FORTIFIED) {
-            pattern[index] = cell.owner == perspectivePlayer ? 3 : 4;
+            pattern[index] = 12; // Out of bounds / Empty
+          } else if (cell.kind == CellKind.EMPTY) {
+            pattern[index] = 12;
+          } else if (cell.kind == CellKind.BASE) {
+            pattern[index] = 13;
+          } else if (cell.kind == CellKind.NORMAL || cell.kind == CellKind.FORTIFIED) {
+            if (cell.owner == perspectivePlayer) {
+              pattern[index] = 0 + mDist;
+            } else {
+              pattern[index] = 6 + mDist;
+            }
           } else if (cell.kind == CellKind.NEUTRAL) {
-            pattern[index] = 5;
+            pattern[index] = 14;
           } else {
-            pattern[index] = 0;
+            pattern[index] = 12;
           }
         } else {
-          pattern[index] = 0;
+          pattern[index] = 12; // Out of bounds
         }
         index++;
       }
@@ -60,10 +78,21 @@ public class NNUEv2Accumulator {
     float[] accumSTM = new float[K];
     float[] accumNSTM = new float[K];
 
+    if (hiddenBias != null) {
+      System.arraycopy(hiddenBias, 0, accumSTM, 0, K);
+      System.arraycopy(hiddenBias, 0, accumNSTM, 0, K);
+    }
+
     int nstmPlayer = 3 - activePlayer;
 
     for (int r = 0; r < board.rows; r++) {
       for (int c = 0; c < board.cols; c++) {
+        Cell cell = board.getCell(r, c);
+        // Only active cells emit windows
+        if (cell == null || cell.kind == CellKind.EMPTY || cell.kind == CellKind.BASE) {
+          continue;
+        }
+
         // Extract and accumulate for STM
         List<Integer> patternSTM = extractPattern(board, r, c, activePlayer);
         Integer patternIdSTM = patternDict.get(patternSTM);

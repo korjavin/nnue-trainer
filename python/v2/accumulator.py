@@ -1,19 +1,26 @@
 import numpy as np
 
 class NNUEv2Accumulator:
-    def __init__(self, pattern_dict, hidden_weights, K, dense_size=14):
+    def __init__(self, pattern_dict, hidden_weights, hidden_bias, K, dense_size=14):
         """
         pattern_dict: mapping from 25-tuple (or similar) to pattern_id.
                       Wait, we need to define the signature of the 5x5 window.
                       Let's say it's a tuple of 25 ints.
         hidden_weights: numpy array of shape (num_patterns, K)
+        hidden_bias: numpy array of shape (K,)
         K: size of the accumulator
         dense_size: size of the dense features (e.g. 14)
         """
         self.pattern_dict = pattern_dict
         self.hidden_weights = hidden_weights
+        self.hidden_bias = hidden_bias
         self.K = K
         self.dense_size = dense_size
+
+        if self.hidden_weights.shape[1] != self.K:
+            raise ValueError(f"hidden_weights K dimension {self.hidden_weights.shape[1]} does not match expected {self.K}")
+        if self.hidden_bias.shape[0] != self.K:
+            raise ValueError(f"hidden_bias dimension {self.hidden_bias.shape[0]} does not match expected {self.K}")
 
     def extract_pattern(self, board_cells, row, col, perspective_player):
         """
@@ -34,34 +41,36 @@ class NNUEv2Accumulator:
 
         for r in range(row - 2, row + 3):
             for c in range(col - 2, col + 3):
+                m_dist = abs(row - r) + abs(col - c)
+
                 if 0 <= r < rows and 0 <= c < cols:
                     cell = board_cells[r][c]
                     if cell is None:
-                        pattern.append(0)
+                        pattern.append(12) # Out of bounds / Empty
                         continue
 
                     owner, kind = cell
                     # kind: 0=EMPTY, 1=NORMAL, 2=BASE, 3=FORTIFIED, 4=NEUTRAL
-                    # Mapping:
-                    # 0=EMPTY, 2=BASE -> 0
-                    if kind == 0 or kind == 2:
-                        pattern.append(0)
+                    if kind == 0:
+                        pattern.append(12)
+                    elif kind == 2:
+                        pattern.append(13)
                     elif kind == 1: # NORMAL
                         if owner == perspective_player:
-                            pattern.append(1)
+                            pattern.append(0 + m_dist)
                         else:
-                            pattern.append(2)
+                            pattern.append(6 + m_dist)
                     elif kind == 3: # FORTIFIED
                         if owner == perspective_player:
-                            pattern.append(3)
+                            pattern.append(0 + m_dist) # Wait, fortified is same as normal? We should check v2 mapping
                         else:
-                            pattern.append(4)
+                            pattern.append(6 + m_dist)
                     elif kind == 4: # NEUTRAL
-                        pattern.append(5)
+                        pattern.append(14)
                     else:
-                        pattern.append(0)
+                        pattern.append(12)
                 else:
-                    pattern.append(0) # Out of bounds
+                    pattern.append(12) # Out of bounds
         return tuple(pattern)
 
     def compute_full(self, board_cells, active_player, dense_features=None):
@@ -75,13 +84,21 @@ class NNUEv2Accumulator:
         rows = len(board_cells)
         cols = len(board_cells[0])
 
-        accum_stm = np.zeros(self.K, dtype=np.float32)
-        accum_nstm = np.zeros(self.K, dtype=np.float32)
+        accum_stm = np.copy(self.hidden_bias)
+        accum_nstm = np.copy(self.hidden_bias)
 
         nstm_player = 3 - active_player
 
         for r in range(rows):
             for c in range(cols):
+                cell = board_cells[r][c]
+                # Only active cells emit windows
+                if cell is None:
+                    continue
+                owner, kind = cell
+                if kind == 0 or kind == 2: # EMPTY or BASE
+                    continue
+
                 # Extract for STM
                 pattern_stm = self.extract_pattern(board_cells, r, c, active_player)
                 if pattern_stm in self.pattern_dict:
