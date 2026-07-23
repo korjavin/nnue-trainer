@@ -76,8 +76,8 @@ public final class GoBotSearcher {
   }
 
   /**
-   * Set this searcher's leaf eval. Pass {@code null} model with {@link LeafEval#NNUE} to lazily load
-   * the default warm-start net ({@code nnue_weights.json}).
+   * Set this searcher's leaf eval. Pass {@code null} model with {@link LeafEval#NNUE} to lazily
+   * load the default warm-start net ({@code nnue_weights.json}).
    */
   public void setLeafEval(LeafEval mode, NNUEModel model) {
     this.leafMode = mode;

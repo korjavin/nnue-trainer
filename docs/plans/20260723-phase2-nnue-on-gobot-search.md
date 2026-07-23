@@ -70,11 +70,11 @@ experiment is maintainer-run** (I run training/evals — the outcome is genuine 
 - [x] `./mvnw test` green
 
 ### Task 2: Wire NNUE-on-GoBot-search selection
-- [ ] make the leaf-eval mode selectable via env/property (e.g. `EVAL=NNUE` with `SEARCH=GOBOT`
+- [x] make the leaf-eval mode selectable via env/property (e.g. `EVAL=NNUE` with `SEARCH=GOBOT`
       selects the NNUE leaf; `EVAL=HANDTUNED` keeps hand-tuned), mirroring existing flag detection
       in `GameLoopHandler`/`SearchEngine`; load `nnue_weights.json`
-- [ ] a small test that the flag selects the NNUE leaf path
-- [ ] `./mvnw test` green
+- [x] a small test that the flag selects the NNUE leaf path
+- [x] `./mvnw test` green
 
 ### Task 3: Self-play + TD-leaf targets through the GoBot search
 - [ ] add a mode to `SelfPlayGenerator` (or a sibling) where **move selection uses the GoBot search**

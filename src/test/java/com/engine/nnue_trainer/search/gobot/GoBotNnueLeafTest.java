@@ -86,7 +86,8 @@ public class GoBotNnueLeafTest {
 
   @Test
   public void defaultLeafIsHandTuned() {
-    GoBotSearcher s = GoBotSearcher.newSearcher(GoState.fromBoard(baseBoard(), 1, 3, new boolean[4]));
+    GoBotSearcher s =
+        GoBotSearcher.newSearcher(GoState.fromBoard(baseBoard(), 1, 3, new boolean[4]));
     assertEquals(GoBotSearcher.LeafEval.HAND_TUNED, s.leafMode, "default preserves parity path");
   }
 }
