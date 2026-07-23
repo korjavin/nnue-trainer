@@ -97,6 +97,11 @@ public class SelfPlayGenerator {
     config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
     config.seed = envLong("SEED", config.seed);
     config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
+    // Exploration knobs — the default (epsilon 0.1, capped to the first 6 turns) makes both
+    // deterministic engines converge to near-identical games (distinct-ratio ~0.02). Exposing
+    // these lets us explore every turn (EXPLORE_TURNS high) at a higher rate for diverse data.
+    config.epsilon = envDouble("EPSILON", config.epsilon);
+    config.exploreTurns = envInt("EXPLORE_TURNS", config.exploreTurns);
     String mode = System.getenv("LABEL_MODE");
     if (mode != null && !mode.isBlank()) {
       config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
