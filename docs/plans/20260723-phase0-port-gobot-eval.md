@@ -126,11 +126,16 @@ Faithful translation (same structure/op order). Smoke-checked integer-exact vs t
 fixture record (player 1, movesLeft 1 → 7211). Full parity is Task 3.
 
 ### Task 3: Prove integer-exact parity
-- [ ] add `HandTunedEvalParityTest`: for each fixture record, assert
+- [x] add `HandTunedEvalParityTest`: for each fixture record, assert
       `staticEval(board, player) == record.score` **exactly**
-- [ ] if any mismatch, fix the port until all pass (mismatches reveal a metric or hidden-state
+- [x] if any mismatch, fix the port until all pass (mismatches reveal a metric or hidden-state
       bug — that's the test doing its job)
-- [ ] run `./mvnw test` — all green incl. the parity test
+- [x] run `./mvnw test` — all green incl. the parity test
+
+Parity test at `src/test/java/com/engine/nnue_trainer/search/eval/HandTunedEvalParityTest.java`.
+Reads the 419-record fixture line-by-line (JSONL) via Jackson, rebuilds each `Board`, feeds
+`(player, movesLeft, neutralUsed)`, and asserts integer-exact `== score`. All 419 passed on the
+first run — the port needed no fixes. Full suite green (74 tests).
 
 ### Task 4: Make the eval selectable in search
 - [ ] wire `HandTunedEval` as an alternative leaf eval in `SearchEngine` behind a flag/env
