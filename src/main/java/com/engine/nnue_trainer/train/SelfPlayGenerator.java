@@ -329,12 +329,21 @@ public class SelfPlayGenerator {
           break; // stuck player — GoState elimination normally sets gameOver before we get here
         }
         GoResult r = chooseGoBot(state, config);
-        float value = (r != null) ? GoBotSearcher.scoreToUnit(r.score) : 0f;
-        plies.add(
-            new GoPly(
-                BoardFeatureMapper.map(state.toBoard(), state.currentPlayer()),
-                state.currentPlayer(),
-                value));
+        // Opening-book moves (node-budget mode) carry a HandTunedEval score on the hand-tuned
+        // magnitude scale, NOT an NNUE-leaf backed-up value; scoreToUnit (the NNUE_SCALE inverse)
+        // would mislabel them with hand-tuned-derived targets. The book fires only on the
+        // deterministic canonical opening, so skipping those plies loses no signal and keeps every
+        // recorded target on the NNUE search's scale. A completed depth-0 GoResult is uniquely a
+        // book move (real searches report depth >= 1).
+        boolean fromBook = r != null && r.searchComplete && r.depth == 0;
+        if (!fromBook) {
+          float value = (r != null) ? GoBotSearcher.scoreToUnit(r.score) : 0f;
+          plies.add(
+              new GoPly(
+                  BoardFeatureMapper.map(state.toBoard(), state.currentPlayer()),
+                  state.currentPlayer(),
+                  value));
+        }
 
         Action chosen;
         if (ply < exploreWindow && random.nextDouble() < config.epsilon) {

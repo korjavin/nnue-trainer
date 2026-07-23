@@ -76,15 +76,6 @@ public final class GoBotSearcher {
   }
 
   /**
-   * Set this searcher's leaf eval. Pass {@code null} model with {@link LeafEval#NNUE} to lazily
-   * load the default warm-start net ({@code nnue_weights.json}).
-   */
-  public void setLeafEval(LeafEval mode, NNUEModel model) {
-    this.leafMode = mode;
-    this.nnueModel = model;
-  }
-
-  /**
    * Process-wide default applied to every {@link #newSearcher} (so the static {@code chooseDepth}/
    * {@code chooseNodeBudget}/{@code choose} entry points use it). Mirrors the env/property flag
    * pattern; Task 2 wires {@code EVAL=NNUE} to call this.
@@ -110,7 +101,8 @@ public final class GoBotSearcher {
       }
     }
     GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2);
-    s.setLeafEval(defaultLeafEval, defaultNnueModel);
+    s.leafMode = defaultLeafEval;
+    s.nnueModel = defaultNnueModel;
     return s;
   }
 
@@ -531,7 +523,7 @@ public final class GoBotSearcher {
 
   private long leafEval(GoState state) {
     if (leafMode == LeafEval.NNUE) {
-      return nnueLeaf(state.toBoard(), root, resolveModel());
+      return nnueLeaf(state.toBoard(), root, nnueModel);
     }
     return HandTunedEval.staticEval(
         state.toBoard(), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
@@ -542,7 +534,7 @@ public final class GoBotSearcher {
     long[] all = new long[4];
     // ponytail: NNUE feature map is 2-player (opponent = 3 - player); for players 3/4 it maps only
     // own stones. The clean 2-player test bench (Java vs GoBot) never hits maxN, so this is fine.
-    NNUEModel model = leafMode == LeafEval.NNUE ? resolveModel() : null;
+    NNUEModel model = leafMode == LeafEval.NNUE ? nnueModel : null;
     for (int p = 1; p <= 4; p++) {
       all[p - 1] =
           model != null
@@ -551,13 +543,6 @@ public final class GoBotSearcher {
                   board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
     }
     return all;
-  }
-
-  private NNUEModel resolveModel() {
-    if (nnueModel == null) {
-      nnueModel = NNUEModel.createDefault();
-    }
-    return nnueModel;
   }
 
   /**
