@@ -63,12 +63,49 @@ is maintainer-run (needs live games; ralphex can't do it in a worktree).
 ## Implementation Steps
 
 ### Task 1: Generate the parity reference fixture
-- [ ] build `staticevalgen` in `../virusgame` and emit a JSONL of a few hundred diverse
+- [x] build `staticevalgen` in `../virusgame` and emit a JSONL of a few hundred diverse
       positions (reuse the clean go-vs-go games and/or self-play) with GoBot's `StaticEval`
-- [ ] check a trimmed copy into `src/test/resources/gobot_staticeval_parity.jsonl`
-- [ ] document (in the plan) exactly what non-board State `staticevalgen` builds (movesLeft,
+- [x] check a trimmed copy into `src/test/resources/gobot_staticeval_parity.jsonl`
+- [x] document (in the plan) exactly what non-board State `staticevalgen` builds (movesLeft,
       neutralUsed, currentPlayer) so the Java port reproduces it
-- [ ] no code test yet; the fixture is the input to Task 3
+- [x] no code test yet; the fixture is the input to Task 3
+
+#### Fixture + hidden-state findings (Task 1 result)
+
+**Fixture:** `src/test/resources/gobot_staticeval_parity.jsonl` — 419 records, one JSONL
+line per position: `{"board":[[{owner,kind}...]...],"player","score","movesLeft","neutralUsed"}`.
+Sampled every 6th line from a 2509-position self-play run (`-positions 2500 -seed 7`) so it
+spans opening→endgame (2..92 owned cells), both movers (p1 232 / p2 187), all `movesLeft`
+∈ {1,2,3}, and `neutralUsed` variety ((F,F) 400, (T,F) 13, (F,T) 6). Scores range
+−36136..+35882. All 12×12, 2-player, non-terminal (mate-magnitude ≥500M skipped).
+
+**Hidden (non-board) State the score depends on — CRITICAL for the Java port:**
+`StaticEval(state, player)` reads more than the grid. Confirmed by reading
+`../virusgame/backend/search/evaluate.go`:
+- `state.CurrentPlayer()` → stored as `player` (the record's mover). Adds `MovesLeft()*12`
+  (MovesLeftTempo) and changes `threatTempo` (current player: `max(1,4-movesLeft)`;
+  others: `max(1,movesLeft)`) — so it must equal `player`.
+- `state.MovesLeft()` (scalar 0..3) → feeds MovesLeftTempo (weight 12) **and** threatTempo
+  for *every* player's threat terms. Varies per position (observed ~uniform over {1,2,3});
+  **not board-derivable**.
+- `state.NeutralUsed(p)` (per-player bool) → `+20` NeutralUnusedBonus for each active player
+  whose neutral is unused; affects both raw[p] and the opponent-subtraction. **Not
+  board-derivable.**
+- `state.Active(p)` → derivable from the board (an active player has an intact base cell +
+  pieces). In these 2-player non-terminal records both players are always active.
+
+Because `movesLeft` and `neutralUsed` are **not** reconstructable from the board yet change
+the integer score, the stock `staticevalgen` record (`{board,player,score}` only) is
+insufficient for exact parity. The generator was extended to also emit `movesLeft` and
+`neutralUsed` (from `state.Snapshot()`), so the fixture is self-contained. The Java port in
+Task 2/3 must take `(board, player, movesLeft, neutralUsed[])` and feed those to the eval.
+
+**Regeneration (for the maintainer):** the extra two JSON fields require a one-hunk patch to
+`../virusgame/backend/arena/cmd/staticevalgen/main.go` (add `MovesLeft int`/`NeutralUsed
+[]bool` to `record`, set from `snap.MovesLeft`/`snap.NeutralUsed` in `toRecord`). Then:
+`go build -o /tmp/staticevalgen ./arena/cmd/staticevalgen/ && /tmp/staticevalgen -out
+out.jsonl -positions 2500 -seed 7`, sample every 6th line. (This sibling patch is left in the
+`../virusgame` working tree, uncommitted — it belongs to that repo, not this one.)
 
 ### Task 2: Port the eval to Java
 - [ ] create `search/eval/HandTunedEval.java` (or similar): port `evaluateAllWithWorkspace` +
