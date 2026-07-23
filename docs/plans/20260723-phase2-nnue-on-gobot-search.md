@@ -92,9 +92,12 @@ experiment is maintainer-run** (I run training/evals — the outcome is genuine 
 - [x] `./mvnw test` green
 
 ### Task 5: Verify + notes
-- [ ] full suite green (incl. parity/hand-tuned), spotless clean, export format unchanged
-- [ ] record the exact maintainer commands to: train (GoBot-search self-play → net) and evaluate
-      (`SEARCH=GOBOT EVAL=NNUE` vs `SEARCH=GOBOT EVAL=HANDTUNED`, and vs GoBot)
+- [x] full suite green (incl. parity/hand-tuned), spotless clean, export format unchanged
+      (100 tests, 0 failures; `spotless:check` clean; GoBot pass delegates to `td_leaf_pass.sh`
+      → `train.py` → export, so format is unchanged by construction)
+- [x] record the exact maintainer commands to: train (GoBot-search self-play → net) and evaluate
+      (`SEARCH=GOBOT EVAL=NNUE` vs `SEARCH=GOBOT EVAL=HANDTUNED`, and vs GoBot) — README Phase 2
+      section now has runnable `td_leaf_pass_gobot.sh` and `eval_java_vs_go.py` commands
 
 ## Technical Details
 - The experiment's cleanliness: identical GoBot search on both sides, only the leaf eval differs →

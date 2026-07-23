@@ -78,16 +78,19 @@ setting), `GOBOT_FIXED_DEPTH` (>0 uses a fixed depth instead), `EPSILON`/`EXPLOR
 (diversity). Shared knobs (`NUM_GAMES`, `TD_LAMBDA`, `SEED`, `MAX_TURNS`, `OUT`) pass straight
 through; `SEARCH_DEPTH` is unused in this mode.
 
-**Evaluate the trained net (maintainer):** with the same GoBot search on both sides, only the
-leaf eval differs, so any win-rate gap is pure eval quality:
+**Evaluate the trained net (maintainer):** `eval_java_vs_go.py` inherits `SEARCH`/`EVAL` from the
+environment (they reach the Java bot via `os.environ.copy()`), so the leaf eval is just an env var.
+With the same GoBot search on both sides only the leaf eval differs, so any win-rate gap is pure
+eval quality. Prereqs: sibling `../virusgame` built (`server`, `bot-hoster`), `JAVA_HOME` = JDK21.
 
 ```bash
-SEARCH=GOBOT EVAL=NNUE      ...   # trained NNUE leaf
-SEARCH=GOBOT EVAL=HANDTUNED ...   # hand-tuned leaf (the Phase 1 6-0 bot)
+# each bot vs the deterministic GoBot reference (result col: 1=Java win, 2=GoBot win)
+SEARCH=GOBOT EVAL=NNUE      python3 eval_java_vs_go.py 20   # trained NNUE leaf vs GoBot
+SEARCH=GOBOT EVAL=HANDTUNED python3 eval_java_vs_go.py 20   # hand-tuned leaf vs GoBot (Phase 1 6-0)
 ```
 
-Run one as each side (see `eval_java_vs_go.py` / the `eval-vs-gobot` skill) to measure
-`EVAL=NNUE` vs `EVAL=HANDTUNED`, and both vs GoBot itself.
+The harness is challenger-vs-GoBot, so `EVAL=NNUE` vs `EVAL=HANDTUNED` is read off the two win
+rates above (both use the identical GoBot search — only the leaf eval, hence the gap, differs).
 
 ## Rules of Virus Game
 
