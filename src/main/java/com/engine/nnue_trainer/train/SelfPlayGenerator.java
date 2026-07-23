@@ -302,12 +302,14 @@ public class SelfPlayGenerator {
    */
   private static GenerationResult generateViaGoBot(Config config) {
     NNUEModel model = NNUEModel.createDefault();
-    GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, model);
+    // Restore the caller's prior default (e.g. an EVAL=NNUE config from GameLoopHandler), not an
+    // assumed HAND_TUNED, so we don't leak NNUE-leaf state yet also don't clobber a live config.
+    GoBotSearcher.LeafConfig prev =
+        GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, model);
     try {
       return playGoBotGames(config);
     } finally {
-      // Restore the process-wide default so we don't leak NNUE-leaf state into later callers/tests.
-      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null);
+      GoBotSearcher.restoreDefaultLeafEval(prev);
     }
   }
 

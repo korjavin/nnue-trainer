@@ -55,9 +55,23 @@ public final class GoBotSearcher {
 
   static final long NNUE_CLAMP = MATE_SCORE - 1L; // strictly below mate
 
-  // Process-wide default leaf eval, applied to each newSearcher (Task 2 sets this from env).
-  private static volatile LeafEval defaultLeafEval = LeafEval.HAND_TUNED;
-  private static volatile NNUEModel defaultNnueModel = null;
+  /**
+   * Immutable (mode, model) pair so newSearcher reads a consistent snapshot in one volatile read.
+   */
+  public static final class LeafConfig {
+    final LeafEval mode;
+    final NNUEModel model;
+
+    LeafConfig(LeafEval mode, NNUEModel model) {
+      this.mode = mode;
+      this.model = model;
+    }
+  }
+
+  // Process-wide default leaf eval, applied to each newSearcher (Task 2 sets this from env). One
+  // volatile field so mode and model can never be observed torn (NNUE mode with a stale/null
+  // model).
+  private static volatile LeafConfig defaultLeaf = new LeafConfig(LeafEval.HAND_TUNED, null);
 
   final int root;
   final boolean multi;
@@ -80,9 +94,15 @@ public final class GoBotSearcher {
    * {@code chooseNodeBudget}/{@code choose} entry points use it). Mirrors the env/property flag
    * pattern; Task 2 wires {@code EVAL=NNUE} to call this.
    */
-  public static void configureDefaultLeafEval(LeafEval mode, NNUEModel model) {
-    defaultLeafEval = mode;
-    defaultNnueModel = model;
+  public static LeafConfig configureDefaultLeafEval(LeafEval mode, NNUEModel model) {
+    LeafConfig prev = defaultLeaf;
+    defaultLeaf = new LeafConfig(mode, model);
+    return prev;
+  }
+
+  /** Restore a previously-captured default (see {@link #configureDefaultLeafEval}). */
+  public static void restoreDefaultLeafEval(LeafConfig prev) {
+    defaultLeaf = prev;
   }
 
   /** Signals that the running budget (node limit / deadline) was exhausted mid-search. */
@@ -101,8 +121,9 @@ public final class GoBotSearcher {
       }
     }
     GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2);
-    s.leafMode = defaultLeafEval;
-    s.nnueModel = defaultNnueModel;
+    LeafConfig cfg = defaultLeaf;
+    s.leafMode = cfg.mode;
+    s.nnueModel = cfg.model;
     return s;
   }
 
