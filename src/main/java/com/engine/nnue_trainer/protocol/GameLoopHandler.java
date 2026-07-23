@@ -106,7 +106,7 @@ public class GameLoopHandler {
         boolean canPlaceNeutral = !neutralUsed[myPlayerIndex - 1];
         // Feed the hand-tuned eval the root turn's non-board state (no-op for NNUE).
         searchEngine.setHandTunedState(movesLeft, neutralUsed);
-        makeMove(board, canPlaceNeutral, movesLeft, neutralUsed);
+        makeMove(snapshot, board, canPlaceNeutral, neutralUsed);
       }
     }
   }
@@ -124,9 +124,10 @@ public class GameLoopHandler {
   /**
    * Build the search {@link GoState} from a server snapshot with the SAME inputs the live GOBOT
    * path feeds {@link GoState#fromBoard} (board orientation, current player, movesLeft, per-player
-   * neutralUsed). The live path passes {@code myPlayerIndex}, which the {@code handleSnapshot}
-   * guard pins equal to {@code snapshot.currentPlayer}; sharing {@link #parseBoardFromSnapshot} /
-   * {@link #parseNeutralUsed} makes this the single tested construction point (parity oracle).
+   * neutralUsed). The live GOBOT path ({@link #gobotSearch}) builds through this method, and the
+   * {@code handleSnapshot} guard pins {@code snapshot.currentPlayer} equal to {@code
+   * myPlayerIndex}; so this is the single construction point the parity oracle ({@code
+   * GoStateFromSnapshotTest}) asserts against.
    */
   static GoState goStateFromSnapshot(JsonNode snapshot) {
     int currentPlayer = snapshot.get("currentPlayer").asInt();
@@ -210,10 +211,10 @@ public class GameLoopHandler {
   }
 
   private void makeMove(
-      Board board, boolean canPlaceNeutral, int movesLeft, boolean[] neutralUsed) {
+      JsonNode snapshot, Board board, boolean canPlaceNeutral, boolean[] neutralUsed) {
     SearchResult searchResult =
         USE_GOBOT_SEARCH
-            ? gobotSearch(board, movesLeft, neutralUsed)
+            ? gobotSearch(snapshot, neutralUsed)
             : searchEngine.findBestActionWithTimeLimitUsingModel(
                 board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
@@ -274,7 +275,7 @@ public class GameLoopHandler {
   }
 
   /** Run the ported GoBot search and adapt its {@link GoResult} into a {@link SearchResult}. */
-  private SearchResult gobotSearch(Board board, int movesLeft, boolean[] neutralUsed) {
+  private SearchResult gobotSearch(JsonNode snapshot, boolean[] neutralUsed) {
     long start = System.currentTimeMillis();
     // GoState.fromBoard builds a 1v1 (players 1,2) state — the only mode SEARCH=GOBOT supports.
     // neutralUsed is per-player, so its length is the game's player count. Anything above 2 would
@@ -284,8 +285,9 @@ public class GameLoopHandler {
           "SEARCH=GOBOT supports 1v1 only; got " + neutralUsed.length + " players — no move made.");
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
     }
-    GoResult r =
-        GoBotSearcher.choose(GoState.fromBoard(board, myPlayerIndex, movesLeft, neutralUsed));
+    // Build the live GoState through the same tested seam GoStateFromSnapshotTest asserts against
+    // (handleSnapshot pins snapshot.currentPlayer == myPlayerIndex).
+    GoResult r = GoBotSearcher.choose(goStateFromSnapshot(snapshot));
     if (r == null) {
       // No legal action from this position; let makeMove log "No legal actions available."
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
