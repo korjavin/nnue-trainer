@@ -144,12 +144,19 @@ prove **fixed-depth move parity** against a generated GoBot oracle. Do NOT modif
 - [x] `./mvnw test` green — full suite 87 green (+7) + `spotless:apply` clean.
 
 ### Task 5: Make the GoBot search selectable + prove parity
-- [ ] wire the ported engine behind `SEARCH=GOBOT` (env/property, mirroring `EVAL=HANDTUNED`) in
+- [x] wire the ported engine behind `SEARCH=GOBOT` (env/property, mirroring `EVAL=HANDTUNED`) in
       the bot path (`GameLoopHandler`/`SearchEngine` selection), using `HandTunedEval` leaves so
       `SEARCH=GOBOT EVAL=HANDTUNED` = full clone
-- [ ] add `GoBotSearchParityTest`: for each oracle record assert
+      — `GameLoopHandler.USE_GOBOT_SEARCH` (System property/env `SEARCH=GOBOT`); when set, `makeMove`
+      routes to `GoBotSearcher.choose(GoState.fromBoard(board,player,movesLeft,neutralUsed))` (book →
+      iterative-deepening minimax → `HandTunedEval` leaf) and adapts `GoResult`→`SearchResult`. NNUE
+      path untouched (default branch unchanged).
+- [x] add `GoBotSearchParityTest`: for each oracle record assert
       `ChooseDepth(board, player, depth).action == record.action` (and score) — **must pass**
-- [ ] `./mvnw test` green incl. parity; `./mvnw spotless:check` clean
+      — `GoBotSearchParityTest.fixedDepthMoveParityOnFixture`: 412/412 records match action AND
+      integer score at depths {3,5} via `GoBotSearcher.chooseDepth(board,player,movesLeft,neutralUsed,depth)`.
+- [x] `./mvnw test` green incl. parity; `./mvnw spotless:check` clean
+      — full suite 88 green (+1); `spotless:check` BUILD SUCCESS.
 
 ### Task 6: Update plan notes
 - [ ] record oracle fixture size/depths, any hidden-state findings, and the exact maintainer
