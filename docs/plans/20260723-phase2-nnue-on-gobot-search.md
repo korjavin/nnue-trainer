@@ -86,10 +86,10 @@ experiment is maintainer-run** (I run training/evals — the outcome is genuine 
 - [x] `./mvnw test` green
 
 ### Task 4: Wire the pipeline
-- [ ] extend `td_leaf_pass.sh` (or add `td_leaf_pass_gobot.sh`) to run the GoBot-search self-play →
+- [x] extend `td_leaf_pass.sh` (or add `td_leaf_pass_gobot.sh`) to run the GoBot-search self-play →
       `dataset.json` → `train.py` → export, driven by env (search mode, node budget, λ, ε)
-- [ ] document the exact commands for the maintainer
-- [ ] `./mvnw test` green
+- [x] document the exact commands for the maintainer
+- [x] `./mvnw test` green
 
 ### Task 5: Verify + notes
 - [ ] full suite green (incl. parity/hand-tuned), spotless clean, export format unchanged
