@@ -97,15 +97,31 @@ Acceptance is the new parity tests passing; the live clone-vs-GoBot re-measure i
 - [x] `./mvnw test` green — `Tests run: 1, Failures: 0` (126.8s).
 
 ### Task 3: Audit + test the live GoState inputs
-- [ ] trace `GameLoopHandler`: how it derives `myPlayerIndex`, `movesLeft`, `neutralUsed`, and the
+- [x] trace `GameLoopHandler`: how it derives `myPlayerIndex`, `movesLeft`, `neutralUsed`, and the
       board from the server snapshot, across the 3 actions of a turn; compare to what the oracle/
       `fromBoard` expects (movesLeft semantics per-action, player indexing, board orientation,
       neutralUsed length/index)
-- [ ] add a test building a `GoState` from a representative server-snapshot-shaped input and assert
+      — traced against GoBot's own client (`../virusgame/backend/cmd/bot-hoster/bot_client.go`) and
+      `game.FromSnapshot`/`game.New`. Findings: `myPlayerIndex==snapshot.currentPlayer` (pinned by
+      the handler guard); `movesLeft` is the server's per-turn action count (3→2→1, server rebroadcasts
+      `game_state` after each intra-turn move so search reruns at each — hub.go:1116); bases are
+      hardcoded but match `game.New`'s `{0,0},{r-1,c-1},{0,c-1},{r-1,0}`; `neutralUsed` is per-player,
+      1-based; the live wire cell format is capital `Owner`/`Kind` with **integer** `Kind` (Go iota
+      0..4), which the handler's tolerant parser + Java `CellKind` values (EMPTY=0..NEUTRAL=4) handle.
+      No input mismatch found — construction is faithful.
+- [x] add a test building a `GoState` from a representative server-snapshot-shaped input and assert
       it equals the oracle's `GoState` for the same logical position (or that the derived
       movesLeft/perspective are correct)
-- [ ] fix any mismatch (this is the most likely bug given fixed-depth parity already passes)
-- [ ] `./mvnw test` green
+      — added `GoStateFromSnapshotTest`: re-encodes each of the 144 fixture records into the **real
+      backend wire format** (capital keys, integer `Kind`) and asserts
+      `GameLoopHandler.goStateFromSnapshot(wire).hash()` (+ rows/cols/currentPlayer/movesLeft/
+      neutralUsed) equals the oracle's `GoState.fromBoard`. Extracted `goStateFromSnapshot` /
+      `parseNeutralUsed` as the single tested construction point (live path reuses the same parse
+      primitives).
+- [x] fix any mismatch (this is the most likely bug given fixed-depth parity already passes)
+      — N/A: no mismatch. 144/144 positions build the identical GoState from the live wire format.
+      Divergence is NOT in the live inputs; focus shifts to the action→server-move translation (Task 4).
+- [x] `./mvnw test` green — full suite passed (exit 0), spotless + jacoco gates green.
 
 ### Task 4: Audit + test the action→server-move translation
 - [ ] verify `makeMove` translates every `GoResult.action` kind (grow/attack move, neutrals

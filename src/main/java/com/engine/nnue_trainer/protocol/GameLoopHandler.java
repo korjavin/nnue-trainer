@@ -102,20 +102,40 @@ public class GameLoopHandler {
 
       if (!gameOver && currentPlayer == myPlayerIndex && movesLeft > 0) {
         Board board = parseBoardFromSnapshot(snapshot);
-        JsonNode neutralNode = snapshot.get("neutralUsed");
-        boolean canPlaceNeutral = !neutralNode.get(myPlayerIndex - 1).asBoolean();
+        boolean[] neutralUsed = parseNeutralUsed(snapshot);
+        boolean canPlaceNeutral = !neutralUsed[myPlayerIndex - 1];
         // Feed the hand-tuned eval the root turn's non-board state (no-op for NNUE).
-        boolean[] neutralUsed = new boolean[neutralNode.size()];
-        for (int i = 0; i < neutralNode.size(); i++) {
-          neutralUsed[i] = neutralNode.get(i).asBoolean();
-        }
         searchEngine.setHandTunedState(movesLeft, neutralUsed);
         makeMove(board, canPlaceNeutral, movesLeft, neutralUsed);
       }
     }
   }
 
-  private Board parseBoardFromSnapshot(JsonNode snapshot) {
+  /** Parse the per-player {@code neutralUsed} flags (length = player count) from a snapshot. */
+  static boolean[] parseNeutralUsed(JsonNode snapshot) {
+    JsonNode neutralNode = snapshot.get("neutralUsed");
+    boolean[] neutralUsed = new boolean[neutralNode.size()];
+    for (int i = 0; i < neutralNode.size(); i++) {
+      neutralUsed[i] = neutralNode.get(i).asBoolean();
+    }
+    return neutralUsed;
+  }
+
+  /**
+   * Build the search {@link GoState} from a server snapshot with the SAME inputs the live GOBOT path
+   * feeds {@link GoState#fromBoard} (board orientation, current player, movesLeft, per-player
+   * neutralUsed). The live path passes {@code myPlayerIndex}, which the {@code handleSnapshot} guard
+   * pins equal to {@code snapshot.currentPlayer}; sharing {@link #parseBoardFromSnapshot} /
+   * {@link #parseNeutralUsed} makes this the single tested construction point (parity oracle).
+   */
+  static GoState goStateFromSnapshot(JsonNode snapshot) {
+    int currentPlayer = snapshot.get("currentPlayer").asInt();
+    int movesLeft = snapshot.has("movesLeft") ? snapshot.get("movesLeft").asInt() : 0;
+    return GoState.fromBoard(
+        parseBoardFromSnapshot(snapshot), currentPlayer, movesLeft, parseNeutralUsed(snapshot));
+  }
+
+  private static Board parseBoardFromSnapshot(JsonNode snapshot) {
     int rows = snapshot.get("rows").asInt();
     int cols = snapshot.get("cols").asInt();
     Board board = new Board(rows, cols);
