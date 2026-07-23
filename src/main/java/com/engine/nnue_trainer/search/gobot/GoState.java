@@ -158,7 +158,7 @@ public final class GoState {
   }
 
   public boolean neutralUsed(int player) {
-    return player >= 1 && player <= 4 && neutralUsed[player - 1];
+    return player >= 1 && player <= players && neutralUsed[player - 1];
   }
 
   public Cell at(int row, int col) {
