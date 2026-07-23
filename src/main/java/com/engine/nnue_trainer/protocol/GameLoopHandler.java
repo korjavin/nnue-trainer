@@ -248,8 +248,20 @@ public class GameLoopHandler {
   /** Run the ported GoBot search and adapt its {@link GoResult} into a {@link SearchResult}. */
   private SearchResult gobotSearch(Board board, int movesLeft, boolean[] neutralUsed) {
     long start = System.currentTimeMillis();
+    // GoState.fromBoard builds a 1v1 (players 1,2) state — the only mode SEARCH=GOBOT supports.
+    // neutralUsed is per-player, so its length is the game's player count. Anything above 2 would
+    // yield a state where player 3/4 is inactive (silent forfeit), so refuse loudly instead.
+    if (neutralUsed != null && neutralUsed.length > 2) {
+      System.err.println(
+          "SEARCH=GOBOT supports 1v1 only; got " + neutralUsed.length + " players — no move made.");
+      return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
+    }
     GoResult r =
         GoBotSearcher.choose(GoState.fromBoard(board, myPlayerIndex, movesLeft, neutralUsed));
+    if (r == null) {
+      // No legal action from this position; let makeMove log "No legal actions available."
+      return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
+    }
     return new SearchResult(
         r.action, r.score, r.depth, (int) r.nodes, System.currentTimeMillis() - start);
   }
