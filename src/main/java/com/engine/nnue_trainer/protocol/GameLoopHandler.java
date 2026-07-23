@@ -102,20 +102,41 @@ public class GameLoopHandler {
 
       if (!gameOver && currentPlayer == myPlayerIndex && movesLeft > 0) {
         Board board = parseBoardFromSnapshot(snapshot);
-        JsonNode neutralNode = snapshot.get("neutralUsed");
-        boolean canPlaceNeutral = !neutralNode.get(myPlayerIndex - 1).asBoolean();
+        boolean[] neutralUsed = parseNeutralUsed(snapshot);
+        boolean canPlaceNeutral = !neutralUsed[myPlayerIndex - 1];
         // Feed the hand-tuned eval the root turn's non-board state (no-op for NNUE).
-        boolean[] neutralUsed = new boolean[neutralNode.size()];
-        for (int i = 0; i < neutralNode.size(); i++) {
-          neutralUsed[i] = neutralNode.get(i).asBoolean();
-        }
         searchEngine.setHandTunedState(movesLeft, neutralUsed);
-        makeMove(board, canPlaceNeutral, movesLeft, neutralUsed);
+        makeMove(snapshot, board, canPlaceNeutral, neutralUsed);
       }
     }
   }
 
-  private Board parseBoardFromSnapshot(JsonNode snapshot) {
+  /** Parse the per-player {@code neutralUsed} flags (length = player count) from a snapshot. */
+  static boolean[] parseNeutralUsed(JsonNode snapshot) {
+    JsonNode neutralNode = snapshot.get("neutralUsed");
+    boolean[] neutralUsed = new boolean[neutralNode.size()];
+    for (int i = 0; i < neutralNode.size(); i++) {
+      neutralUsed[i] = neutralNode.get(i).asBoolean();
+    }
+    return neutralUsed;
+  }
+
+  /**
+   * Build the search {@link GoState} from a server snapshot with the SAME inputs the live GOBOT
+   * path feeds {@link GoState#fromBoard} (board orientation, current player, movesLeft, per-player
+   * neutralUsed). The live GOBOT path ({@link #gobotSearch}) builds through this method, and the
+   * {@code handleSnapshot} guard pins {@code snapshot.currentPlayer} equal to {@code
+   * myPlayerIndex}; so this is the single construction point the parity oracle ({@code
+   * GoStateFromSnapshotTest}) asserts against.
+   */
+  static GoState goStateFromSnapshot(JsonNode snapshot) {
+    int currentPlayer = snapshot.get("currentPlayer").asInt();
+    int movesLeft = snapshot.has("movesLeft") ? snapshot.get("movesLeft").asInt() : 0;
+    return GoState.fromBoard(
+        parseBoardFromSnapshot(snapshot), currentPlayer, movesLeft, parseNeutralUsed(snapshot));
+  }
+
+  private static Board parseBoardFromSnapshot(JsonNode snapshot) {
     int rows = snapshot.get("rows").asInt();
     int cols = snapshot.get("cols").asInt();
     Board board = new Board(rows, cols);
@@ -164,11 +185,36 @@ public class GameLoopHandler {
     return "GOBOT".equalsIgnoreCase(v);
   }
 
+  /**
+   * Translate a chosen {@link Action} into the server move message, the sole tested translation
+   * point. Mirrors GoBot's {@code actionMessage} (bot_client.go): a {@link MoveAction} sends {@code
+   * {type:"move", row, col}} (the server infers grow vs attack from the board); a {@link
+   * PlaceNeutralsAction} sends {@code {type:"neutrals", cells:[{row,col},{row,col}]}}.
+   */
+  static void writeAction(ObjectNode response, ObjectMapper mapper, Action action) {
+    if (action instanceof MoveAction) {
+      MoveAction move = (MoveAction) action;
+      response.put("type", "move");
+      response.put("row", move.target.row);
+      response.put("col", move.target.col);
+    } else if (action instanceof PlaceNeutralsAction) {
+      PlaceNeutralsAction place = (PlaceNeutralsAction) action;
+      response.put("type", "neutrals");
+      response.set(
+          "cells",
+          mapper
+              .createArrayNode()
+              .add(mapper.createObjectNode().put("row", place.pos1.row).put("col", place.pos1.col))
+              .add(
+                  mapper.createObjectNode().put("row", place.pos2.row).put("col", place.pos2.col)));
+    }
+  }
+
   private void makeMove(
-      Board board, boolean canPlaceNeutral, int movesLeft, boolean[] neutralUsed) {
+      JsonNode snapshot, Board board, boolean canPlaceNeutral, boolean[] neutralUsed) {
     SearchResult searchResult =
         USE_GOBOT_SEARCH
-            ? gobotSearch(board, movesLeft, neutralUsed)
+            ? gobotSearch(snapshot, neutralUsed)
             : searchEngine.findBestActionWithTimeLimitUsingModel(
                 board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
@@ -204,29 +250,12 @@ public class GameLoopHandler {
       response.put("nodesEvaluated", searchResult.nodesEvaluated);
       response.put("timeMs", searchResult.timeMs);
 
+      writeAction(response, objectMapper, bestAction);
       if (bestAction instanceof MoveAction) {
         MoveAction move = (MoveAction) bestAction;
-        response.put("type", "move");
-        response.put("row", move.target.row);
-        response.put("col", move.target.col);
         System.out.println("Playing Move: (" + move.target.row + ", " + move.target.col + ")");
       } else if (bestAction instanceof PlaceNeutralsAction) {
         PlaceNeutralsAction place = (PlaceNeutralsAction) bestAction;
-        response.put("type", "neutrals");
-        JsonNode cellsNode =
-            objectMapper
-                .createArrayNode()
-                .add(
-                    objectMapper
-                        .createObjectNode()
-                        .put("row", place.pos1.row)
-                        .put("col", place.pos1.col))
-                .add(
-                    objectMapper
-                        .createObjectNode()
-                        .put("row", place.pos2.row)
-                        .put("col", place.pos2.col));
-        response.set("cells", cellsNode);
         System.out.println(
             "Placing Neutrals: ("
                 + place.pos1.row
@@ -246,7 +275,7 @@ public class GameLoopHandler {
   }
 
   /** Run the ported GoBot search and adapt its {@link GoResult} into a {@link SearchResult}. */
-  private SearchResult gobotSearch(Board board, int movesLeft, boolean[] neutralUsed) {
+  private SearchResult gobotSearch(JsonNode snapshot, boolean[] neutralUsed) {
     long start = System.currentTimeMillis();
     // GoState.fromBoard builds a 1v1 (players 1,2) state — the only mode SEARCH=GOBOT supports.
     // neutralUsed is per-player, so its length is the game's player count. Anything above 2 would
@@ -256,8 +285,9 @@ public class GameLoopHandler {
           "SEARCH=GOBOT supports 1v1 only; got " + neutralUsed.length + " players — no move made.");
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
     }
-    GoResult r =
-        GoBotSearcher.choose(GoState.fromBoard(board, myPlayerIndex, movesLeft, neutralUsed));
+    // Build the live GoState through the same tested seam GoStateFromSnapshotTest asserts against
+    // (handleSnapshot pins snapshot.currentPlayer == myPlayerIndex).
+    GoResult r = GoBotSearcher.choose(goStateFromSnapshot(snapshot));
     if (r == null) {
       // No legal action from this position; let makeMove log "No legal actions available."
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
