@@ -73,12 +73,15 @@ Acceptance is the new parity tests passing; the live clone-vs-GoBot re-measure i
 ## Implementation Steps
 
 ### Task 1: Deterministic ChooseNodeBudget parity oracle
-- [ ] extend the Phase-1 Go oracle tool in `../virusgame` to also emit, per position,
+- [x] extend the Phase-1 Go oracle tool in `../virusgame` to also emit, per position,
       `search.ChooseNodeBudget(state, LIMIT)` → `{board, player, movesLeft, neutralUsed, nodeLimit,
       action, score}` (a fixed LIMIT, e.g. 50000; document it)
-- [ ] generate over the same diverse positions; check a trimmed fixture into
+      — added `-nodebudget-out`/`-nodelimit` flags (default 50000) to `searchparitygen`; emits
+      node-budget records at the same sampled self-play positions as the depth fixture.
+- [x] generate over the same diverse positions; check a trimmed fixture into
       `src/test/resources/gobot_nodebudget_parity.jsonl`
-- [ ] no code test yet — fixture feeds Task 2
+      — 144 unique records (deduped from 260; 13 PLACE_NEUTRALS), all at nodeLimit 50000.
+- [x] no code test yet — fixture feeds Task 2
 
 ### Task 2: ChooseNodeBudget parity test (localizes search-side divergence)
 - [ ] add `GoBotNodeBudgetParityTest`: for each record assert
