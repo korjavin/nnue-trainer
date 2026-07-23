@@ -165,6 +165,18 @@ public final class GoState {
     return cells[row * cols + col];
   }
 
+  /** Snapshot the grid into a {@link Board} for leaf evaluation / opening-book scoring. */
+  public Board toBoard() {
+    Board board = new Board(rows, cols);
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        Cell cell = cells[r * cols + c];
+        board.setCell(r, c, new Cell(cell.owner, cell.kind));
+      }
+    }
+    return board;
+  }
+
   int index(Pos pos) {
     return pos.row * cols + pos.col;
   }

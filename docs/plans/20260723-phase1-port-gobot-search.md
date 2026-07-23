@@ -125,12 +125,23 @@ prove **fixed-depth move parity** against a generated GoBot oracle. Do NOT modif
       depths {3,5} (the official `GoBotSearchParityTest` lands in Task 5).
 
 ### Task 4: Port the opening book + Choose/time entry points
-- [ ] port `opening_book.go` (`openingBookMove` thick first-turn placement + void condition,
+- [x] port `opening_book.go` (`openingBookMove` thick first-turn placement + void condition,
       `openingBookResult`) to Java
-- [ ] port `Choose` (iterative deepening + time budget) and `chooseNodeBudget`; entry points try
+      — `search/gobot/GoOpeningBook.java`: `openingBookMove` (wedge = base-adjacent anchor + width-2
+      advancing pair, oriented inward; voids on own cell outside block / not-first-turn / OOB
+      collision) + `openingBookResult` (wraps as completed depth-0 `GoResult`, score via
+      `HandTunedEval`). Added `GoState.toBoard()` helper.
+- [x] port `Choose` (iterative deepening + time budget) and `chooseNodeBudget`; entry points try
       the book first, exactly as GoBot
-- [ ] unit test: book triggers on a fresh opening turn and voids once own non-base cells appear
-- [ ] `./mvnw test` green
+      — `GoBotSearcher.choose`/`chooseWithDeadline` (wall-clock deadline via `running()`;
+      `PRODUCTION_BUDGET_MILLIS=1000`) + `chooseNodeBudget` (node limit). Both consult
+      `GoOpeningBook.openingBookResult` first, then `preservingFallback` + iterative deepening over
+      `atDepth`; `SearchIncomplete` = GoBot's `!complete` break.
+- [x] unit test: book triggers on a fresh opening turn and voids once own non-base cells appear
+      — `GoOpeningBookTest` (7 tests): anchor placement, in-order block advance, void on own cell
+      outside block, void on wrong-turn `movesLeft` invariant, `openingBookResult` wrapping,
+      `chooseNodeBudget` takes book vs runs search when voided.
+- [x] `./mvnw test` green — full suite 87 green (+7) + `spotless:apply` clean.
 
 ### Task 5: Make the GoBot search selectable + prove parity
 - [ ] wire the ported engine behind `SEARCH=GOBOT` (env/property, mirroring `EVAL=HANDTUNED`) in

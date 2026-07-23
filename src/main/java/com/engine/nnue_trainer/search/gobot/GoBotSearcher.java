@@ -127,6 +127,85 @@ public final class GoBotSearcher {
     return chooseDepth(GoState.fromBoard(board, player, movesLeft, neutralUsed), depth);
   }
 
+  // --- live entry points (port of Choose / chooseNodeBudget) ---
+
+  /** GoBot's {@code ProductionBudget}: the per-move wall-clock search budget (1s). */
+  static final long PRODUCTION_BUDGET_MILLIS = 1000;
+
+  /**
+   * Port of GoBot's {@code Choose}: try the opening book, else iterative deepening bounded by a
+   * wall-clock deadline (best result from the last fully completed iteration). Uses the
+   * production-safe default budget of {@link #PRODUCTION_BUDGET_MILLIS}.
+   */
+  public static GoResult choose(GoState state) {
+    return chooseWithDeadline(state, System.currentTimeMillis() + PRODUCTION_BUDGET_MILLIS);
+  }
+
+  /**
+   * Port of GoBot's {@code Choose} with an explicit absolute deadline (epoch millis). Returns
+   * {@code null} only when the position has no legal action.
+   */
+  public static GoResult chooseWithDeadline(GoState state, long deadlineMillis) {
+    GoResult book = GoOpeningBook.openingBookResult(state);
+    if (book != null) {
+      return book;
+    }
+    Action fallback = preservingFallback(state);
+    if (fallback == null) {
+      return null;
+    }
+    GoResult best = new GoResult(fallback);
+    GoBotSearcher s = newSearcher(state);
+    s.deadlineMillis = deadlineMillis;
+    for (int depth = 1; depth <= MAX_DEPTH; depth++) {
+      GoResult result;
+      try {
+        result = s.atDepth(state, depth);
+      } catch (SearchIncomplete e) {
+        break;
+      }
+      best = result;
+      best.depth = depth;
+      best.nodes = s.nodes;
+      best.evaluations = s.evaluations;
+    }
+    return best;
+  }
+
+  /**
+   * Port of GoBot's {@code chooseNodeBudget}: deterministic iterative deepening bounded by a node
+   * limit rather than a wall-clock deadline. Returns {@code null} when the position has no legal
+   * action or {@code limit == 0}.
+   */
+  public static GoResult chooseNodeBudget(GoState state, long limit) {
+    GoResult book = GoOpeningBook.openingBookResult(state);
+    if (book != null) {
+      return book;
+    }
+    Action fallback = preservingFallback(state);
+    if (fallback == null || limit == 0) {
+      return null;
+    }
+    GoResult best = new GoResult(fallback);
+    GoBotSearcher s = newSearcher(state);
+    s.nodeLimit = limit;
+    for (int depth = 1; depth <= MAX_DEPTH && s.nodes < limit; depth++) {
+      GoResult result;
+      try {
+        result = s.atDepth(state, depth);
+      } catch (SearchIncomplete e) {
+        break;
+      }
+      best = result;
+      best.depth = depth;
+    }
+    best.nodes = s.nodes;
+    best.evaluations = s.evaluations;
+    best.budgetExhausted = s.nodes >= limit;
+    best.searchComplete = best.depth == MAX_DEPTH;
+    return best;
+  }
+
   // --- search core ---
 
   private GoResult atDepth(GoState state, int depth) {
