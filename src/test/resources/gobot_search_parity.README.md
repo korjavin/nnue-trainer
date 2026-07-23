@@ -61,3 +61,11 @@ go build -o /tmp/searchparitygen ./arena/cmd/searchparitygen/
 neutral-placement pairs) whose depth-5 search would blow up is skipped. Every kept
 record is a fully-completed, deterministic search — reproducible in Java with no timeout.
 This fixture: 412 records, depths {3,5}, players {1,2}, both action types.
+
+### Companion node-budget fixture (`gobot_nodebudget_parity.jsonl`)
+
+Add `-nodebudget-out .../src/test/resources/gobot_nodebudget_parity.jsonl -nodelimit 50000`.
+Use `-sample 2`, **not** `-sample 3`: a turn is `ACTIONS_PER_TURN=3` plies, so a stride of 3
+aliases onto turn boundaries and samples only turn-start roots (`movesLeft=3`). Live play
+searches from `movesLeft` 3→2→1 every turn, so a coprime stride is required for the fixture to
+exercise the mid-turn roots (`movesLeft` {1,2,3}) the live GOBOT path actually hits.
