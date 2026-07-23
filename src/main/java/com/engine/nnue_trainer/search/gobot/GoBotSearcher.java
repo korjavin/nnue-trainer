@@ -6,6 +6,8 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.Pos;
+import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,9 +40,44 @@ public final class GoBotSearcher {
   static final long INF_SCORE = 1L << 60;
   static final long MATE_SCORE = 1_000_000_000L;
 
+  /** Selectable leaf evaluation for the GoBot search (Phase 2): hand-tuned or learned NNUE. */
+  public enum LeafEval {
+    HAND_TUNED,
+    NNUE
+  }
+
+  /**
+   * NNUE output (~±1) → hand-tuned-comparable integer. The only hard constraint is staying strictly
+   * within {@code ±MATE_SCORE} so a learned leaf never collides with terminal/mate scores; the
+   * magnitude just needs to land in the hand-tuned band so search behaves normally.
+   */
+  static final long NNUE_SCALE = 1000L;
+
+  static final long NNUE_CLAMP = MATE_SCORE - 1L; // strictly below mate
+
+  /**
+   * Immutable (mode, model) pair so newSearcher reads a consistent snapshot in one volatile read.
+   */
+  public static final class LeafConfig {
+    final LeafEval mode;
+    final NNUEModel model;
+
+    LeafConfig(LeafEval mode, NNUEModel model) {
+      this.mode = mode;
+      this.model = model;
+    }
+  }
+
+  // Process-wide default leaf eval, applied to each newSearcher (Task 2 sets this from env). One
+  // volatile field so mode and model can never be observed torn (NNUE mode with a stale/null
+  // model).
+  private static volatile LeafConfig defaultLeaf = new LeafConfig(LeafEval.HAND_TUNED, null);
+
   final int root;
   final boolean multi;
   final Map<Long, TableEntry> table;
+  LeafEval leafMode = LeafEval.HAND_TUNED;
+  NNUEModel nnueModel;
   long nodes;
   long evaluations;
   long nodeLimit; // 0 == unlimited
@@ -50,6 +87,22 @@ public final class GoBotSearcher {
     this.root = root;
     this.multi = multi;
     this.table = new HashMap<>();
+  }
+
+  /**
+   * Process-wide default applied to every {@link #newSearcher} (so the static {@code chooseDepth}/
+   * {@code chooseNodeBudget}/{@code choose} entry points use it). Mirrors the env/property flag
+   * pattern; Task 2 wires {@code EVAL=NNUE} to call this.
+   */
+  public static LeafConfig configureDefaultLeafEval(LeafEval mode, NNUEModel model) {
+    LeafConfig prev = defaultLeaf;
+    defaultLeaf = new LeafConfig(mode, model);
+    return prev;
+  }
+
+  /** Restore a previously-captured default (see {@link #configureDefaultLeafEval}). */
+  public static void restoreDefaultLeafEval(LeafConfig prev) {
+    defaultLeaf = prev;
   }
 
   /** Signals that the running budget (node limit / deadline) was exhausted mid-search. */
@@ -67,7 +120,11 @@ public final class GoBotSearcher {
         activeCount++;
       }
     }
-    return new GoBotSearcher(state.currentPlayer(), activeCount > 2);
+    GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2);
+    LeafConfig cfg = defaultLeaf;
+    s.leafMode = cfg.mode;
+    s.nnueModel = cfg.model;
+    return s;
   }
 
   /** TT probe: the stored entry for this position hash, or {@code null} on a miss. */
@@ -486,6 +543,16 @@ public final class GoBotSearcher {
   // --- scoring helpers (port of terminalScore / evaluate / activeCount) ---
 
   private long leafEval(GoState state) {
+    if (leafMode == LeafEval.NNUE) {
+      // The net is side-to-move relative (trained on features mapped to the mover with an
+      // STM-relative target). Query it from the leaf's own mover — in-distribution — then flip to
+      // root's perspective by zero-sum negation. Mapping straight to root (as HandTunedEval can,
+      // since it also receives currentPlayer for tempo) would evaluate opponent-to-move leaves a
+      // tempo out of distribution. Valid on the 2-player bench; maxN uses leafEvalAll below.
+      int mover = state.currentPlayer();
+      long v = nnueLeaf(state.toBoard(), mover, nnueModel);
+      return mover == root ? v : -v;
+    }
     return HandTunedEval.staticEval(
         state.toBoard(), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
   }
@@ -493,12 +560,38 @@ public final class GoBotSearcher {
   private long[] leafEvalAll(GoState state) {
     Board board = state.toBoard();
     long[] all = new long[4];
+    // ponytail: NNUE feature map is 2-player (opponent = 3 - player); for players 3/4 it maps only
+    // own stones. The clean 2-player test bench (Java vs GoBot) never hits maxN, so this is fine.
+    NNUEModel model = leafMode == LeafEval.NNUE ? nnueModel : null;
     for (int p = 1; p <= 4; p++) {
       all[p - 1] =
-          HandTunedEval.staticEval(
-              board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
+          model != null
+              ? nnueLeaf(board, p, model)
+              : HandTunedEval.staticEval(
+                  board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
     }
     return all;
+  }
+
+  /**
+   * NNUE leaf value oriented to {@code player} (higher = better for {@code player}, matching {@link
+   * HandTunedEval}): {@code round(forward(features) * NNUE_SCALE)} clamped strictly inside {@code
+   * ±MATE_SCORE} so it never collides with terminal/mate scores.
+   */
+  static long nnueLeaf(Board board, int player, NNUEModel model) {
+    double value = model.forward(BoardFeatureMapper.map(board, player));
+    long scaled = Math.round(value * NNUE_SCALE);
+    return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
+  }
+
+  /**
+   * Inverse of the NNUE leaf scaling: a backed-up search score → the net's output range, clamped to
+   * ±1. Used as the TD-leaf target when self-play drives move selection through this search (Phase
+   * 2 Task 3). Terminal/mate magnitudes (~1e9) collapse to ±1.
+   */
+  public static float scoreToUnit(long score) {
+    double v = (double) score / NNUE_SCALE;
+    return (float) Math.max(-1.0, Math.min(1.0, v));
   }
 
   private static long terminalScore(GoState state, int player, int ply) {

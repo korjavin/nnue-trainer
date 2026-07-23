@@ -189,6 +189,27 @@ public class GameLoopHandler {
     return "GOBOT".equalsIgnoreCase(v);
   }
 
+  // EVAL=NNUE (with SEARCH=GOBOT) swaps the GoBot search's leaf eval to the learned NNUE net;
+  // EVAL=HANDTUNED / unset keeps the hand-tuned leaf (the GoBot clone). Mirrors SearchEngine's EVAL
+  // flag detection. Configured once at class load so every static GoBot entry point picks it up.
+  static {
+    if (gobotLeafEvalFor(
+            System.getProperty("SEARCH", System.getenv("SEARCH")),
+            System.getProperty("EVAL", System.getenv("EVAL")))
+        == GoBotSearcher.LeafEval.NNUE) {
+      GoBotSearcher.configureDefaultLeafEval(
+          GoBotSearcher.LeafEval.NNUE, com.engine.nnue_trainer.nnue.NNUEModel.createDefault());
+    }
+  }
+
+  /** Pure flag resolution: NNUE leaf only when {@code SEARCH=GOBOT} and {@code EVAL=NNUE}. */
+  static GoBotSearcher.LeafEval gobotLeafEvalFor(String searchFlag, String evalFlag) {
+    if ("GOBOT".equalsIgnoreCase(searchFlag) && "NNUE".equalsIgnoreCase(evalFlag)) {
+      return GoBotSearcher.LeafEval.NNUE;
+    }
+    return GoBotSearcher.LeafEval.HAND_TUNED;
+  }
+
   /**
    * Translate a chosen {@link Action} into the server move message, the sole tested translation
    * point. Mirrors GoBot's {@code actionMessage} (bot_client.go): a {@link MoveAction} sends {@code

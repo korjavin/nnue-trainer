@@ -23,7 +23,7 @@ import java.util.List;
  */
 public final class GoState {
 
-  static final int ACTIONS_PER_TURN = 3;
+  public static final int ACTIONS_PER_TURN = 3;
 
   final int rows;
   final int cols;
