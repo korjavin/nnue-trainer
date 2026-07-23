@@ -92,11 +92,18 @@ prove **fixed-depth move parity** against a generated GoBot oracle. Do NOT modif
       note that `ChooseDepth` skips the opening book so records are pure search).
 
 ### Task 2: Port the transposition table + searcher scaffolding
-- [ ] port `searcher`, `tableEntry`, TT flags/const, `Result`, `RootMove`, `newSearcher` to Java
+- [x] port `searcher`, `tableEntry`, TT flags/const, `Result`, `RootMove`, `newSearcher` to Java
       (e.g. `search/gobot/GoBotSearch.java` + helpers), keyed by the same Zobrist/position hash
-- [ ] port TT probe/store with GoBot's fail-soft bound semantics (exact/lower/upper by ply+depth)
-- [ ] unit test: TT store then probe returns the stored entry with correct flag handling
-- [ ] `./mvnw compile` clean
+      — `search/gobot/`: `GoBotSearcher` (searcher + flags + newSearcher + probe/store + running),
+      `TableEntry`, `GoResult`, `RootMove`, `GoState` (fields + accessors + `hash()` = byte-exact
+      port of GoBot `stateHash`). `Apply`/`LegalActions`/`Position` deferred to Task 3.
+- [x] port TT probe/store with GoBot's fail-soft bound semantics (exact/lower/upper by ply+depth)
+      — `TableEntry{depth,ply,flag,bestAction,values[4]}`, `FLAG_EXACT/LOWER/UPPER = 0/1/2` (GoBot
+      iota); the flag *computation* is inline in `minimax` (Task 3), store is unconditional overwrite.
+- [x] unit test: TT store then probe returns the stored entry with correct flag handling
+      — `GoBotSearcherTest`: store/probe round-trip, flag constants, `stateHash` keys on hidden
+      state (movesLeft/currentPlayer/neutralUsed), `running()` node-limit guard.
+- [x] `./mvnw compile` clean — compile + full `./mvnw test` (80) green + `spotless:apply` clean.
 
 ### Task 3: Port minimax (AB + PVS) + maxN + fixed-depth ChooseDepth
 - [ ] port `minimax` faithfully: alpha-beta, PVS (full window first move; `alpha,alpha+1` null
