@@ -180,6 +180,10 @@ public class GameLoopHandler {
   // leaf); with EVAL=HANDTUNED that is a GoBot clone by construction. Mirrors EVAL detection.
   private static final boolean USE_GOBOT_SEARCH = gobotSearchFromEnv();
 
+  // Per-move node budget for the deterministic live GoBot search. ~GoBot's 1s worth of nodes and
+  // then some (GoBot does ~17-55k/move); at 60k the clone beats GoBot 6-0. Overridable via env.
+  private static final long DEFAULT_LIVE_NODE_LIMIT = 60000L;
+
   private static boolean gobotSearchFromEnv() {
     String v = System.getProperty("SEARCH", System.getenv("SEARCH"));
     return "GOBOT".equalsIgnoreCase(v);
@@ -287,7 +291,23 @@ public class GameLoopHandler {
     }
     // Build the live GoState through the same tested seam GoStateFromSnapshotTest asserts against
     // (handleSnapshot pins snapshot.currentPlayer == myPlayerIndex).
-    GoResult r = GoBotSearcher.choose(goStateFromSnapshot(snapshot));
+    // Live search uses the DETERMINISTIC, parity-verified node-budget entry by default: the
+    // time-based choose() had a wall-clock-deadline move-selection bug (bd 0dj.7) that lost 0-10
+    // vs GoBot, while chooseNodeBudget(60k) wins 6-0. Overridable via env for experiments.
+    GoState gs = goStateFromSnapshot(snapshot);
+    GoResult r;
+    String fd = System.getenv("GOBOT_FIXED_DEPTH");
+    String nl = System.getenv("GOBOT_NODE_LIMIT");
+    String tm = System.getenv("GOBOT_TIME_MODE"); // opt back into the (buggy) time-based choose()
+    if (fd != null && !fd.isBlank()) {
+      r = GoBotSearcher.chooseDepth(gs, Integer.parseInt(fd.trim()));
+    } else if (tm != null && !tm.isBlank()) {
+      r = GoBotSearcher.choose(gs);
+    } else {
+      long limit =
+          (nl != null && !nl.isBlank()) ? Long.parseLong(nl.trim()) : DEFAULT_LIVE_NODE_LIMIT;
+      r = GoBotSearcher.chooseNodeBudget(gs, limit);
+    }
     if (r == null) {
       // No legal action from this position; let makeMove log "No legal actions available."
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
