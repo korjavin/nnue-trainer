@@ -138,10 +138,20 @@ Reads the 419-record fixture line-by-line (JSONL) via Jackson, rebuilds each `Bo
 first run — the port needed no fixes. Full suite green (74 tests).
 
 ### Task 4: Make the eval selectable in search
-- [ ] wire `HandTunedEval` as an alternative leaf eval in `SearchEngine` behind a flag/env
+- [x] wire `HandTunedEval` as an alternative leaf eval in `SearchEngine` behind a flag/env
       (e.g. `EVAL=HANDTUNED` vs the default NNUE), so the bot can play with the ported eval
-- [ ] a small unit test that the flag selects the hand-tuned path
-- [ ] run `./mvnw test` green; `./mvnw spotless:check` clean
+- [x] a small unit test that the flag selects the hand-tuned path
+- [x] run `./mvnw test` green; `./mvnw spotless:check` clean
+
+`SearchEngine.evaluate()` gains a `useHandTunedEval` branch (before the NNUE block, after the
+base-alive infinity short-circuits) calling `HandTunedEval.staticEval(board, perspective, movesLeft,
+neutralUsed)`. The flag defaults from env/property `EVAL=HANDTUNED` (`handTunedFromEnv()`), with
+`setUseHandTunedEval`/`isUseHandTunedEval` for tests. The GoBot eval needs per-turn non-board state
+(`movesLeft`, per-player `neutralUsed`) the search doesn't track per node; `setHandTunedState(...)`
+holds the root turn's values, fed live from the snapshot in `GameLoopHandler.handleSnapshot`.
+Deeper search nodes reuse the root values — a minor tempo offset (ponytail-noted in-code).
+Test `search/HandTunedEvalSelectionTest`: flag off by default; flag on returns the exact
+`HandTunedEval` integer and differs from the NNUE path. Full suite green (76 tests), spotless clean.
 
 ### Task 5: Update plan notes
 - [ ] record the fixture size, any hidden-state findings, and the exact command for the

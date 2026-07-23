@@ -5,16 +5,16 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 
 /**
- * Faithful integer-exact port of GoBot's hand-tuned static evaluation
- * ({@code ../virusgame/backend/search/evaluate.go}, {@code StaticEval}).
+ * Faithful integer-exact port of GoBot's hand-tuned static evaluation ({@code
+ * ../virusgame/backend/search/evaluate.go}, {@code StaticEval}).
  *
- * <p>Higher = better for {@code player}. This is a literal translation of the Go
- * source (same structure, same operation order) so that scores are integer-identical
- * to GoBot on the parity fixture. Do NOT "improve" the math — any divergence is a bug.
+ * <p>Higher = better for {@code player}. This is a literal translation of the Go source (same
+ * structure, same operation order) so that scores are integer-identical to GoBot on the parity
+ * fixture. Do NOT "improve" the math — any divergence is a bug.
  *
- * <p>The score depends on non-board state that is not reconstructable from the grid:
- * the mover ({@code player} == {@code state.CurrentPlayer()}), {@code movesLeft} and
- * per-player {@code neutralUsed}. Those must be supplied by the caller.
+ * <p>The score depends on non-board state that is not reconstructable from the grid: the mover
+ * ({@code player} == {@code state.CurrentPlayer()}), {@code movesLeft} and per-player {@code
+ * neutralUsed}. Those must be supplied by the caller.
  */
 public final class HandTunedEval {
 
@@ -124,7 +124,9 @@ public final class HandTunedEval {
               + W_BASE_OPENINGS * m.baseOpenings
               + W_BASE_ANCHORS * m.baseAnchors
               - W_BASE_THREAT * m.baseThreat * m.threatTempo
-              - m.threatTempo * W_THREATENED_LOSS_MULT * ratio(m.threatenedLoss, Math.max(1, m.connected))
+              - m.threatTempo
+                  * W_THREATENED_LOSS_MULT
+                  * ratio(m.threatenedLoss, Math.max(1, m.connected))
               - m.threatTempo * W_THREATENED_MULT * ratio(m.threatened, Math.max(1, m.connected))
               + normalized(space[p - 1], area, W_SPACE_RACE);
       if (m.baseExits + m.baseOpenings == 0) {
@@ -151,7 +153,8 @@ public final class HandTunedEval {
         }
         Metrics oppM = metrics[opp - 1];
         for (int index = 0; index < oppM.articulation.length; index++) {
-          if (oppM.articulation[index] && adjacentConnected(index, rows, cols, own.connectedCells)) {
+          if (oppM.articulation[index]
+              && adjacentConnected(index, rows, cols, own.connectedCells)) {
             int loss = oppM.cutLoss[index];
             raw[p - 1] +=
                 W_PREDATORY_CUT_BASE
@@ -186,9 +189,9 @@ public final class HandTunedEval {
   // --- helpers, mirroring evaluate.go ---
 
   /**
-   * A player is active iff its base cell (fixed corner) is intact. GoBot flags a player
-   * inactive only when its base is captured, which ends a 2-player game; non-terminal
-   * fixture records therefore have an intact base exactly for the active players.
+   * A player is active iff its base cell (fixed corner) is intact. GoBot flags a player inactive
+   * only when its base is captured, which ends a 2-player game; non-terminal fixture records
+   * therefore have an intact base exactly for the active players.
    */
   private static boolean isActive(int[] owner, int[] kind, int rows, int cols, int player) {
     int bi = baseIndex(rows, cols, player);
@@ -319,7 +322,8 @@ public final class HandTunedEval {
     m.connectedCells = connected[player - 1];
     m.articulation = new boolean[size];
     m.cutLoss = new int[size];
-    articulationPointsInto(owner, kind, rows, cols, player, m.connectedCells, m.articulation, m.cutLoss);
+    articulationPointsInto(
+        owner, kind, rows, cols, player, m.connectedCells, m.articulation, m.cutLoss);
 
     boolean[] targets = new boolean[size];
     int[] nb = new int[8];
@@ -388,8 +392,8 @@ public final class HandTunedEval {
   }
 
   /**
-   * More urgent as the defender spends its turn, fully urgent while an opponent still
-   * has actions. {@code current} is the mover (GoBot's CurrentPlayer).
+   * More urgent as the defender spends its turn, fully urgent while an opponent still has actions.
+   * {@code current} is the mover (GoBot's CurrentPlayer).
    */
   private static int threatTempo(int player, int current, int movesLeft) {
     if (current == player) {
@@ -425,7 +429,9 @@ public final class HandTunedEval {
     }
     for (int index = 0; index < size; index++) {
       if (connected[index] && discovery[index] == 0) {
-        visit(index, rows, cols, connected, discovery, low, parent, subtree, result, cutLoss, timeBox);
+        visit(
+            index, rows, cols, connected, discovery, low, parent, subtree, result, cutLoss,
+            timeBox);
       }
     }
     for (int index = 0; index < size; index++) {
@@ -467,7 +473,9 @@ public final class HandTunedEval {
       if (discovery[nextIndex] == 0) {
         children++;
         parent[nextIndex] = index;
-        visit(nextIndex, rows, cols, connected, discovery, low, parent, subtree, result, cutLoss, timeBox);
+        visit(
+            nextIndex, rows, cols, connected, discovery, low, parent, subtree, result, cutLoss,
+            timeBox);
         subtree[index] += subtree[nextIndex];
         if (low[nextIndex] < low[index]) {
           low[index] = low[nextIndex];

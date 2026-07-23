@@ -12,6 +12,7 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.Accumulator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
+import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +25,35 @@ public class SearchEngine {
   private NNUEModel nnueModel;
   private boolean isCustomModel = false;
   private int nodesEvaluated = 0;
+
+  // Selectable leaf eval: hand-tuned GoBot port instead of NNUE (env/property EVAL=HANDTUNED).
+  // The GoBot eval reads non-board state (movesLeft, per-player neutralUsed) the search doesn't
+  // track per node; we feed the root turn's values (set from the live snapshot).
+  private boolean useHandTunedEval = handTunedFromEnv();
+  private int handTunedMovesLeft =
+      1; // ponytail: search has no per-node movesLeft; use root turn's.
+  private boolean[] handTunedNeutralUsed = new boolean[4];
+
+  private static boolean handTunedFromEnv() {
+    String v = System.getProperty("EVAL", System.getenv("EVAL"));
+    return "HANDTUNED".equalsIgnoreCase(v);
+  }
+
+  public void setUseHandTunedEval(boolean value) {
+    this.useHandTunedEval = value;
+  }
+
+  public boolean isUseHandTunedEval() {
+    return useHandTunedEval;
+  }
+
+  /** Root turn's non-board eval state, fed to the hand-tuned eval at leaves. */
+  public void setHandTunedState(int movesLeft, boolean[] neutralUsed) {
+    this.handTunedMovesLeft = movesLeft;
+    if (neutralUsed != null) {
+      this.handTunedNeutralUsed = neutralUsed;
+    }
+  }
 
   // Search state
   private TranspositionTable tt;
@@ -364,6 +394,11 @@ public class SearchEngine {
     if (hasBases) {
       if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
       if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+    }
+
+    if (useHandTunedEval) {
+      return HandTunedEval.staticEval(
+          board, originalPlayer, handTunedMovesLeft, handTunedNeutralUsed);
     }
 
     if (nnueModel != null && board.rows == 12 && board.cols == 12) {

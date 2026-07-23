@@ -32,8 +32,7 @@ public class HandTunedEvalParityTest {
       if (is == null) {
         throw new RuntimeException("Could not find /gobot_staticeval_parity.jsonl");
       }
-      BufferedReader reader =
-          new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+      BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
       String line;
       while ((line = reader.readLine()) != null) {
         line = line.trim();
@@ -74,10 +73,7 @@ public class HandTunedEvalParityTest {
     }
 
     assertTrue(records > 0, "fixture was empty");
-    assertEquals(
-        0,
-        mismatches,
-        mismatches + "/" + records + " positions mismatched:" + firstFew);
+    assertEquals(0, mismatches, mismatches + "/" + records + " positions mismatched:" + firstFew);
   }
 
   private static Board toBoard(JsonNode boardNode) {
