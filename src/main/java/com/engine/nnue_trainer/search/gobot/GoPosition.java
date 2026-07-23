@@ -50,10 +50,6 @@ final class GoPosition {
     return new GoPosition(state, moves, owned, searchPairs);
   }
 
-  GoState state() {
-    return state;
-  }
-
   /**
    * Successor for an action already emitted by {@link #searchActions} (GoBot's {@code
    * ApplySearch}).

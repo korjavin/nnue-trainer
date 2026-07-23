@@ -487,11 +487,11 @@ public final class GoBotSearcher {
 
   private long leafEval(GoState state) {
     return HandTunedEval.staticEval(
-        toBoard(state), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
+        state.toBoard(), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
   }
 
   private long[] leafEvalAll(GoState state) {
-    Board board = toBoard(state);
+    Board board = state.toBoard();
     long[] all = new long[4];
     for (int p = 1; p <= 4; p++) {
       all[p - 1] =
@@ -524,17 +524,6 @@ public final class GoBotSearcher {
       }
     }
     return count;
-  }
-
-  private static Board toBoard(GoState state) {
-    Board board = new Board(state.rows(), state.cols());
-    for (int r = 0; r < state.rows(); r++) {
-      for (int c = 0; c < state.cols(); c++) {
-        Cell cell = state.at(r, c);
-        board.setCell(r, c, new Cell(cell.owner, cell.kind));
-      }
-    }
-    return board;
   }
 
   private static long[] toLong(int[] values) {
