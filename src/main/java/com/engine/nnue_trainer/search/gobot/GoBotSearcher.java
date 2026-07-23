@@ -571,6 +571,16 @@ public final class GoBotSearcher {
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
   }
 
+  /**
+   * Inverse of the NNUE leaf scaling: a backed-up search score → the net's output range, clamped to
+   * ±1. Used as the TD-leaf target when self-play drives move selection through this search (Phase
+   * 2 Task 3). Terminal/mate magnitudes (~1e9) collapse to ±1.
+   */
+  public static float scoreToUnit(long score) {
+    double v = (double) score / NNUE_SCALE;
+    return (float) Math.max(-1.0, Math.min(1.0, v));
+  }
+
   private static long terminalScore(GoState state, int player, int ply) {
     if (state.winner() == player) {
       return MATE_SCORE - ply;

@@ -77,13 +77,13 @@ experiment is maintainer-run** (I run training/evals — the outcome is genuine 
 - [x] `./mvnw test` green
 
 ### Task 3: Self-play + TD-leaf targets through the GoBot search
-- [ ] add a mode to `SelfPlayGenerator` (or a sibling) where **move selection uses the GoBot search**
+- [x] add a mode to `SelfPlayGenerator` (or a sibling) where **move selection uses the GoBot search**
       (`GoBotSearcher.chooseNodeBudget`/`chooseDepth` with the current NNUE net) and the **TD-leaf
       target is the GoBot search's backed-up value** (scaled back to the net's output range), blended
       by `tdLambda`; honor `EPSILON`/`EXPLORE_TURNS` for diversity
-- [ ] keep the existing `SearchEngine`-based mode intact (selectable)
-- [ ] unit-test the GoBot-search self-play produces well-formed records; targets in range
-- [ ] `./mvnw test` green
+- [x] keep the existing `SearchEngine`-based mode intact (selectable)
+- [x] unit-test the GoBot-search self-play produces well-formed records; targets in range
+- [x] `./mvnw test` green
 
 ### Task 4: Wire the pipeline
 - [ ] extend `td_leaf_pass.sh` (or add `td_leaf_pass_gobot.sh`) to run the GoBot-search self-play →

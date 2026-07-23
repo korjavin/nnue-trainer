@@ -9,6 +9,9 @@ import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
+import com.engine.nnue_trainer.search.gobot.GoResult;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +32,14 @@ public class SelfPlayGenerator {
     TD_LEAF
   }
 
+  /** Which search drives move selection (and the TD-leaf target). */
+  public enum SearchMode {
+    /** The negamax NNUE {@link SearchEngine} (original path). */
+    NEGAMAX,
+    /** The strong ported GoBot search with an NNUE leaf (Phase 2 Task 3). */
+    GOBOT
+  }
+
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
@@ -41,6 +52,14 @@ public class SelfPlayGenerator {
 
     /** TD-leaf blend: 1 → pure outcome (subsumes OUTCOME), 0 → pure search bootstrap. */
     public double tdLambda = 1.0;
+
+    public SearchMode searchMode = SearchMode.NEGAMAX;
+
+    /** GoBot mode node budget (0 disables); the proven strong live setting is 60k. */
+    public long gobotNodeLimit = 60_000L;
+
+    /** GoBot mode fixed depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
+    public int gobotFixedDepth = 0;
   }
 
   public static class TrainingRecord {
@@ -106,6 +125,14 @@ public class SelfPlayGenerator {
     if (mode != null && !mode.isBlank()) {
       config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
     }
+    // SELFPLAY_SEARCH=GOBOT routes move selection + TD-leaf targets through the strong GoBot search
+    // (with the NNUE leaf); GOBOT_NODE_LIMIT / GOBOT_FIXED_DEPTH tune it (mirrors GameLoopHandler).
+    String sm = System.getenv("SELFPLAY_SEARCH");
+    if (sm != null && sm.trim().equalsIgnoreCase("GOBOT")) {
+      config.searchMode = SearchMode.GOBOT;
+    }
+    config.gobotNodeLimit = envLong("GOBOT_NODE_LIMIT", config.gobotNodeLimit);
+    config.gobotFixedDepth = envInt("GOBOT_FIXED_DEPTH", config.gobotFixedDepth);
     outputPath = System.getenv().getOrDefault("OUT", outputPath);
 
     System.out.println(
@@ -141,6 +168,9 @@ public class SelfPlayGenerator {
   public static GenerationResult generate(Config config, SearchEngine customEngine) {
     if (!Double.isFinite(config.tdLambda) || config.tdLambda < 0.0 || config.tdLambda > 1.0) {
       throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
+    }
+    if (config.searchMode == SearchMode.GOBOT) {
+      return generateViaGoBot(config);
     }
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
@@ -248,6 +278,109 @@ public class SelfPlayGenerator {
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
     return new GenerationResult(dataset, distinctGameRatio);
+  }
+
+  /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */
+  private static final class GoPly {
+    final float[] features;
+    final int sideToMove;
+    final float searchValue; // GoBot backed-up score, scaled to ±1
+
+    GoPly(float[] features, int sideToMove, float searchValue) {
+      this.features = features;
+      this.sideToMove = sideToMove;
+      this.searchValue = searchValue;
+    }
+  }
+
+  /**
+   * Phase 2 self-play where BOTH move selection and the TD-leaf target come from the strong GoBot
+   * search using the current NNUE net as its leaf. Games are played through {@link GoState} (the
+   * GoBot rules) rather than the negamax loop above; each ply is recorded with the search's
+   * backed-up value (scaled to ±1) as its TD-leaf target, blended toward the outcome by {@code
+   * tdLambda}. Honors {@code epsilon}/{@code exploreTurns} for diversity.
+   */
+  private static GenerationResult generateViaGoBot(Config config) {
+    NNUEModel model = NNUEModel.createDefault();
+    GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, model);
+    try {
+      return playGoBotGames(config);
+    } finally {
+      // Restore the process-wide default so we don't leak NNUE-leaf state into later callers/tests.
+      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null);
+    }
+  }
+
+  private static GenerationResult playGoBotGames(Config config) {
+    List<TrainingRecord> dataset = new ArrayList<>();
+    Random random = config.seed != 0 ? new Random(config.seed) : new Random();
+    Set<Integer> uniquePositionHashes = new HashSet<>();
+    int totalPositions = 0;
+    int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
+    int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
+
+    for (int game = 1; game <= config.numGames; game++) {
+      List<GoPly> plies = new ArrayList<>();
+      GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
+
+      for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
+        List<Action> legal = state.legalActions();
+        if (legal.isEmpty()) {
+          break; // stuck player — GoState elimination normally sets gameOver before we get here
+        }
+        GoResult r = chooseGoBot(state, config);
+        float value = (r != null) ? GoBotSearcher.scoreToUnit(r.score) : 0f;
+        plies.add(
+            new GoPly(
+                BoardFeatureMapper.map(state.toBoard(), state.currentPlayer()),
+                state.currentPlayer(),
+                value));
+
+        Action chosen;
+        if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
+          chosen = legal.get(random.nextInt(legal.size()));
+        } else {
+          chosen = (r != null && r.action != null) ? r.action : legal.get(0);
+        }
+        GoState next = state.apply(chosen);
+        if (next == null) {
+          chosen = legal.get(0);
+          next = state.apply(chosen);
+        }
+        state = next;
+      }
+
+      int winner = state.gameOver() ? state.winner() : 0;
+      for (GoPly p : plies) {
+        float outcome = winner == 0 ? 0f : (winner == p.sideToMove ? 1f : -1f);
+        float target =
+            config.labelMode == LabelMode.TD_LEAF
+                ? (float) ((1.0 - config.tdLambda) * p.searchValue + config.tdLambda * outcome)
+                : outcome;
+        dataset.add(new TrainingRecord(p.features, target));
+        uniquePositionHashes.add(Arrays.hashCode(p.features));
+        totalPositions++;
+      }
+    }
+
+    double distinctGameRatio =
+        totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
+    return new GenerationResult(dataset, distinctGameRatio);
+  }
+
+  /** GoBot move selection: fixed depth when {@code gobotFixedDepth>0}, else the node budget. */
+  private static GoResult chooseGoBot(GoState state, Config config) {
+    if (config.gobotFixedDepth > 0) {
+      return GoBotSearcher.chooseDepth(state, config.gobotFixedDepth);
+    }
+    return GoBotSearcher.chooseNodeBudget(state, config.gobotNodeLimit);
+  }
+
+  private static Board freshBoard() {
+    Board board = new Board(12, 12);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+    return board;
   }
 
   /**
