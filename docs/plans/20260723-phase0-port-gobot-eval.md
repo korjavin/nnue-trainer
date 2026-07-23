@@ -154,8 +154,40 @@ Test `search/HandTunedEvalSelectionTest`: flag off by default; flag on returns t
 `HandTunedEval` integer and differs from the NNUE path. Full suite green (76 tests), spotless clean.
 
 ### Task 5: Update plan notes
-- [ ] record the fixture size, any hidden-state findings, and the exact command for the
+- [x] record the fixture size, any hidden-state findings, and the exact command for the
       maintainer to re-measure vs GoBot (`EVAL=HANDTUNED` + `eval_java_vs_go.py`)
+
+#### Summary (Task 5 result)
+
+**Fixture:** `src/test/resources/gobot_staticeval_parity.jsonl` — 419 records (every 6th line
+of a 2509-position `-positions 2500 -seed 7` self-play run), all 12×12 2-player non-terminal,
+spanning opening→endgame (2..92 owned cells), both movers (p1 232 / p2 187), `movesLeft`
+∈ {1,2,3}, `neutralUsed` ((F,F) 400, (T,F) 13, (F,T) 6), scores −36136..+35882.
+See the Task 1 findings block for full detail.
+
+**Hidden-state findings (the port's key risk, now resolved):** `StaticEval` reads three
+non-board quantities that change the integer score and are NOT reconstructable from the grid —
+`player` (= `CurrentPlayer()`), `movesLeft` (0..3), and per-player `neutralUsed[]`. `staticevalgen`
+was extended to emit `movesLeft`/`neutralUsed` so the fixture is self-contained, and the Java
+signature is `staticEval(Board, int player, int movesLeft, boolean[] neutralUsed)`. All 419
+records passed integer-exact on the first parity run — no port fixes needed.
+
+**Maintainer re-measurement command (the decisive experiment):** from
+`../virusgame/backend`, build `server`/`bot-hoster` (gitignored) and set `JAVA_HOME` (JDK21),
+then from this repo run the parity harness with the ported eval selected:
+
+```bash
+# one-time env (see bd memory eval-vs-gobot-harness for full setup)
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+(cd ../virusgame/backend && go build -o server . && go build -o bot-hoster ./cmd/bot-hoster)
+
+# run 5–10 games, GoBot static eval vs the Go reference bot
+EVAL=HANDTUNED python .agents/skills/eval-vs-gobot/eval_java_vs_go.py 10
+```
+
+Results land in the sqlite `result` column (1 = Java win, 2 = GoBot win). Compare to the 0/7
+NNUE baseline: still ~0 → moat is GoBot's SEARCH (proceed to Phase 1 `0dj.2`); jumps → the
+distillation approximation mattered. Record the outcome on `0dj.1` and epic `0dj`.
 
 ## Technical Details
 - Parity means **integer-identical** on the fixture — a hand-tuned eval has no randomness, so
