@@ -544,7 +544,14 @@ public final class GoBotSearcher {
 
   private long leafEval(GoState state) {
     if (leafMode == LeafEval.NNUE) {
-      return nnueLeaf(state.toBoard(), root, nnueModel);
+      // The net is side-to-move relative (trained on features mapped to the mover with an
+      // STM-relative target). Query it from the leaf's own mover — in-distribution — then flip to
+      // root's perspective by zero-sum negation. Mapping straight to root (as HandTunedEval can,
+      // since it also receives currentPlayer for tempo) would evaluate opponent-to-move leaves a
+      // tempo out of distribution. Valid on the 2-player bench; maxN uses leafEvalAll below.
+      int mover = state.currentPlayer();
+      long v = nnueLeaf(state.toBoard(), mover, nnueModel);
+      return mover == root ? v : -v;
     }
     return HandTunedEval.staticEval(
         state.toBoard(), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
