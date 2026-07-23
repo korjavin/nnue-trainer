@@ -124,11 +124,21 @@ Acceptance is the new parity tests passing; the live clone-vs-GoBot re-measure i
 - [x] `./mvnw test` green — full suite passed (exit 0), spotless + jacoco gates green.
 
 ### Task 4: Audit + test the action→server-move translation
-- [ ] verify `makeMove` translates every `GoResult.action` kind (grow/attack move, neutrals
+- [x] verify `makeMove` translates every `GoResult.action` kind (grow/attack move, neutrals
       placement) to the correct server message (row/col/type), including the 3-per-turn flow
-- [ ] add a round-trip test (action → message → parse) asserting equality
-- [ ] fix any mismatch
-- [ ] `./mvnw test` green
+      — compared against GoBot's own `actionMessage` (bot_client.go): MOVE → `{type:"move", row, col}`
+      (server infers grow vs attack from the board — both grow and attack send only row/col), and
+      PLACE_NEUTRALS → `{type:"neutrals", cells:[{row,col},{row,col}]}`. Java's `makeMove` matches
+      exactly. The 3-per-turn flow is just three independent MOVE messages (no special framing).
+      Extracted the translation into `GameLoopHandler.writeAction` as the single tested point
+      (mirrors Task 3's `goStateFromSnapshot`).
+- [x] add a round-trip test (action → message → parse) asserting equality
+      — added `ActionTranslationRoundTripTest`: writeAction → serialize → reparse → assert `equals`
+      for MOVE (three distinct targets) and PLACE_NEUTRALS, plus an exact wire-shape assert for
+      neutrals (equals() is order-insensitive there, so pin the byte layout too).
+- [x] fix any mismatch
+      — N/A: no mismatch. Translation is faithful to the GoBot server wire contract.
+- [x] `./mvnw test` green — full suite passed (EXIT=0), spotless + jacoco gates green.
 
 ### Task 5: Verify + notes
 - [ ] full suite green incl. both parity tests (`ChooseDepth` + `ChooseNodeBudget`); spotless clean

@@ -184,6 +184,30 @@ public class GameLoopHandler {
     return "GOBOT".equalsIgnoreCase(v);
   }
 
+  /**
+   * Translate a chosen {@link Action} into the server move message, the sole tested translation
+   * point. Mirrors GoBot's {@code actionMessage} (bot_client.go): a {@link MoveAction} sends {@code
+   * {type:"move", row, col}} (the server infers grow vs attack from the board); a {@link
+   * PlaceNeutralsAction} sends {@code {type:"neutrals", cells:[{row,col},{row,col}]}}.
+   */
+  static void writeAction(ObjectNode response, ObjectMapper mapper, Action action) {
+    if (action instanceof MoveAction) {
+      MoveAction move = (MoveAction) action;
+      response.put("type", "move");
+      response.put("row", move.target.row);
+      response.put("col", move.target.col);
+    } else if (action instanceof PlaceNeutralsAction) {
+      PlaceNeutralsAction place = (PlaceNeutralsAction) action;
+      response.put("type", "neutrals");
+      response.set(
+          "cells",
+          mapper
+              .createArrayNode()
+              .add(mapper.createObjectNode().put("row", place.pos1.row).put("col", place.pos1.col))
+              .add(mapper.createObjectNode().put("row", place.pos2.row).put("col", place.pos2.col)));
+    }
+  }
+
   private void makeMove(
       Board board, boolean canPlaceNeutral, int movesLeft, boolean[] neutralUsed) {
     SearchResult searchResult =
@@ -224,29 +248,12 @@ public class GameLoopHandler {
       response.put("nodesEvaluated", searchResult.nodesEvaluated);
       response.put("timeMs", searchResult.timeMs);
 
+      writeAction(response, objectMapper, bestAction);
       if (bestAction instanceof MoveAction) {
         MoveAction move = (MoveAction) bestAction;
-        response.put("type", "move");
-        response.put("row", move.target.row);
-        response.put("col", move.target.col);
         System.out.println("Playing Move: (" + move.target.row + ", " + move.target.col + ")");
       } else if (bestAction instanceof PlaceNeutralsAction) {
         PlaceNeutralsAction place = (PlaceNeutralsAction) bestAction;
-        response.put("type", "neutrals");
-        JsonNode cellsNode =
-            objectMapper
-                .createArrayNode()
-                .add(
-                    objectMapper
-                        .createObjectNode()
-                        .put("row", place.pos1.row)
-                        .put("col", place.pos1.col))
-                .add(
-                    objectMapper
-                        .createObjectNode()
-                        .put("row", place.pos2.row)
-                        .put("col", place.pos2.col));
-        response.set("cells", cellsNode);
         System.out.println(
             "Placing Neutrals: ("
                 + place.pos1.row
