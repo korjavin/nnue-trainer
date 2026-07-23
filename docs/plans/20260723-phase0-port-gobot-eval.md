@@ -108,14 +108,22 @@ out.jsonl -positions 2500 -seed 7`, sample every 6th line. (This sibling patch i
 `../virusgame` working tree, uncommitted — it belongs to that repo, not this one.)
 
 ### Task 2: Port the eval to Java
-- [ ] create `search/eval/HandTunedEval.java` (or similar): port `evaluateAllWithWorkspace` +
+- [x] create `search/eval/HandTunedEval.java` (or similar): port `evaluateAllWithWorkspace` +
       `analyze` + `spaceRace` + connectivity/base metrics, with the literal `defaultEvalParams`
       weights as constants; `int staticEval(Board board, int player, <extra state>)` returning
       the same integer as GoBot
-- [ ] map our `Board`/`Cell`/`CellKind` to the quantities `evaluate.go` computes (reuse the
+- [x] map our `Board`/`Cell`/`CellKind` to the quantities `evaluate.go` computes (reuse the
       `BoardFeatureMapper` cell conventions); handle the 2-player case faithfully
-- [ ] reproduce any non-board state the score depends on (moves-left tempo etc.)
-- [ ] run `./mvnw compile` — clean
+- [x] reproduce any non-board state the score depends on (moves-left tempo etc.)
+- [x] run `./mvnw compile` — clean
+
+Port lives at `src/main/java/com/engine/nnue_trainer/search/eval/HandTunedEval.java`.
+Signature: `staticEval(Board board, int player, int movesLeft, boolean[] neutralUsed)`.
+Go `game.CellKind` iota (Empty=0,Normal=1,Base=2,Fortified=3,Neutral=4) matches Java
+`CellKind.value` exactly, so no remapping. `Active(p)` is derived from an intact corner
+base (correct for the 2-player non-terminal fixture; players 3/4 have no base → inactive).
+Faithful translation (same structure/op order). Smoke-checked integer-exact vs the first
+fixture record (player 1, movesLeft 1 → 7211). Full parity is Task 3.
 
 ### Task 3: Prove integer-exact parity
 - [ ] add `HandTunedEvalParityTest`: for each fixture record, assert
