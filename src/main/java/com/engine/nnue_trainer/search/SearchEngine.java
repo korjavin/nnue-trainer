@@ -12,6 +12,7 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.Accumulator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
+import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +25,49 @@ public class SearchEngine {
   private NNUEModel nnueModel;
   private boolean isCustomModel = false;
   private int nodesEvaluated = 0;
+
+  // Selectable leaf eval: hand-tuned GoBot port instead of NNUE (env/property EVAL=HANDTUNED).
+  // The GoBot eval reads non-board state (movesLeft, per-player neutralUsed) the search doesn't
+  // track per node; we feed the root turn's values (set from the live snapshot).
+  private boolean useHandTunedEval = handTunedFromEnv();
+  private int handTunedMovesLeft =
+      1; // ponytail: search has no per-node movesLeft; use root turn's.
+  private boolean[] handTunedNeutralUsed = new boolean[4];
+  private boolean handTunedStateSet = false; // did anyone feed live movesLeft/neutralUsed?
+  private boolean warnedUninitHandTuned = false; // latch so the warning fires once
+
+  private static boolean handTunedFromEnv() {
+    String v = System.getProperty("EVAL", System.getenv("EVAL"));
+    return "HANDTUNED".equalsIgnoreCase(v);
+  }
+
+  public void setUseHandTunedEval(boolean value) {
+    this.useHandTunedEval = value;
+  }
+
+  public boolean isUseHandTunedEval() {
+    return useHandTunedEval;
+  }
+
+  /** Root turn's non-board eval state, fed to the hand-tuned eval at leaves. */
+  public void setHandTunedState(int movesLeft, boolean[] neutralUsed) {
+    // movesLeft/neutralUsed change the hand-tuned score but are NOT in the TT key (Zobrist hashes
+    // only board+player). A reused engine (one per game in GameLoopHandler) sees these change every
+    // sub-move, so cached hand-tuned scores/bounds would be stale — clear on change. Only in
+    // hand-tuned mode; the NNUE eval doesn't read this state, so its TT stays valid across turns.
+    boolean changed =
+        movesLeft != this.handTunedMovesLeft
+            || (neutralUsed != null
+                && !java.util.Arrays.equals(neutralUsed, this.handTunedNeutralUsed));
+    this.handTunedMovesLeft = movesLeft;
+    if (neutralUsed != null) {
+      this.handTunedNeutralUsed = neutralUsed;
+    }
+    this.handTunedStateSet = true;
+    if (useHandTunedEval && changed) {
+      clearSearchState();
+    }
+  }
 
   // Search state
   private TranspositionTable tt;
@@ -220,7 +264,10 @@ public class SearchEngine {
 
   /** Static leaf value in the side-to-move ({@code player}) frame. */
   private float leafEval(Board board, Accumulator accumulator, int player, int perspective) {
-    float e = evaluate(board, accumulator, perspective);
+    // Score in the fixed perspective frame, but tell the hand-tuned eval the real mover at this
+    // leaf (its tempo terms depend on the current player, which differs from perspective on
+    // opponent-to-move leaves — GoBot reads state.CurrentPlayer() there, not s.root).
+    float e = evaluate(board, accumulator, perspective, player);
     return (player == perspective) ? e : -e;
   }
 
@@ -331,8 +378,18 @@ public class SearchEngine {
    * pass.
    */
   protected float evaluate(Board board, Accumulator accumulator, int player) {
+    // sideToMove defaults to the perspective (correct for direct callers and the parity fixture,
+    // where the mover == the scored player).
+    return evaluate(board, accumulator, player, player);
+  }
+
+  /**
+   * Static evaluation in {@code perspective}'s frame. {@code sideToMove} is the actual mover at
+   * this node, used only by the hand-tuned eval's current-player tempo terms.
+   */
+  protected float evaluate(Board board, Accumulator accumulator, int perspective, int sideToMove) {
     nodesEvaluated++;
-    int originalPlayer = player;
+    int originalPlayer = perspective;
     int opponent = getOpponent(originalPlayer);
 
     boolean myBaseAlive = false;
@@ -364,6 +421,18 @@ public class SearchEngine {
     if (hasBases) {
       if (!myBaseAlive) return Float.NEGATIVE_INFINITY;
       if (!oppBaseAlive) return Float.POSITIVE_INFINITY;
+    }
+
+    if (useHandTunedEval) {
+      if (!handTunedStateSet && !warnedUninitHandTuned) {
+        warnedUninitHandTuned = true;
+        System.err.println(
+            "WARNING: EVAL=HANDTUNED active but setHandTunedState() was never called; falling back"
+                + " to default movesLeft=1/neutralUsed=false. Tempo/neutral terms will be"
+                + " miscalibrated. Only GameLoopHandler feeds live state today.");
+      }
+      return HandTunedEval.staticEval(
+          board, originalPlayer, sideToMove, handTunedMovesLeft, handTunedNeutralUsed);
     }
 
     if (nnueModel != null && board.rows == 12 && board.cols == 12) {

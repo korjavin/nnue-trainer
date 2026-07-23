@@ -99,7 +99,14 @@ public class GameLoopHandler {
 
       if (!gameOver && currentPlayer == myPlayerIndex && movesLeft > 0) {
         Board board = parseBoardFromSnapshot(snapshot);
-        boolean canPlaceNeutral = !snapshot.get("neutralUsed").get(myPlayerIndex - 1).asBoolean();
+        JsonNode neutralNode = snapshot.get("neutralUsed");
+        boolean canPlaceNeutral = !neutralNode.get(myPlayerIndex - 1).asBoolean();
+        // Feed the hand-tuned eval the root turn's non-board state (no-op for NNUE).
+        boolean[] neutralUsed = new boolean[neutralNode.size()];
+        for (int i = 0; i < neutralNode.size(); i++) {
+          neutralUsed[i] = neutralNode.get(i).asBoolean();
+        }
+        searchEngine.setHandTunedState(movesLeft, neutralUsed);
         makeMove(board, canPlaceNeutral);
       }
     }
