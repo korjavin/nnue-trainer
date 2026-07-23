@@ -66,12 +66,35 @@ public final class HandTunedEval {
   /**
    * Static evaluation for {@code player} (1-based), integer-identical to GoBot.
    *
+   * <p>Parity path: the fixture records set {@code player == CurrentPlayer()}, so the utility index
+   * and the tempo mover coincide. Search must instead call the 5-arg overload, which keeps them
+   * separate (GoBot evaluates {@code s.root} but reads {@code state.CurrentPlayer()} for tempo).
+   *
    * @param board the position
    * @param player the mover (== GoBot's CurrentPlayer)
    * @param movesLeft actions remaining this turn (0..3)
    * @param neutralUsed per-player neutral-used flag, index 0 == player 1
    */
   public static int staticEval(Board board, int player, int movesLeft, boolean[] neutralUsed) {
+    return staticEval(board, player, player, movesLeft, neutralUsed);
+  }
+
+  /**
+   * Static evaluation for {@code scorePlayer} (1-based), integer-identical to GoBot.
+   *
+   * <p>GoBot keeps two roles separate: the utility index ({@code s.root} in search) and the mover
+   * read for the tempo terms ({@code state.CurrentPlayer()}). At an opponent-to-move leaf these
+   * differ, so search passes the leaf's side-to-move as {@code currentPlayer} while still scoring
+   * from the root's frame.
+   *
+   * @param board the position
+   * @param scorePlayer whose utility to return (== GoBot's s.root)
+   * @param currentPlayer the mover, for the tempo terms (== GoBot's CurrentPlayer())
+   * @param movesLeft actions remaining this turn (0..3)
+   * @param neutralUsed per-player neutral-used flag, index 0 == player 1
+   */
+  public static int staticEval(
+      Board board, int scorePlayer, int currentPlayer, int movesLeft, boolean[] neutralUsed) {
     int rows = board.rows;
     int cols = board.cols;
     int size = rows * cols;
@@ -109,7 +132,7 @@ public final class HandTunedEval {
         continue;
       }
       activeCount++;
-      Metrics m = analyze(owner, kind, rows, cols, p, active, connected, player, movesLeft);
+      Metrics m = analyze(owner, kind, rows, cols, p, active, connected, currentPlayer, movesLeft);
       metrics[p - 1] = m;
       int area = rows * cols;
       int owned = m.normal + m.fortified + 1; // include the base
@@ -135,7 +158,7 @@ public final class HandTunedEval {
       if (!neutralUsedFor(neutralUsed, p)) {
         r += W_NEUTRAL_UNUSED_BONUS;
       }
-      if (player == p) {
+      if (currentPlayer == p) {
         r += movesLeft * W_MOVES_LEFT_TEMPO;
       }
       raw[p - 1] = r;
@@ -183,7 +206,7 @@ public final class HandTunedEval {
         utility[p - 1] = raw[p - 1];
       }
     }
-    return utility[player - 1];
+    return utility[scorePlayer - 1];
   }
 
   // --- helpers, mirroring evaluate.go ---
