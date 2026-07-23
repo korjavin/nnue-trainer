@@ -73,14 +73,23 @@ prove **fixed-depth move parity** against a generated GoBot oracle. Do NOT modif
 ## Implementation Steps
 
 ### Task 1: Generate the GoBot search parity oracle
-- [ ] add a Go tool in `../virusgame` (mirror `arena/cmd/staticevalgen`) that, per position, calls
+- [x] add a Go tool in `../virusgame` (mirror `arena/cmd/staticevalgen`) that, per position, calls
       `search.ChooseDepth(ctx, state, depth)` for a couple of small fixed depths (e.g. 3 and 5)
       and emits `{board, player, depth, action, score}` JSONL (action encoded to match our
       `Action` — row/col/type; document the exact encoding)
-- [ ] generate a few hundred diverse positions (reuse clean go-vs-go games / self-play snapshots)
-- [ ] check a trimmed fixture into `src/test/resources/gobot_search_parity.jsonl`
-- [ ] document exactly what State the oracle builds (movesLeft/neutralUsed/currentPlayer) so the
+      — `backend/arena/cmd/searchparitygen/main.go`; action = `{"type":"MOVE","target":{row,col}}`
+      or `{"type":"PLACE_NEUTRALS","pos1":{row,col},"pos2":{row,col}}` (maps to Java
+      `MoveAction`/`PlaceNeutralsAction`). Also emits `movesLeft`/`neutralUsed` hidden state.
+- [x] generate a few hundred diverse positions (reuse clean go-vs-go games / self-play snapshots)
+      — diverse roster self-play (budget/tournament/greedy/base/mobility agents), sampled every
+      3rd ply; per-position `-timeout` gates selection only (kept records are fully-completed
+      deterministic searches → reproducible in Java with no timeout).
+- [x] check a trimmed fixture into `src/test/resources/gobot_search_parity.jsonl`
+      — 412 records: depths {3:236, 5:176}, players {1,2}, MOVE 391 + PLACE_NEUTRALS 21, 179 scores.
+- [x] document exactly what State the oracle builds (movesLeft/neutralUsed/currentPlayer) so the
       Java port reproduces it (same lesson as Phase 0's hidden state)
+      — `src/test/resources/gobot_search_parity.README.md` (schema, action encoding, hidden state,
+      note that `ChooseDepth` skips the opening book so records are pure search).
 
 ### Task 2: Port the transposition table + searcher scaffolding
 - [ ] port `searcher`, `tableEntry`, TT flags/const, `Result`, `RootMove`, `newSearcher` to Java
