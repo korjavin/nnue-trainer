@@ -57,15 +57,17 @@ experiment is maintainer-run** (I run training/evals — the outcome is genuine 
 ## Implementation Steps
 
 ### Task 1: Swappable leaf eval in the GoBot search
-- [ ] add a leaf-eval seam to `GoBotSearcher`: an eval-mode (e.g. `LeafEval {HAND_TUNED, NNUE}`)
+- [x] add a leaf-eval seam to `GoBotSearcher`: an eval-mode (e.g. `LeafEval {HAND_TUNED, NNUE}`)
       with a setter/field, default HAND_TUNED (preserves current behavior + all parity tests)
-- [ ] implement the NNUE leaf: `NNUEModel.forward(BoardFeatureMapper.map(board, sideToMove))` →
+- [x] implement the NNUE leaf: `NNUEModel.forward(BoardFeatureMapper.map(board, sideToMove))` →
       scale to int (`round(value * SCALE)`, `SCALE` a constant making it comparable to hand-tuned
       magnitudes), clamp to `(-MATE_SCORE, MATE_SCORE)`, oriented so positive = good for the
       side-to-move; terminal/mate handling unchanged
-- [ ] unit-test: NNUE leaf returns finite in-range ints, correct side-to-move sign; hand-tuned
+      (note: this search is minimax-for-`root`, not negamax — the leaf is oriented to `root` to
+      match `HandTunedEval`/`leafEval`, i.e. `map(board, root)`, not the side-to-move)
+- [x] unit-test: NNUE leaf returns finite in-range ints, correct side-to-move sign; hand-tuned
       path unchanged (parity tests still pass)
-- [ ] `./mvnw test` green
+- [x] `./mvnw test` green
 
 ### Task 2: Wire NNUE-on-GoBot-search selection
 - [ ] make the leaf-eval mode selectable via env/property (e.g. `EVAL=NNUE` with `SEARCH=GOBOT`

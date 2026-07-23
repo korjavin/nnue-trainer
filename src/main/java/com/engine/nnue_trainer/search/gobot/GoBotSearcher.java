@@ -6,6 +6,8 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.Pos;
+import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
+import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,9 +40,30 @@ public final class GoBotSearcher {
   static final long INF_SCORE = 1L << 60;
   static final long MATE_SCORE = 1_000_000_000L;
 
+  /** Selectable leaf evaluation for the GoBot search (Phase 2): hand-tuned or learned NNUE. */
+  public enum LeafEval {
+    HAND_TUNED,
+    NNUE
+  }
+
+  /**
+   * NNUE output (~±1) → hand-tuned-comparable integer. The only hard constraint is staying strictly
+   * within {@code ±MATE_SCORE} so a learned leaf never collides with terminal/mate scores; the
+   * magnitude just needs to land in the hand-tuned band so search behaves normally.
+   */
+  static final long NNUE_SCALE = 1000L;
+
+  static final long NNUE_CLAMP = MATE_SCORE - 1L; // strictly below mate
+
+  // Process-wide default leaf eval, applied to each newSearcher (Task 2 sets this from env).
+  private static volatile LeafEval defaultLeafEval = LeafEval.HAND_TUNED;
+  private static volatile NNUEModel defaultNnueModel = null;
+
   final int root;
   final boolean multi;
   final Map<Long, TableEntry> table;
+  LeafEval leafMode = LeafEval.HAND_TUNED;
+  NNUEModel nnueModel;
   long nodes;
   long evaluations;
   long nodeLimit; // 0 == unlimited
@@ -50,6 +73,25 @@ public final class GoBotSearcher {
     this.root = root;
     this.multi = multi;
     this.table = new HashMap<>();
+  }
+
+  /**
+   * Set this searcher's leaf eval. Pass {@code null} model with {@link LeafEval#NNUE} to lazily load
+   * the default warm-start net ({@code nnue_weights.json}).
+   */
+  public void setLeafEval(LeafEval mode, NNUEModel model) {
+    this.leafMode = mode;
+    this.nnueModel = model;
+  }
+
+  /**
+   * Process-wide default applied to every {@link #newSearcher} (so the static {@code chooseDepth}/
+   * {@code chooseNodeBudget}/{@code choose} entry points use it). Mirrors the env/property flag
+   * pattern; Task 2 wires {@code EVAL=NNUE} to call this.
+   */
+  public static void configureDefaultLeafEval(LeafEval mode, NNUEModel model) {
+    defaultLeafEval = mode;
+    defaultNnueModel = model;
   }
 
   /** Signals that the running budget (node limit / deadline) was exhausted mid-search. */
@@ -67,7 +109,9 @@ public final class GoBotSearcher {
         activeCount++;
       }
     }
-    return new GoBotSearcher(state.currentPlayer(), activeCount > 2);
+    GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2);
+    s.setLeafEval(defaultLeafEval, defaultNnueModel);
+    return s;
   }
 
   /** TT probe: the stored entry for this position hash, or {@code null} on a miss. */
@@ -486,6 +530,9 @@ public final class GoBotSearcher {
   // --- scoring helpers (port of terminalScore / evaluate / activeCount) ---
 
   private long leafEval(GoState state) {
+    if (leafMode == LeafEval.NNUE) {
+      return nnueLeaf(state.toBoard(), root, resolveModel());
+    }
     return HandTunedEval.staticEval(
         state.toBoard(), root, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
   }
@@ -493,12 +540,35 @@ public final class GoBotSearcher {
   private long[] leafEvalAll(GoState state) {
     Board board = state.toBoard();
     long[] all = new long[4];
+    // ponytail: NNUE feature map is 2-player (opponent = 3 - player); for players 3/4 it maps only
+    // own stones. The clean 2-player test bench (Java vs GoBot) never hits maxN, so this is fine.
+    NNUEModel model = leafMode == LeafEval.NNUE ? resolveModel() : null;
     for (int p = 1; p <= 4; p++) {
       all[p - 1] =
-          HandTunedEval.staticEval(
-              board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
+          model != null
+              ? nnueLeaf(board, p, model)
+              : HandTunedEval.staticEval(
+                  board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
     }
     return all;
+  }
+
+  private NNUEModel resolveModel() {
+    if (nnueModel == null) {
+      nnueModel = NNUEModel.createDefault();
+    }
+    return nnueModel;
+  }
+
+  /**
+   * NNUE leaf value oriented to {@code player} (higher = better for {@code player}, matching {@link
+   * HandTunedEval}): {@code round(forward(features) * NNUE_SCALE)} clamped strictly inside {@code
+   * ±MATE_SCORE} so it never collides with terminal/mate scores.
+   */
+  static long nnueLeaf(Board board, int player, NNUEModel model) {
+    double value = model.forward(BoardFeatureMapper.map(board, player));
+    long scaled = Math.round(value * NNUE_SCALE);
+    return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
   }
 
   private static long terminalScore(GoState state, int player, int ply) {
