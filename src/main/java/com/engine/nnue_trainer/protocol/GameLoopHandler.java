@@ -8,6 +8,9 @@ import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
+import com.engine.nnue_trainer.search.gobot.GoResult;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -107,7 +110,7 @@ public class GameLoopHandler {
           neutralUsed[i] = neutralNode.get(i).asBoolean();
         }
         searchEngine.setHandTunedState(movesLeft, neutralUsed);
-        makeMove(board, canPlaceNeutral);
+        makeMove(board, canPlaceNeutral, movesLeft, neutralUsed);
       }
     }
   }
@@ -152,10 +155,22 @@ public class GameLoopHandler {
     return board;
   }
 
-  private void makeMove(Board board, boolean canPlaceNeutral) {
+  // SEARCH=GOBOT selects the ported GoBot search (book -> iterative-deepening minimax -> HandTuned
+  // leaf); with EVAL=HANDTUNED that is a GoBot clone by construction. Mirrors EVAL detection.
+  private static final boolean USE_GOBOT_SEARCH = gobotSearchFromEnv();
+
+  private static boolean gobotSearchFromEnv() {
+    String v = System.getProperty("SEARCH", System.getenv("SEARCH"));
+    return "GOBOT".equalsIgnoreCase(v);
+  }
+
+  private void makeMove(
+      Board board, boolean canPlaceNeutral, int movesLeft, boolean[] neutralUsed) {
     SearchResult searchResult =
-        searchEngine.findBestActionWithTimeLimitUsingModel(
-            board, myPlayerIndex, 5000, canPlaceNeutral);
+        USE_GOBOT_SEARCH
+            ? gobotSearch(board, movesLeft, neutralUsed)
+            : searchEngine.findBestActionWithTimeLimitUsingModel(
+                board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
 
     System.out.println(
@@ -228,5 +243,26 @@ public class GameLoopHandler {
     } catch (Exception e) {
       System.err.println("Failed to send action: " + e.getMessage());
     }
+  }
+
+  /** Run the ported GoBot search and adapt its {@link GoResult} into a {@link SearchResult}. */
+  private SearchResult gobotSearch(Board board, int movesLeft, boolean[] neutralUsed) {
+    long start = System.currentTimeMillis();
+    // GoState.fromBoard builds a 1v1 (players 1,2) state — the only mode SEARCH=GOBOT supports.
+    // neutralUsed is per-player, so its length is the game's player count. Anything above 2 would
+    // yield a state where player 3/4 is inactive (silent forfeit), so refuse loudly instead.
+    if (neutralUsed != null && neutralUsed.length > 2) {
+      System.err.println(
+          "SEARCH=GOBOT supports 1v1 only; got " + neutralUsed.length + " players — no move made.");
+      return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
+    }
+    GoResult r =
+        GoBotSearcher.choose(GoState.fromBoard(board, myPlayerIndex, movesLeft, neutralUsed));
+    if (r == null) {
+      // No legal action from this position; let makeMove log "No legal actions available."
+      return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
+    }
+    return new SearchResult(
+        r.action, r.score, r.depth, (int) r.nodes, System.currentTimeMillis() - start);
   }
 }
