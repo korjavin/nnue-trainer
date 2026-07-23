@@ -106,13 +106,23 @@ prove **fixed-depth move parity** against a generated GoBot oracle. Do NOT modif
 - [x] `./mvnw compile` clean — compile + full `./mvnw test` (80) green + `spotless:apply` clean.
 
 ### Task 3: Port minimax (AB + PVS) + maxN + fixed-depth ChooseDepth
-- [ ] port `minimax` faithfully: alpha-beta, PVS (full window first move; `alpha,alpha+1` null
+- [x] port `minimax` faithfully: alpha-beta, PVS (full window first move; `alpha,alpha+1` null
       window then re-search on fail-high), TT probe/store, leaves via `HandTunedEval` (no
       quiescence), the exact move iteration/order GoBot uses
-- [ ] port `maxN` (for >2 players; 1v1 uses minimax) and `atDepth`
-- [ ] port `ChooseDepth(board, player, depth)` — deterministic, fully completed — as the parity
-      entry point
-- [ ] `./mvnw test` green
+      — `GoBotSearcher.minimax`; move gen/order ported as `GoPosition` (`ForEachSearchAction` +
+      `strategicNeutralPairs`) + `GoState` rules transitions (`applyGenerated`/`connected`/
+      `advance`/`eliminate`). Search runs in `long` (fixed the pre-existing `INF_SCORE = 1<<60`
+      int-overflow bug; GoBot's `int` is 64-bit). Incomplete-budget signalled via unchecked
+      `SearchIncomplete` (fixed depth never throws; sets up Task 4's time-limited path).
+- [x] port `maxN` (for >2 players; 1v1 uses minimax) and `atDepth`
+      — `GoBotSearcher.maxN`/`atDepth` (+ `orderedChildren`/`preservingChildren`/`terminalScore(s)`/
+      `activeCount`). maxN unexercised by the 1v1 fixture; ported for fidelity.
+- [x] port `ChooseDepth(board, player, depth)` — deterministic, fully completed — as the parity
+      entry point — `GoBotSearcher.chooseDepth(GoState,depth)` + `(Board,player,movesLeft,neutralUsed,depth)`
+      convenience; leaves evaluated via ported `HandTunedEval` (GoState→Board).
+- [x] `./mvnw test` green — full suite 80 green + `spotless:apply` clean. Verified against the
+      Task-1 fixture with a throwaway harness: 412/412 records match action AND integer score at
+      depths {3,5} (the official `GoBotSearchParityTest` lands in Task 5).
 
 ### Task 4: Port the opening book + Choose/time entry points
 - [ ] port `opening_book.go` (`openingBookMove` thick first-turn placement + void condition,
