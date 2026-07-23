@@ -33,6 +33,8 @@ public class SearchEngine {
   private int handTunedMovesLeft =
       1; // ponytail: search has no per-node movesLeft; use root turn's.
   private boolean[] handTunedNeutralUsed = new boolean[4];
+  private boolean handTunedStateSet = false; // did anyone feed live movesLeft/neutralUsed?
+  private boolean warnedUninitHandTuned = false; // latch so the warning fires once
 
   private static boolean handTunedFromEnv() {
     String v = System.getProperty("EVAL", System.getenv("EVAL"));
@@ -61,6 +63,7 @@ public class SearchEngine {
     if (neutralUsed != null) {
       this.handTunedNeutralUsed = neutralUsed;
     }
+    this.handTunedStateSet = true;
     if (useHandTunedEval && changed) {
       clearSearchState();
     }
@@ -421,6 +424,13 @@ public class SearchEngine {
     }
 
     if (useHandTunedEval) {
+      if (!handTunedStateSet && !warnedUninitHandTuned) {
+        warnedUninitHandTuned = true;
+        System.err.println(
+            "WARNING: EVAL=HANDTUNED active but setHandTunedState() was never called; falling back"
+                + " to default movesLeft=1/neutralUsed=false. Tempo/neutral terms will be"
+                + " miscalibrated. Only GameLoopHandler feeds live state today.");
+      }
       return HandTunedEval.staticEval(
           board, originalPlayer, sideToMove, handTunedMovesLeft, handTunedNeutralUsed);
     }
