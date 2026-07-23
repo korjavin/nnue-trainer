@@ -84,13 +84,17 @@ Acceptance is the new parity tests passing; the live clone-vs-GoBot re-measure i
 - [x] no code test yet — fixture feeds Task 2
 
 ### Task 2: ChooseNodeBudget parity test (localizes search-side divergence)
-- [ ] add `GoBotNodeBudgetParityTest`: for each record assert
+- [x] add `GoBotNodeBudgetParityTest`: for each record assert
       `chooseNodeBudget(fromBoard(...), nodeLimit).action == record.action` (and score)
-- [ ] if it FAILS: the bug is in `choose`/`chooseNodeBudget`/iterative-deepening/`atDepth` root
+      — added; mirrors `GoBotSearchParityTest` reading `gobot_nodebudget_parity.jsonl`.
+- [x] if it FAILS: the bug is in `choose`/`chooseNodeBudget`/iterative-deepening/`atDepth` root
       move selection — fix the port until it matches GoBot (compare against `ChooseDepth`, which is
       known-correct, at the depth the budget reaches)
-- [ ] if it PASSES: the search side is faithful → the bug is wiring (Tasks 3–4)
-- [ ] `./mvnw test` green
+      — N/A: it PASSED.
+- [x] if it PASSES: the search side is faithful → the bug is wiring (Tasks 3–4)
+      — CONFIRMED: 144/144 records match action+score. Search side is faithful; divergence is in
+      the live wiring (GameLoopHandler inputs / move translation). Focus shifts to Tasks 3–4.
+- [x] `./mvnw test` green — `Tests run: 1, Failures: 0` (126.8s).
 
 ### Task 3: Audit + test the live GoState inputs
 - [ ] trace `GameLoopHandler`: how it derives `myPlayerIndex`, `movesLeft`, `neutralUsed`, and the
