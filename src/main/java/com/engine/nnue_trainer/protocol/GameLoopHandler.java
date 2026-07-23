@@ -122,10 +122,10 @@ public class GameLoopHandler {
   }
 
   /**
-   * Build the search {@link GoState} from a server snapshot with the SAME inputs the live GOBOT path
-   * feeds {@link GoState#fromBoard} (board orientation, current player, movesLeft, per-player
-   * neutralUsed). The live path passes {@code myPlayerIndex}, which the {@code handleSnapshot} guard
-   * pins equal to {@code snapshot.currentPlayer}; sharing {@link #parseBoardFromSnapshot} /
+   * Build the search {@link GoState} from a server snapshot with the SAME inputs the live GOBOT
+   * path feeds {@link GoState#fromBoard} (board orientation, current player, movesLeft, per-player
+   * neutralUsed). The live path passes {@code myPlayerIndex}, which the {@code handleSnapshot}
+   * guard pins equal to {@code snapshot.currentPlayer}; sharing {@link #parseBoardFromSnapshot} /
    * {@link #parseNeutralUsed} makes this the single tested construction point (parity oracle).
    */
   static GoState goStateFromSnapshot(JsonNode snapshot) {
@@ -204,7 +204,8 @@ public class GameLoopHandler {
           mapper
               .createArrayNode()
               .add(mapper.createObjectNode().put("row", place.pos1.row).put("col", place.pos1.col))
-              .add(mapper.createObjectNode().put("row", place.pos2.row).put("col", place.pos2.col)));
+              .add(
+                  mapper.createObjectNode().put("row", place.pos2.row).put("col", place.pos2.col)));
     }
   }
 

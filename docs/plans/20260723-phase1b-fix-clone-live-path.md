@@ -141,9 +141,26 @@ Acceptance is the new parity tests passing; the live clone-vs-GoBot re-measure i
 - [x] `./mvnw test` green — full suite passed (EXIT=0), spotless + jacoco gates green.
 
 ### Task 5: Verify + notes
-- [ ] full suite green incl. both parity tests (`ChooseDepth` + `ChooseNodeBudget`); spotless clean
-- [ ] record in the plan which layer had the bug and the exact maintainer command to re-measure
+- [x] full suite green incl. both parity tests (`ChooseDepth` + `ChooseNodeBudget`); spotless clean
+      — `./mvnw test`: Tests run: 92, Failures: 0, Errors: 0 (incl. `GoBotSearchParityTest`,
+      `GoBotNodeBudgetParityTest`, `GoStateFromSnapshotTest`, `ActionTranslationRoundTripTest`),
+      jacoco gates met; `./mvnw spotless:apply` reflowed 4 comment/whitespace-only spots, now clean.
+- [x] record in the plan which layer had the bug and the exact maintainer command to re-measure
       (`SEARCH=GOBOT EVAL=HANDTUNED` + `eval_java_vs_go.py 10`)
+      — WHICH LAYER: none of the audited layers diverged. All four localizing oracles pass:
+      search side (`ChooseNodeBudget` 144/144 action+score), live GoState inputs
+      (`goStateFromSnapshot` builds the identical GoState for all 144 wire-format positions), and
+      the action→server-move translation (`writeAction` round-trips MOVE + PLACE_NEUTRALS). The
+      search core, `GoState.fromBoard` inputs, and move translation are all faithful to GoBot.
+      The 0–10 live loss is therefore NOT explained by any deterministically-testable layer; the
+      remaining suspects are time-based only (the wall-clock `choose`/`chooseWithDeadline` deadline
+      behavior vs GoBot's `Choose`, or a live-only sequencing/state effect the node-budget oracle
+      cannot reproduce). Follow-up must localize on the LIVE positions (log clone move vs GoBot move
+      in a real game) — see Post-Completion.
+      — MAINTAINER RE-MEASURE COMMAND (from the nnue-trainer repo root, sibling `../virusgame`
+      built per the eval-vs-gobot skill):
+      `SEARCH=GOBOT EVAL=HANDTUNED python .agents/skills/eval-vs-gobot/eval_java_vs_go.py 10`
+      (result col: 1=Java win, 2=GoBot win; expect ≈even/draws = parity floor).
 
 ## Technical Details
 - `ChooseNodeBudget` is deterministic (node-limited), so it is a valid golden oracle where

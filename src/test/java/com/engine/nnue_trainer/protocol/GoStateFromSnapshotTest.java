@@ -18,16 +18,16 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /**
- * Task 3: the live GoState inputs match the oracle. Each parity-fixture record is re-serialized into
- * the <b>real server wire format</b> — {@code game.Cell} has no JSON tags, so the backend emits
- * capitalized {@code "Owner"}/{@code "Kind"} keys with {@code Kind} as an <i>integer</i> (Go iota:
- * Empty=0..Neutral=4), unlike the fixture's lowercase {@code "owner"} / string {@code "kind"}. We
- * feed that wire snapshot through {@link GameLoopHandler#goStateFromSnapshot} (the live construction
- * point) and assert the resulting {@link GoState} is byte-for-byte identical (FNV {@code hash()} +
- * every field) to the oracle's {@code GoState.fromBoard} for the same logical position. A pass means
- * board orientation, {@code CellKind} mapping, current player, movesLeft, and per-player neutralUsed
- * survive the live parse untouched, so any remaining divergence is the action→move translation
- * (Task 4), not the inputs.
+ * Task 3: the live GoState inputs match the oracle. Each parity-fixture record is re-serialized
+ * into the <b>real server wire format</b> — {@code game.Cell} has no JSON tags, so the backend
+ * emits capitalized {@code "Owner"}/{@code "Kind"} keys with {@code Kind} as an <i>integer</i> (Go
+ * iota: Empty=0..Neutral=4), unlike the fixture's lowercase {@code "owner"} / string {@code
+ * "kind"}. We feed that wire snapshot through {@link GameLoopHandler#goStateFromSnapshot} (the live
+ * construction point) and assert the resulting {@link GoState} is byte-for-byte identical (FNV
+ * {@code hash()} + every field) to the oracle's {@code GoState.fromBoard} for the same logical
+ * position. A pass means board orientation, {@code CellKind} mapping, current player, movesLeft,
+ * and per-player neutralUsed survive the live parse untouched, so any remaining divergence is the
+ * action→move translation (Task 4), not the inputs.
  */
 public class GoStateFromSnapshotTest {
 
@@ -68,11 +68,14 @@ public class GoStateFromSnapshotTest {
         assertEquals(oracle.hash(), live.hash(), "GoState hash mismatch" + where);
         assertEquals(oracle.rows(), live.rows(), "rows mismatch" + where);
         assertEquals(oracle.cols(), live.cols(), "cols mismatch" + where);
-        assertEquals(oracle.currentPlayer(), live.currentPlayer(), "currentPlayer mismatch" + where);
+        assertEquals(
+            oracle.currentPlayer(), live.currentPlayer(), "currentPlayer mismatch" + where);
         assertEquals(oracle.movesLeft(), live.movesLeft(), "movesLeft mismatch" + where);
         for (int p = 1; p <= 2; p++) {
           assertEquals(
-              oracle.neutralUsed(p), live.neutralUsed(p), "neutralUsed[" + p + "] mismatch" + where);
+              oracle.neutralUsed(p),
+              live.neutralUsed(p),
+              "neutralUsed[" + p + "] mismatch" + where);
         }
       }
     }
@@ -80,7 +83,9 @@ public class GoStateFromSnapshotTest {
     assertTrue(records > 0, "fixture was empty");
   }
 
-  /** Re-encode a fixture record as the backend's real wire snapshot (capital keys, integer Kind). */
+  /**
+   * Re-encode a fixture record as the backend's real wire snapshot (capital keys, integer Kind).
+   */
   private static JsonNode toWireSnapshot(
       ObjectMapper mapper, JsonNode rec, int player, int movesLeft, JsonNode neutralNode) {
     JsonNode fixtureBoard = rec.get("board");

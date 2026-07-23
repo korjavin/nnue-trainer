@@ -19,8 +19,8 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /**
- * Deterministic live-path oracle (Task 2). {@link GoBotSearcher#chooseNodeBudget} exercises the full
- * iterative-deepening + opening-book + root-move-selection path that live play uses via {@code
+ * Deterministic live-path oracle (Task 2). {@link GoBotSearcher#chooseNodeBudget} exercises the
+ * full iterative-deepening + opening-book + root-move-selection path that live play uses via {@code
  * choose} — but bounded by a node limit instead of wall-clock, so it is reproducible. It must pick
  * the <b>same action</b> and return the <b>same integer score</b> as GoBot's {@code
  * ChooseNodeBudget} for every record in the fixture. A pass means the search side is faithful and

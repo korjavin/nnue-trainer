@@ -14,15 +14,18 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Round-trips every {@link Action} kind through {@link GameLoopHandler#writeAction} (the live
- * action-&gt;server-move translation) and back, asserting equality. Guards the wiring the fixed-depth
- * and node-budget parity fixtures never exercised: the {@code GoResult.action -> server message}
- * step. The parse side mirrors GoBot's own server wire contract (bot_client.go {@code actionMessage}
- * / server hub): {@code {type:"move", row, col}} and {@code {type:"neutrals", cells:[...]}}.
+ * action-&gt;server-move translation) and back, asserting equality. Guards the wiring the
+ * fixed-depth and node-budget parity fixtures never exercised: the {@code GoResult.action -> server
+ * message} step. The parse side mirrors GoBot's own server wire contract (bot_client.go {@code
+ * actionMessage} / server hub): {@code {type:"move", row, col}} and {@code {type:"neutrals",
+ * cells:[...]}}.
  */
 public class ActionTranslationRoundTripTest {
   private final ObjectMapper mapper = new ObjectMapper();
 
-  /** Inverse of {@link GameLoopHandler#writeAction} — parse a server message back into an Action. */
+  /**
+   * Inverse of {@link GameLoopHandler#writeAction} — parse a server message back into an Action.
+   */
   private static Action parseAction(JsonNode msg) {
     String type = msg.get("type").asText();
     if ("move".equals(type)) {
