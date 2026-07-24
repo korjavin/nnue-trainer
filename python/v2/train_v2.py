@@ -8,6 +8,7 @@ dense stack to a single WDL scalar. Float-only prototype (no quantization).
 See docs/plans/20260724-v2-pytorch-two-accumulator-model.md.
 """
 import json
+import math
 import os
 import random
 
@@ -216,10 +217,13 @@ def main(argv=None):
 
     torch.save(model.state_dict(), args.out_model)
     meta = model_metadata(model)
-    meta.update({"train_mse": train_mse, "val_mse": val_mse,
+    # A NaN metric (empty train/val split on a tiny corpus) is not valid JSON;
+    # write null so cross-language consumers can still parse the metadata.
+    meta.update({"train_mse": train_mse if math.isfinite(train_mse) else None,
+                 "val_mse": val_mse if math.isfinite(val_mse) else None,
                  "num_examples": len(examples)})
     with open(args.out_meta, "w") as f:
-        json.dump(meta, f, indent=2)
+        json.dump(meta, f, indent=2, allow_nan=False)
 
     print(f"num_patterns={num_patterns} examples={len(examples)} "
           f"train_mse={train_mse:.6f} val_mse={val_mse:.6f}")
