@@ -94,12 +94,13 @@ Merge target: `nnue-v2-3.2-mining` branch (stacked PR), NOT master / v2.
 - [x] run `python3 python/v2/mine_patterns_test.py` — passes (10/10; run with `PYTHONPATH=.`)
 
 ### Task 4: Corpus generation script + manifest
-- [ ] add `scripts/gen_v2_corpus.sh`: compile, then loop board sizes
+- [x] add `scripts/gen_v2_corpus.sh`: compile, then loop board sizes
       (12x12, 9x9, 7x7, 5x5, 5x7) invoking SelfPlayGenerator with ROWS/COLS/SEED/
       NUM_GAMES/EMIT=raw/RAW_OUT per size, concatenating into one corpus JSONL; print
       per-size + total line counts. Deterministic (SEED offset per size).
-- [ ] append corpus artifacts (e.g. `python/v2/corpus/*.jsonl`) to `.gitignore` (append only)
-- [ ] run tests - full `SelfPlayGeneratorTest` + `mine_patterns_test.py` must pass
+      Smoke run (NUM_GAMES=2): 746 positions across 5 sizes; mines to 1581 patterns @ 76% coverage.
+- [x] append corpus artifacts (e.g. `python/v2/corpus/*.jsonl`) to `.gitignore` (append only)
+- [x] run tests - full `SelfPlayGeneratorTest` + `mine_patterns_test.py` must pass (7/7, 10/10)
 
 ### Task 5: Verify acceptance criteria
 - [ ] `./mvnw test` green (SelfPlayGenerator tests pass, v1 path intact)
