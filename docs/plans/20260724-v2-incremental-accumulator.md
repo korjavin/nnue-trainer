@@ -117,15 +117,15 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 - [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 4.
 
 ### Task 4: Parity tests for every required case
-- [ ] Add a helper in the test that loads the real dictionary and builds an accumulator with deterministic non-trivial `float[numPatterns][K]` weights (e.g. `weights[id][i] = (float)((id*31 + i) % 7) - 3`) and a non-null bias, so float parity is a real check (not all-ones).
-- [ ] Add a helper `assertParity(oldBoard,newBoard,activePlayer)`: `State s = newState(old); applyMove(s, old, new, diffCells(old,new));` then assert `s.stmCounts()/nstmCounts()` equal `newState(new).*` counts AND `output(s,dense)` array-equals `computeFull(new, activePlayer, dense)` EXACTLY (`assertArrayEquals` with delta 0), for activePlayer 1 AND 2 (covers STM+NSTM swap).
-- [ ] Test: single-cell change (place one piece on an interior empty cell).
-- [ ] Test: multi-cell move with overlapping windows (two changed cells within 4 of each other so their affected-window sets overlap — proves each shared window is processed once).
-- [ ] Test: edge/OOB windows (changed cell in a corner / on the border of a small board so windows include OUT_OF_BOUNDS).
-- [ ] Test: repeated occurrences of the same pattern id (two identical isolated pieces like the fixture's repeated_pattern board; move one, assert the shared id's count decrements by exactly the right amount).
-- [ ] Test: unseen pattern / dict miss (a synthetic board region whose windows are not in the dictionary — parity still holds, i.e. misses are skipped on both sides).
-- [ ] Test: base-move fallback (a board where the enemy base position differs old->new, e.g. remove/relocate a BASE cell — assert parity still exact via the fallback path).
-- [ ] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 5.
+- [x] Add a helper in the test that loads the real dictionary and builds an accumulator with deterministic non-trivial `float[numPatterns][K]` weights (e.g. `weights[id][i] = (float)((id*31 + i) % 7) - 3`) and a non-null bias, so float parity is a real check (not all-ones).
+- [x] Add a helper `assertParity(oldBoard,newBoard,activePlayer)`: `State s = newState(old); applyMove(s, old, new, diffCells(old,new));` then assert `s.stmCounts()/nstmCounts()` equal `newState(new).*` counts AND `output(s,dense)` array-equals `computeFull(new, activePlayer, dense)` EXACTLY (`assertArrayEquals` with delta 0), for activePlayer 1 AND 2 (covers STM+NSTM swap).
+- [x] Test: single-cell change (place one piece on an interior empty cell).
+- [x] Test: multi-cell move with overlapping windows (two changed cells within 4 of each other so their affected-window sets overlap — proves each shared window is processed once).
+- [x] Test: edge/OOB windows (changed cell in a corner / on the border of a small board so windows include OUT_OF_BOUNDS).
+- [x] Test: repeated occurrences of the same pattern id (two identical isolated pieces like the fixture's repeated_pattern board; move one, assert the shared id's count decrements by exactly the right amount).
+- [x] Test: unseen pattern / dict miss (windows near a static base carry a non-7 bucket the all-bucket-7 dictionary never contains — guaranteed miss; parity still holds, i.e. misses are skipped on both sides).
+- [x] Test: base-move fallback (a board where the enemy base position differs old->new, e.g. remove/relocate a BASE cell — assert parity still exact via the fallback path).
+- [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 5.
 
 ### Task 5: Randomized property parity test
 - [ ] Add a seeded (`new Random(SEED)`) property test: start from a small/medium board with two bases, then for N iterations mutate 1–3 random cells (place/convert/clear NORMAL/FORTIFIED/NEUTRAL, occasionally a base to exercise the fallback), snapshot old board (deep copy), apply the change to a new board, `applyMove(state, old, new, diffCells(...))`, and assert incremental counts AND float output equal full recompute at EVERY step. Run with activePlayer 1 and 2.
