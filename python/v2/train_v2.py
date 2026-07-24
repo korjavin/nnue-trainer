@@ -99,7 +99,10 @@ def load_examples(path=_DEFAULT_EXAMPLES, dataset_path=_DEFAULT_DATASET,
     `regenerate=True`, then reads it back line by line.
     """
     if regenerate or not os.path.exists(path):
-        from python.v2 import extract_examples
+        try:
+            from python.v2 import extract_examples
+        except ImportError:  # run as a script: python/v2 is on sys.path directly
+            import extract_examples
         extract_examples.main(
             ["--dataset", dataset_path, "--dict", dict_path, "--out", path]
         )

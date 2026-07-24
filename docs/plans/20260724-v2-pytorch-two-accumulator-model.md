@@ -112,11 +112,15 @@ must re-run UNCHANGED on the larger real-WDL corpus from bead d4a.3.4.
 - [x] run tests - must pass before next task
 
 ### Task 4: Verify acceptance criteria
-- [ ] run full suite: `python3 -m unittest discover -s python/v2 -p "*_test.py"`.
-- [ ] run end-to-end: `python3 python/v2/train_v2.py` (default few epochs) on the
+- [x] run full suite: `python3 -m unittest discover -s python/v2 -p "*_test.py"`.
+      (25 tests OK)
+- [x] run end-to-end: `python3 python/v2/train_v2.py` (default few epochs) on the
       real 1048-example corpus; confirm it regenerates examples, trains, prints
-      train/val MSE, and writes the `.pt` + metadata JSON.
-- [ ] confirm num_patterns is read from metadata (grep: no literal 5571 in code).
+      train/val MSE, and writes the `.pt` + metadata JSON. (regenerated 1048
+      examples, train_mse=0.038 val_mse=0.098, wrote .pt + meta; fixed a
+      script-vs-package import so regenerate works under `python3 path/to/train_v2.py`.)
+- [x] confirm num_patterns is read from metadata (grep: no literal 5571 in code).
+      (only occurrence is the test assertion in train_v2_test.py:69, not source.)
 
 ## Technical Details
 

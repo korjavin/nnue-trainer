@@ -39,6 +39,8 @@ build/
 .beads/proxieddb/
 dataset.json
 python/v2/nnue_v2_examples.jsonl
+python/v2/nnue_v2_model.pt
+python/v2/nnue_v2_model_meta.json
 
 # Python venv and run logs
 .venv/
