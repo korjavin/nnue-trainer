@@ -148,15 +148,15 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 5: Verify acceptance criteria
-- [ ] `python3 python/v2/validate_v2.py` runs clean end-to-end, report written
+- [x] `python3 python/v2/validate_v2.py` runs clean end-to-end, report written
       with populated learning curves, v1-vs-v2 numbers, and board-size table.
-- [ ] Report includes the honest-framing and no-overclaim language, and the
+- [x] Report includes the honest-framing and no-overclaim language, and the
       explicit board-size-independence PROVEN statement naming the non-12x12
       sizes that ran.
-- [ ] `git grep -n "12" python/v2/validate_v2.py` shows no 12x12 hardcode in
+- [x] `git grep -n "12" python/v2/validate_v2.py` shows no 12x12 hardcode in
       logic (12x12 may appear only as a listed sanity-anchor size / in prose).
-- [ ] `python3 -m unittest discover -s python/v2 -p "*_test.py"` all green.
-- [ ] Commit the generated `docs/nnue-v2-validation.md` (it is a deliverable,
+- [x] `python3 -m unittest discover -s python/v2 -p "*_test.py"` all green.
+- [x] Commit the generated `docs/nnue-v2-validation.md` (it is a deliverable,
       not gitignored).
 
 ## Technical Details
