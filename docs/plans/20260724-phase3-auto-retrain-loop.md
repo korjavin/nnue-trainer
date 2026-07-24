@@ -62,12 +62,12 @@ cycles correctly.
 ## Implementation Steps
 
 ### Task 1: Offline net-vs-net match harness
-- [ ] add a `GauntletMatch` (mirror `SearchAB`): GoBot search on both sides (`EVAL=NNUE`),
+- [x] add a `GauntletMatch` (mirror `SearchAB`): GoBot search on both sides (`EVAL=NNUE`),
       load champion + challenger via `NNUEModel.load(pathA/pathB)`, play N games alternating colors
       with a fixed node budget + seeds, return `{wins, losses, draws}`; also support a side being
       `HandTunedEval` (challenger-vs-hand-tuned-bar)
-- [ ] unit-test: identical weights → ~even; deterministic given seeds
-- [ ] `./mvnw test` green
+- [x] unit-test: identical weights → ~even; deterministic given seeds
+- [x] `./mvnw test` green
 
 ### Task 2: Promotion decision + champion management
 - [ ] a champion store (e.g. `champions/` dir + a `champion.json` pointer / history log); current
