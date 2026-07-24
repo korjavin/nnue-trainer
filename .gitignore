@@ -41,6 +41,8 @@ dataset.json
 python/v2/nnue_v2_examples.jsonl
 python/v2/nnue_v2_model.pt
 python/v2/nnue_v2_model_meta.json
+# large exported weights blob (regen: python/v2/export_weights.py); keep the small meta
+python/v2/nnue_v2_weights.json
 
 # Python venv and run logs
 .venv/

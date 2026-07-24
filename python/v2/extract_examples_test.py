@@ -6,11 +6,24 @@ import unittest
 
 from python.v2.extract_examples import (
     extract_example,
+    extract_example_corpus,
     pattern_counts,
     wdl_from_target,
 )
-from python.v2.mine_patterns import decode_v1_record, window_signature
+from python.v2.mine_patterns import (
+    _board_from_corpus_line,
+    decode_v1_record,
+    window_signature,
+)
 from python.v2.pattern_contract import Board, Cell, CellKind, PatternContract
+
+
+def _raw_line(rows, cols, entities, stm, wdl):
+    """A v2 raw-board corpus line; entities = [(r, c, kind_name, owner)]."""
+    cells = [[{"kind": "EMPTY", "owner": -1} for _ in range(cols)] for _ in range(rows)]
+    for r, c, kind, owner in entities:
+        cells[r][c] = {"kind": kind, "owner": owner}
+    return {"rows": rows, "cols": cols, "cells": cells, "stm": stm, "wdl": wdl}
 
 
 def _dict_for(board, owners=(1, 2)):
@@ -92,6 +105,41 @@ class ExtractExampleTest(unittest.TestCase):
         rec = self._asymmetric_record(side=5)
         p2id = _dict_for(decode_v1_record(rec["features"]))
         self.assertEqual(extract_example(rec, p2id), extract_example(rec, p2id))
+
+
+class ExtractExampleCorpusTest(unittest.TestCase):
+    def _asym(self, stm=2, wdl=0.5):
+        # owner-1 NORMAL top-left, owner-2 FORTIFIED top-right -> asymmetric.
+        return _raw_line(5, 5, [(0, 0, "NORMAL", 1), (0, 4, "FORTIFIED", 2)], stm, wdl)
+
+    def test_shape_size_and_draw_passthrough(self):
+        obj = self._asym(stm=2, wdl=0.5)
+        board = _board_from_corpus_line(obj)
+        ex = extract_example_corpus(obj, _dict_for(board))
+        self.assertEqual(
+            set(ex),
+            {"stm_pattern_counts", "nstm_pattern_counts", "dense", "rows", "cols", "wdl"},
+        )
+        self.assertEqual(len(ex["dense"]), 14)
+        self.assertEqual((ex["rows"], ex["cols"]), (5, 5))  # board-size-agnostic
+        self.assertEqual(ex["wdl"], 0.5)  # REAL draw passes straight through
+
+    def test_perspective_follows_line_stm(self):
+        # stm=2 => STM perspective is owner 2, NSTM is owner 1 (not hardcoded 1/2).
+        obj = self._asym(stm=2, wdl=1.0)
+        board = _board_from_corpus_line(obj)
+        p2id = _dict_for(board)
+        ex = extract_example_corpus(obj, p2id)
+        self.assertEqual(ex["stm_pattern_counts"], pattern_counts(board, 2, p2id))
+        self.assertEqual(ex["nstm_pattern_counts"], pattern_counts(board, 1, p2id))
+        self.assertNotEqual(ex["stm_pattern_counts"], ex["nstm_pattern_counts"])
+
+    def test_deterministic(self):
+        obj = self._asym(stm=1, wdl=0.0)
+        p2id = _dict_for(_board_from_corpus_line(obj))
+        self.assertEqual(
+            extract_example_corpus(obj, p2id), extract_example_corpus(obj, p2id)
+        )
 
 
 if __name__ == "__main__":

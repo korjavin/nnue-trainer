@@ -19,7 +19,11 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from python.v2.mine_patterns import decode_v1_record, window_signature
+from python.v2.mine_patterns import (
+    _board_from_corpus_line,
+    decode_v1_record,
+    window_signature,
+)
 from python.v2.pattern_contract import CellKind, PatternContract
 from python.v2.dense_features import extract_dense_features
 
@@ -97,9 +101,47 @@ def iter_examples(dataset_path, pattern_to_id):
         yield extract_example(rec, pattern_to_id)
 
 
+def extract_example_corpus(obj, pattern_to_id):
+    """One training example from a v2 raw-board corpus line.
+
+    Schema: {"rows","cols","cells":[[{"kind","owner"},...],...],"stm","wdl"}.
+    The perspective is the line's own `stm` (1 or 2), NOT a fixed owner 1 — so
+    the model sees genuine STM/NSTM splits across both players. `wdl` is the REAL
+    STM-perspective outcome (0.0/0.5/1.0, draws included) and is passed straight
+    through. Board size comes from rows/cols; nothing is hardcoded to 12x12.
+    """
+    board = _board_from_corpus_line(obj)
+    stm = obj["stm"]
+    nstm = 3 - stm  # two-player diagonal-base setup: owners are 1 and 2
+    grid = board_to_grid(board)
+    return {
+        "stm_pattern_counts": pattern_counts(board, stm, pattern_to_id),
+        "nstm_pattern_counts": pattern_counts(board, nstm, pattern_to_id),
+        "dense": extract_dense_features(
+            grid, active_player=stm, turn_number=0, rows=board.rows, cols=board.cols
+        ),
+        "rows": board.rows,
+        "cols": board.cols,
+        "wdl": float(obj["wdl"]),
+    }
+
+
+def iter_examples_corpus(corpus_path, pattern_to_id):
+    """Yield one example per raw-corpus JSONL line, in file order."""
+    with open(corpus_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                yield extract_example_corpus(json.loads(line), pattern_to_id)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Extract NNUE v2 training examples.")
     parser.add_argument("--dataset", default=os.path.join(_REPO_ROOT, "dataset.json"))
+    parser.add_argument(
+        "--corpus", default=None,
+        help="v2 raw-board JSONL corpus (real-outcome WDL); overrides --dataset",
+    )
     parser.add_argument(
         "--dict",
         default=os.path.join(_REPO_ROOT, "python", "v2", "nnue_v2_dictionary.json"),
@@ -112,16 +154,20 @@ def main(argv=None):
 
     pattern_to_id = load_dictionary(args.dict)
 
+    source = args.corpus if args.corpus else args.dataset
+    examples = (iter_examples_corpus(args.corpus, pattern_to_id) if args.corpus
+                else iter_examples(args.dataset, pattern_to_id))
+
     count = 0
     last = None
     with open(args.out, "w") as f:
-        for example in iter_examples(args.dataset, pattern_to_id):
+        for example in examples:
             f.write(json.dumps(example, sort_keys=True))
             f.write("\n")
             last = example
             count += 1
 
-    print("dataset:  %s" % args.dataset)
+    print("dataset:  %s" % source)
     print("dict:     %s" % args.dict)
     print("examples: %d" % count)
     print("wrote:    %s" % args.out)
