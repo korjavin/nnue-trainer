@@ -89,11 +89,19 @@ larger/variable-size corpus (bead d4a.3.4) drops in unchanged.
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — all pass.
 
 ### Task 3: Verify acceptance criteria
-- [ ] Both perspectives present as counted sparse `{id:count}` maps; unseen patterns
-      ignored; counts not normalized for board size.
-- [ ] 14 dense features attached; rows/cols metadata present; WDL from STM perspective.
-- [ ] Deterministic under fixed input + dictionary.
-- [ ] Full test suite green; run the CLI showing example count + sample record.
+- [x] Both perspectives present as counted sparse `{id:count}` maps; unseen patterns
+      ignored; counts not normalized for board size. (proven by
+      `test_counted_and_dict_miss_skipped` -> `{"0": 2}` and
+      `test_stm_nstm_differ_for_asymmetric_board`)
+- [x] 14 dense features attached; rows/cols metadata present; WDL from STM perspective.
+      (`test_shape_and_size`: `len(dense)==14`, `(rows,cols)==(5,5)`, `wdl==1.0`)
+- [x] Deterministic under fixed input + dictionary. (`test_deterministic` +
+      two CLI runs byte-identical via `cmp`)
+- [x] Full test suite green; run the CLI showing example count + sample record.
+      (20/20 tests pass; CLI prints `examples: 5` + a sample record. Note: the
+      placeholder `dataset.json` yields empty pattern maps because its windows do
+      not intersect the larger mining corpus's dictionary — expected; the real
+      corpus lands in bead d4a.3.4.)
 
 ## Technical Details
 - Output artifact: `python/v2/nnue_v2_examples.jsonl`, one JSON object per line:
