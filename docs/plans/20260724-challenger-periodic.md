@@ -91,11 +91,11 @@ Deliberate behavior change — owner-reviewed before merge. Merge target: master
 - [x] run `./mvnw test` — existing HandshakeHandlerTest cases must pass before next task
 
 ### Task 3: Wire HandshakeHandler into BotWebSocketClient lifecycle
-- [ ] in `BotWebSocketClient` constructor, build `gameLoopHandler` first, then
+- [x] in `BotWebSocketClient` constructor, build `gameLoopHandler` first, then
       `new HandshakeHandler(sender, gameLoopHandler::isInGame)`
-- [ ] call `handshakeHandler.start()` to begin the periodic timer
-- [ ] in `shutdown()`, call `handshakeHandler.shutdown()` alongside `worker.shutdownNow()`
-- [ ] run `./mvnw test` — must pass before next task
+- [x] call `handshakeHandler.start()` to begin the periodic timer
+- [x] in `shutdown()`, call `handshakeHandler.shutdown()` alongside `worker.shutdownNow()`
+- [x] run `./mvnw test` — must pass before next task
 
 ### Task 4: Add challenger unit tests
 - [ ] periodic fire: inject a mock `ScheduledExecutorService`, call `start()`, capture the `Runnable`
