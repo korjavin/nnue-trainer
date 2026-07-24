@@ -69,14 +69,14 @@ only, default OFF for anything that isn't the data-gen challenger.
 ## Implementation Steps
 
 ### Task 1: Shared seeded exploration sampler `GoBotExploration`
-- [ ] add `search/gobot/GoBotExploration.java`: immutable config
+- [x] add `search/gobot/GoBotExploration.java`: immutable config
   `{boolean enabled, double temperature, Random random}` plus a static
   `fromEnv(String enableKey, String tempKey, String seedKey, double defaultTemp)`
   reading `CHALLENGER_EXPLORE` (bool gate, default false),
   `CHALLENGER_EXPLORE_TEMP` (softmax temperature), `CHALLENGER_EXPLORE_SEED`
   (long; 0 ⇒ nondeterministic Random, else seeded). Support both system
   property and env (mirror `GameLoopHandler.gobotSearchFromEnv`).
-- [ ] `Action sampleMove(GoResult r)`: when `!enabled` return `r.action`
+- [x] `Action sampleMove(GoResult r)`: when `!enabled` return `r.action`
   (argmax — unchanged). When enabled, build candidate list
   `[(r.action, r.score)] + r.alternatives`, compute softmax weights
   `exp((score - maxScore) / tempScale)` over candidate scores, and sample one
@@ -84,15 +84,15 @@ only, default OFF for anything that isn't the data-gen challenger.
   result (`r.searchComplete && r.depth == 0`, null alternatives) is handled by
   the caller (opening randomizer), so `sampleMove` just returns `r.action`
   there. temperature ≤ 0 ⇒ argmax (deterministic).
-- [ ] `Action sampleOpening(java.util.List<Action> legal)`: when enabled, pick a
+- [x] `Action sampleOpening(java.util.List<Action> legal)`: when enabled, pick a
   uniform-random legal action (on the opening turn the only legal actions are
   sensible near-base placements, so this is a diverse-but-legal opening);
   when disabled, return null so the caller keeps the canonical book move.
-- [ ] write tests `GoBotExplorationTest`: OFF ⇒ `sampleMove` == `r.action`;
+- [x] write tests `GoBotExplorationTest`: OFF ⇒ `sampleMove` == `r.action`;
   ON + seed reproducible (same seed ⇒ same pick); temperature 0 ⇒ argmax; high
   temperature ⇒ can pick a non-best alternative; empty/null alternatives safe;
   `fromEnv` parses gate/temp/seed and defaults to disabled.
-- [ ] run tests — must pass before next task.
+- [x] run tests — must pass before next task.
 
 ### Task 2: Fix A — gate exploration into the LIVE challenger
 - [ ] in `GameLoopHandler`: build a `GoBotExploration` (per-instance, read at
