@@ -67,22 +67,22 @@ must re-run UNCHANGED on the larger real-WDL corpus from bead d4a.3.4.
 ## Implementation Steps
 
 ### Task 1: Model + sparse-batch collation in `train_v2.py`
-- [ ] create `python/v2/train_v2.py` with a `NNUEv2` `nn.Module`: two separate
+- [x] create `python/v2/train_v2.py` with a `NNUEv2` `nn.Module`: two separate
       `nn.EmbeddingBag(num_patterns, W, mode='sum')` (STM, NSTM), then
       `Linear(2*W+14 -> 16) -> ReLU -> Linear(16 -> 32) -> ReLU -> Linear(32 -> 1)`.
       Constructor takes `num_patterns`, `W=1024`, `dense_size=14`.
-- [ ] `forward(stm_ids, stm_off, stm_w, nstm_ids, nstm_off, nstm_w, dense)`:
+- [x] `forward(stm_ids, stm_off, stm_w, nstm_ids, nstm_off, nstm_w, dense)`:
       call each EmbeddingBag with `per_sample_weights`, concat with dense, run
       the dense stack, return raw scalar per example.
-- [ ] add a collate helper turning a list of example dicts into the flat
+- [x] add a collate helper turning a list of example dicts into the flat
       `(ids, offsets, per_sample_weights)` EmbeddingBag tensors for STM and NSTM
       plus a dense tensor and a wdl target tensor. Empty bags -> offset points
       past end / zero-length slice yielding a zero accumulator (no crash).
-- [ ] write test: forward pass output shape `(batch,)`; gradients flow to both
+- [x] write test: forward pass output shape `(batch,)`; gradients flow to both
       EmbeddingBag weights after a backward pass.
-- [ ] write test: an example with empty `stm_pattern_counts` (dict-miss) yields
+- [x] write test: an example with empty `stm_pattern_counts` (dict-miss) yields
       a finite loss and a zero STM accumulator contribution (no NaN/crash).
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 2: Data loading + deterministic training loop
 - [ ] add `load_examples(path)` reading the JSONL; add a `regenerate_examples`
