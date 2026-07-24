@@ -95,22 +95,22 @@ only, default OFF for anything that isn't the data-gen challenger.
 - [x] run tests — must pass before next task.
 
 ### Task 2: Fix A — gate exploration into the LIVE challenger
-- [ ] in `GameLoopHandler`: build a `GoBotExploration` (per-instance, read at
+- [x] in `GameLoopHandler`: build a `GoBotExploration` (per-instance, read at
   construction like `useGobotSearch`) from `CHALLENGER_EXPLORE*`.
-- [ ] in `gobotSearch(...)`: after obtaining `r`, if exploration enabled and `r`
+- [x] in `gobotSearch(...)`: after obtaining `r`, if exploration enabled and `r`
   is a book move (`searchComplete && depth == 0`), replace the chosen action
   with `sampleOpening(gs.legalActions())`; otherwise replace with
   `sampleMove(r)`. Rebuild the returned `SearchResult` around the chosen
   action (keep score/depth/nodes diagnostics from `r`). When disabled, the code
   path and returned action are unchanged (still `r.action`).
-- [ ] keep the existing `GOBOT_FIXED_DEPTH` / `GOBOT_NODE_LIMIT` /
+- [x] keep the existing `GOBOT_FIXED_DEPTH` / `GOBOT_NODE_LIMIT` /
   `GOBOT_TIME_MODE` env handling intact.
-- [ ] write tests `ChallengerExploreTest`: with exploration OFF the adapted
+- [x] write tests `ChallengerExploreTest`: with exploration OFF the adapted
   action equals plain `chooseNodeBudget` best action for a mid-game position;
   with ON + fixed seed the selection is reproducible across two constructions;
   opening position with ON yields a legal placement (may differ from the
   canonical book move).
-- [ ] run tests — must pass before next task.
+- [x] run tests — must pass before next task.
 
 ### Task 3: Fix B — offline SelfPlayGenerator sampling across all turns + dedup
 - [ ] add `Config` fields `exploreTemperature` (default 0.0 = keep existing
