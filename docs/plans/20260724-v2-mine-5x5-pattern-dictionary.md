@@ -92,18 +92,18 @@ pattern dictionary from REAL game positions. The pipeline:
 - [x] write tests (Task 2) — do not proceed until they pass. (tests are Task 2, next iteration; core smoke-verified)
 
 ### Task 2: `python/v2/mine_patterns_test.py`
-- [ ] test `window_signature` is stable/deterministic for a known Window.
-- [ ] test `decode_v1_record` round-trips a hand-built 864-vector (place a
+- [x] test `window_signature` is stable/deterministic for a known Window.
+- [x] test `decode_v1_record` round-trips a hand-built 864-vector (place a
       NORMAL_self, a NORMAL_opp, a NEUTRAL) into the right cells and that a
       non-square/short vector raises.
-- [ ] test `count_signatures` on a tiny synthetic board counts the expected
+- [x] test `count_signatures` on a tiny synthetic board counts the expected
       number of active windows (reuse the contract's known emission counts).
-- [ ] test `build_dictionary` promotes only `count >= min_count`, assigns
+- [x] test `build_dictionary` promotes only `count >= min_count`, assigns
       contiguous ids `0..N-1`, and is deterministic (same input twice → identical
       map).
-- [ ] test determinism end-to-end: mining the same list of boards twice yields
+- [x] test determinism end-to-end: mining the same list of boards twice yields
       byte-identical serialized `pattern_to_id`.
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 3: CLI export + generate the `nnue_v2_dictionary.json` artifact
 - [ ] add `export_dictionary(pattern_to_id, min_count, out_path)` writing
