@@ -72,15 +72,50 @@ def iter_boards(dataset_path):
         yield decode_v1_record(rec["features"])
 
 
+def _board_from_corpus_line(obj):
+    """Build a pattern_contract.Board from one v2 raw-position dict.
+
+    Schema: {"rows","cols","cells":[[{"kind","owner"},...],...],"stm","wdl"}.
+    owner is -1 for EMPTY/NEUTRAL. Board size comes from rows/cols (any size).
+    """
+    board = Board(obj["rows"], obj["cols"])
+    for r, row in enumerate(obj["cells"]):
+        for c, cell in enumerate(row):
+            kind = CellKind[cell["kind"]]
+            if kind != CellKind.EMPTY:
+                board.set_cell(r, c, Cell(cell["owner"], kind))
+    return board
+
+
+def iter_boards_corpus(corpus_path):
+    """Yield (Board, stm_owner) per JSONL line, in file order.
+
+    Each line is one v2 raw position; stm is that position's perspective.
+    """
+    with open(corpus_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            yield _board_from_corpus_line(obj), obj["stm"]
+
+
 def count_signatures(boards, stm_owner=1):
     """Count window signatures across boards.
 
+    Each item is either a Board (uses stm_owner) or a (Board, stm_owner) pair —
+    the corpus reader yields pairs so each position uses its own perspective.
     Returns (Counter, total_window_count).
     """
     counter = collections.Counter()
     total = 0
-    for board in boards:
-        for window in PatternContract.extract_windows(board, stm_owner):
+    for item in boards:
+        if isinstance(item, tuple):
+            board, owner = item
+        else:
+            board, owner = item, stm_owner
+        for window in PatternContract.extract_windows(board, owner):
             counter[window_signature(window)] += 1
             total += 1
     return counter, total
@@ -117,19 +152,25 @@ def export_dictionary(pattern_to_id, min_count, out_path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Mine 5x5 pattern dictionary.")
     parser.add_argument("--dataset", default=os.path.join(_REPO_ROOT, "dataset.json"))
+    parser.add_argument(
+        "--corpus", default=None,
+        help="v2 raw-position JSONL corpus; overrides --dataset when given",
+    )
     parser.add_argument("--min-count", type=int, default=5)
     parser.add_argument(
         "--out", default=os.path.join(_REPO_ROOT, "python", "v2", "nnue_v2_dictionary.json")
     )
     args = parser.parse_args(argv)
 
-    counter, total = count_signatures(iter_boards(args.dataset))
+    source = args.corpus if args.corpus else args.dataset
+    boards = iter_boards_corpus(args.corpus) if args.corpus else iter_boards(args.dataset)
+    counter, total = count_signatures(boards)
     pattern_to_id, retained, promoted_occ = build_dictionary(counter, args.min_count)
     coverage = (promoted_occ / total * 100.0) if total else 0.0
 
     export_dictionary(pattern_to_id, args.min_count, args.out)
 
-    print("dataset:            %s" % args.dataset)
+    print("source:             %s" % source)
     print("total windows:      %d" % total)
     print("distinct signatures:%d" % len(counter))
     print("min_count:          %d" % args.min_count)

@@ -82,15 +82,16 @@ Merge target: `nnue-v2-3.2-mining` branch (stacked PR), NOT master / v2.
 - [x] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — passes (7/7)
 
 ### Task 3: mine_patterns.py --corpus reader
-- [ ] add `iter_boards_corpus(path)` in `mine_patterns.py`: read JSONL, map kind string
+- [x] add `iter_boards_corpus(path)` in `mine_patterns.py`: read JSONL, map kind string
       → `CellKind`, set owner, build `pattern_contract.Board` (size from rows/cols)
-- [ ] mine each corpus board with `stm_owner = line["stm"]` (per-position perspective)
-- [ ] add `--corpus` arg to `main`; when given, use corpus iterator instead of
+- [x] mine each corpus board with `stm_owner = line["stm"]` (per-position perspective) —
+      iter yields `(board, stm)` pairs; `count_signatures` uses per-position perspective
+- [x] add `--corpus` arg to `main`; when given, use corpus iterator instead of
       `--dataset`; keep the dataset path working unchanged
-- [ ] write test in `mine_patterns_test.py`: a tiny inline JSONL corpus round-trips
+- [x] write test in `mine_patterns_test.py`: a tiny inline JSONL corpus round-trips
       through `iter_boards_corpus` → `count_signatures` → `build_dictionary` (size-agnostic,
       e.g. a 7x7 line), asserting boards reconstruct and dictionary builds
-- [ ] run `python3 python/v2/mine_patterns_test.py` — must pass before next task
+- [x] run `python3 python/v2/mine_patterns_test.py` — passes (10/10; run with `PYTHONPATH=.`)
 
 ### Task 4: Corpus generation script + manifest
 - [ ] add `scripts/gen_v2_corpus.sh`: compile, then loop board sizes
