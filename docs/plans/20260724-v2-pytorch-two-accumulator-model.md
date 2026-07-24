@@ -85,21 +85,21 @@ must re-run UNCHANGED on the larger real-WDL corpus from bead d4a.3.4.
 - [x] run tests - must pass before next task
 
 ### Task 2: Data loading + deterministic training loop
-- [ ] add `load_examples(path)` reading the JSONL; add a `regenerate_examples`
+- [x] add `load_examples(path)` reading the JSONL; add a `regenerate_examples`
       path that imports `extract_examples` and calls its `main`/`iter_examples`
       to (re)produce the gitignored JSONL when missing or `--regenerate`.
-- [ ] add `read_num_patterns(dict_path)` from `metadata.num_patterns` (assert
+- [x] add `read_num_patterns(dict_path)` from `metadata.num_patterns` (assert
       present; never hardcode).
-- [ ] add `set_seed(seed)` seeding python `random`, numpy, torch; deterministic
+- [x] add `set_seed(seed)` seeding python `random`, numpy, torch; deterministic
       train/val split (default 0.8/0.2) via a seeded generator.
-- [ ] add `train(...)`: few epochs default (configurable `--epochs`,
+- [x] add `train(...)`: few epochs default (configurable `--epochs`,
       `--batch-size`, `--lr`, `--width`, `--seed`), MSE loss, Adam; return final
       train MSE and val MSE.
-- [ ] write test: two runs with the same seed give identical train/val MSE
+- [x] write test: two runs with the same seed give identical train/val MSE
       (determinism), on a small synthetic in-memory example list.
-- [ ] write test: `read_num_patterns` reads the real dictionary metadata (5571)
+- [x] write test: `read_num_patterns` reads the real dictionary metadata (5571)
       and is not a hardcoded constant.
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 3: CLI, model + metadata save, MSE report
 - [ ] add `main(argv)` / `__main__`: parse args (`--dataset`, `--dict`,
