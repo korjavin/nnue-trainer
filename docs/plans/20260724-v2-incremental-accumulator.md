@@ -110,11 +110,11 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 - [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — existing parity + multiplicativity tests must still pass before Task 3.
 
 ### Task 3: Implement the incremental applyMove
-- [ ] Add `public void applyMove(State state, Board oldBoard, Board newBoard, java.util.Collection<Pos> changedCells)` using `state.activePlayer` (STM=activePlayer, NSTM=3-activePlayer). No-op when `hiddenWeights == null`? No — counts are weight-independent, so still update counts (output derives correctly regardless).
-- [ ] Per perspective owner: compute `oldBase = findEnemyBase(oldBoard, owner)` and `newBase = findEnemyBase(newBoard, owner)`; if `!Objects.equals(oldBase,newBase)` replace that perspective's counts with `countPatterns(newBoard, owner)` (full recompute fallback for board-wide bucket shift) and return.
-- [ ] Otherwise build the deduped union of affected centers (`|wr-cr|<=2 && |wc-cc|<=2`, valid on newBoard) via a `Set`; for each center compute `oldId = idAt(oldBoard,...,oldBase)` and `newId = idAt(newBoard,...,newBase)`; if `oldId == newId` skip; else `dec(counts,oldId)` when `oldId>=0` (remove entry at 0) and `inc(counts,newId)` when `newId>=0`.
-- [ ] Add a `public static java.util.List<Pos> diffCells(Board oldBoard, Board newBoard)` convenience helper (cells differing by `Cell.equals`; requires same dims) so callers/tests can derive `changedCells` honestly.
-- [ ] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 4.
+- [x] Add `public void applyMove(State state, Board oldBoard, Board newBoard, java.util.Collection<Pos> changedCells)` using `state.activePlayer` (STM=activePlayer, NSTM=3-activePlayer). No-op when `hiddenWeights == null`? No — counts are weight-independent, so still update counts (output derives correctly regardless).
+- [x] Per perspective owner: compute `oldBase = findEnemyBase(oldBoard, owner)` and `newBase = findEnemyBase(newBoard, owner)`; if `!Objects.equals(oldBase,newBase)` replace that perspective's counts with `countPatterns(newBoard, owner)` (full recompute fallback for board-wide bucket shift) and return.
+- [x] Otherwise build the deduped union of affected centers (`|wr-cr|<=2 && |wc-cc|<=2`, valid on newBoard) via a `Set`; for each center compute `oldId = idAt(oldBoard,...,oldBase)` and `newId = idAt(newBoard,...,newBase)`; if `oldId == newId` skip; else `dec(counts,oldId)` when `oldId>=0` (remove entry at 0) and `inc(counts,newId)` when `newId>=0`.
+- [x] Add a `public static java.util.List<Pos> diffCells(Board oldBoard, Board newBoard)` convenience helper (cells differing by `Cell.equals`; requires same dims) so callers/tests can derive `changedCells` honestly.
+- [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 4.
 
 ### Task 4: Parity tests for every required case
 - [ ] Add a helper in the test that loads the real dictionary and builds an accumulator with deterministic non-trivial `float[numPatterns][K]` weights (e.g. `weights[id][i] = (float)((id*31 + i) % 7) - 3`) and a non-null bias, so float parity is a real check (not all-ones).

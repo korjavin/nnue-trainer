@@ -1,13 +1,17 @@
 package com.engine.nnue_trainer.v2;
 
 import com.engine.nnue_trainer.board.Board;
+import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.Pos;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * v2 accumulator over the canonical 3.1 pattern contract. Builds window
@@ -170,6 +174,92 @@ public class NNUEv2Accumulator {
       counts.merge(id, 1, Integer::sum);
     }
     return counts;
+  }
+
+  /**
+   * Incrementally updates {@code state} from {@code oldBoard} to {@code newBoard} given the changed
+   * cells, keeping both count maps EXACTLY equal to a full recompute on {@code newBoard}. Counts are
+   * weight-independent, so this runs regardless of null weights (the derived output stays correct).
+   * Updates both STM (owner = activePlayer) and NSTM (owner = 3 - activePlayer) perspectives.
+   */
+  public void applyMove(
+      State state, Board oldBoard, Board newBoard, Collection<Pos> changedCells) {
+    int stm = state.activePlayer;
+    applyPerspective(state.stmCounts, oldBoard, newBoard, stm, changedCells);
+    applyPerspective(state.nstmCounts, oldBoard, newBoard, 3 - stm, changedCells);
+  }
+
+  private void applyPerspective(
+      Map<Integer, Integer> counts,
+      Board oldBoard,
+      Board newBoard,
+      int owner,
+      Collection<Pos> changedCells) {
+    Pos oldBase = PatternContract.findEnemyBase(oldBoard, owner);
+    Pos newBase = PatternContract.findEnemyBase(newBoard, owner);
+    if (!Objects.equals(oldBase, newBase)) {
+      // The enemy base moved, which shifts every window's distance bucket: no local invariant holds,
+      // so recompute this perspective in full.
+      counts.clear();
+      counts.putAll(countPatterns(newBoard, owner));
+      return;
+    }
+    // Deduped union of window centers overlapping any changed cell (radius 2 == 5x5), so each
+    // affected window is processed exactly once even when multiple cells share it.
+    Set<Long> centers = new HashSet<>();
+    for (Pos changed : changedCells) {
+      for (int wr = changed.row - 2; wr <= changed.row + 2; wr++) {
+        for (int wc = changed.col - 2; wc <= changed.col + 2; wc++) {
+          if (newBoard.isValidPos(wr, wc)) {
+            centers.add(((long) wr << 32) | (wc & 0xffffffffL));
+          }
+        }
+      }
+    }
+    for (long packed : centers) {
+      int wr = (int) (packed >> 32);
+      int wc = (int) packed;
+      int oldId = idAt(oldBoard, wr, wc, owner, oldBase);
+      int newId = idAt(newBoard, wr, wc, owner, newBase);
+      if (oldId == newId) {
+        continue;
+      }
+      if (oldId >= 0) {
+        dec(counts, oldId);
+      }
+      if (newId >= 0) {
+        counts.merge(newId, 1, Integer::sum);
+      }
+    }
+  }
+
+  /** Decrements {@code id}'s count, dropping the entry at zero (full recompute never stores zeros). */
+  private static void dec(Map<Integer, Integer> counts, int id) {
+    Integer v = counts.get(id);
+    if (v == null) {
+      return;
+    }
+    if (v <= 1) {
+      counts.remove(id);
+    } else {
+      counts.put(id, v - 1);
+    }
+  }
+
+  /** Cells differing by {@link Cell#equals} between two same-dimension boards. */
+  public static List<Pos> diffCells(Board oldBoard, Board newBoard) {
+    if (oldBoard.rows != newBoard.rows || oldBoard.cols != newBoard.cols) {
+      throw new IllegalArgumentException("diffCells requires same-dimension boards");
+    }
+    List<Pos> diff = new ArrayList<>();
+    for (int r = 0; r < oldBoard.rows; r++) {
+      for (int c = 0; c < oldBoard.cols; c++) {
+        if (!Objects.equals(oldBoard.getCell(r, c), newBoard.getCell(r, c))) {
+          diff.add(new Pos(r, c));
+        }
+      }
+    }
+    return diff;
   }
 
   public float[] computeFull(Board board, int activePlayer, float[] denseFeatures) {
