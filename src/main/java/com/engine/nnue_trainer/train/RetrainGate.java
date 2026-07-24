@@ -9,13 +9,14 @@ import java.nio.file.Path;
 /**
  * Phase 3 Task 3: the per-generation promotion gate, one process invocation per generation. Given a
  * freshly-trained challenger and the current champion ({@code nnue_weights.json}), it plays the
- * three offline {@link GauntletMatch}es the {@link ChampionStore} rule needs — challenger-vs-champion,
- * challenger-vs-bar, champion-vs-bar — applies {@link ChampionStore#shouldPromote}, then promotes
- * (atomically overwrites the champion) or keeps, appending a history line either way.
+ * three offline {@link GauntletMatch}es the {@link ChampionStore} rule needs —
+ * challenger-vs-champion, challenger-vs-bar, champion-vs-bar — applies {@link
+ * ChampionStore#shouldPromote}, then promotes (atomically overwrites the champion) or keeps,
+ * appending a history line either way.
  *
- * <p>The bash loop {@code td_retrain_loop.sh} trains the challenger and calls this once per gen; the
- * decision + weights mutation live here (in Java) so the loop never parses match output or races on
- * the weights file.
+ * <p>The bash loop {@code td_retrain_loop.sh} trains the challenger and calls this once per gen;
+ * the decision + weights mutation live here (in Java) so the loop never parses match output or
+ * races on the weights file.
  *
  * <p>Run: {@code java -cp <cp> com.engine.nnue_trainer.train.RetrainGate <gen> <challenger.json>
  * <champion.json> <history.log>}. Env knobs: {@code GAUNTLET_GAMES}, {@code GAUNTLET_NODE_LIMIT},
@@ -46,7 +47,8 @@ public final class RetrainGate {
 
   public static void main(String[] args) throws IOException {
     if (args.length < 4) {
-      System.err.println("usage: RetrainGate <gen> <challenger.json> <champion.json> <history.log>");
+      System.err.println(
+          "usage: RetrainGate <gen> <challenger.json> <champion.json> <history.log>");
       System.exit(2);
     }
     int gen = Integer.parseInt(args[0]);

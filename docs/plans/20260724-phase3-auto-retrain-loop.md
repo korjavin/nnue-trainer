@@ -90,12 +90,14 @@ cycles correctly.
 - [x] `./mvnw test` green (logic unit-tested; the script itself smoke-run once)
 
 ### Task 4: Safety + sanity
-- [ ] never mutate `nnue_weights.json` except via a passed promotion (atomic: write temp, then move)
-- [ ] optional periodic live sanity: every K generations, run `eval_java_vs_go.py` vs GoBot and log
-      (off by default — it's slow); champion-vs-hand-tuned offline check each gen instead
-- [ ] a small integration smoke: 1 generation, tiny settings, asserts champion only changes on a
-      real improvement and the run log is written
-- [ ] `./mvnw test` green; `./mvnw spotless:check` clean
+- [x] never mutate `nnue_weights.json` except via a passed promotion (atomic: write temp, then move)
+      — `ChampionStore.atomicReplace` runs only inside `promote()`; training writes the challenger to
+      `OUT_PATH=$CHALLENGER` (inherited by `train.py`), never the champion
+- [x] optional periodic live sanity: every K generations, run `eval_java_vs_go.py` vs GoBot and log
+      (off by default — `LIVE_SANITY_EVERY=0`); champion-vs-hand-tuned offline check each gen instead
+- [x] a small integration smoke: 1 generation, tiny settings, asserts champion only changes on a
+      real improvement and the run log is written (`RetrainSmokeTest`)
+- [x] `./mvnw test` green; `./mvnw spotless:check` clean
 
 ### Task 5: Verify + notes
 - [ ] full suite green, spotless clean, weights untouched unless a genuine promotion in a smoke

@@ -17,6 +17,8 @@
 #   PROMOTE_MARGIN=2         # challenger must win the gate match by (wins-losses) >= this
 #   GAUNTLET_GAMES=8         # games per gate match (challenger-vs-champion / vs hand-tuned bar)
 #   GAUNTLET_NODE_LIMIT=60000  GAUNTLET_SEED=1
+#   LIVE_SANITY_EVERY=0      # >0: every K gens also run the slow live vs-GoBot check and log it
+#   LIVE_SANITY_GAMES=20     # games for that live check (needs sibling ../virusgame; see skill)
 #   CHAMPION=src/main/resources/nnue_weights.json   RUN_LOG=champions/run.log
 #   Self-play knobs pass straight through to td_leaf_pass_gobot.sh: NUM_GAMES, EPSILON,
 #   EXPLORE_TURNS, GOBOT_NODE_LIMIT, TD_LAMBDA, SEED, MAX_TURNS ...
@@ -31,6 +33,8 @@ fi
 
 : "${GENERATIONS:=1}"
 : "${MAX_WALL_SECONDS:=3600}"
+: "${LIVE_SANITY_EVERY:=0}"
+: "${LIVE_SANITY_GAMES:=20}"
 : "${CHAMPION:=src/main/resources/nnue_weights.json}"
 : "${CHALLENGER:=target/challenger.json}"
 : "${RUN_LOG:=champions/run.log}"
@@ -71,6 +75,18 @@ for gen in $(seq 1 "$GENERATIONS"); do
 
   wl=$(echo "$gateout" | grep -oE 'vsChampion=\[[^]]*\]' | head -1)
   echo "gen=$gen valMSE=$val ${wl:-vsChampion=?} promoted=$promoted" | tee -a "$RUN_LOG"
+
+  # Optional slow live vs-GoBot sanity (off by default): the offline gate is the real per-gen
+  # decision; this is a periodic reality-check on the deployed champion only.
+  if [ "$LIVE_SANITY_EVERY" -gt 0 ] && [ $((gen % LIVE_SANITY_EVERY)) -eq 0 ]; then
+    if [ -f eval_java_vs_go.py ]; then
+      echo ">> live sanity: champion vs GoBot ($LIVE_SANITY_GAMES games) — slow"
+      sanity=$(python3 eval_java_vs_go.py "$LIVE_SANITY_GAMES" 2>&1 | tail -1)
+      echo "gen=$gen liveSanity: $sanity" | tee -a "$RUN_LOG"
+    else
+      echo ">> live sanity requested but eval_java_vs_go.py missing — skipping" | tee -a "$RUN_LOG"
+    fi
+  fi
 done
 
 echo ">> loop done. run log: $RUN_LOG"
