@@ -162,7 +162,7 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
     # A random model would otherwise be saved as if trained.
     if not train_ex:
         raise ValueError(
-            f"empty training split (examples={n}, val_frac={val_frac}); "
+            f"empty training split (examples={len(examples)}, val_frac={val_frac}); "
             "need at least one training example")
 
     model = NNUEv2(num_patterns, W=W)

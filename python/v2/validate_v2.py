@@ -311,9 +311,10 @@ def write_report(path, v2_result, v1_result, proof_rows):
     L.append("")
     L.append("- The sparse accumulator sums per-pattern embeddings; it has no "
              "board-size dimension, so it is size-agnostic by construction.")
-    L.append("- The distance bucket in the pattern contract is derived from the "
-             "enemy-base Manhattan distance, which normalizes by board size — "
-             "not a fixed 12x12 grid position.")
+    L.append("- The distance bucket in the pattern contract is the absolute "
+             "enemy-base Manhattan distance clamped to a fixed 0-7 range — "
+             "computed from real board positions with no hardcoded 12x12 grid "
+             "assumption.")
     L.append("- Small boards match FEW dictionary patterns (the dictionary was "
              "mined from 12x12 games), yet still evaluate to a finite scalar via "
              "the dense channel plus zeroed accumulators. The low match counts "

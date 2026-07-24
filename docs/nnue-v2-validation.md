@@ -70,7 +70,7 @@ The SAME trained model and SAME 12x12-mined dictionary evaluate boards of arbitr
 **Why this works structurally:**
 
 - The sparse accumulator sums per-pattern embeddings; it has no board-size dimension, so it is size-agnostic by construction.
-- The distance bucket in the pattern contract is derived from the enemy-base Manhattan distance, which normalizes by board size — not a fixed 12x12 grid position.
+- The distance bucket in the pattern contract is the absolute enemy-base Manhattan distance clamped to a fixed 0-7 range — computed from real board positions with no hardcoded 12x12 grid assumption.
 - Small boards match FEW dictionary patterns (the dictionary was mined from 12x12 games), yet still evaluate to a finite scalar via the dense channel plus zeroed accumulators. The low match counts are honest evidence that the pipeline degrades gracefully rather than crashing or asserting a fixed size.
 
 **PROVEN across sizes 5x5, 5x7, 7x9, 9x9 with no code changes** (12x12 included as a sanity anchor). Every eval above is finite and scalar-shaped.
