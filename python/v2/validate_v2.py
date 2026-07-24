@@ -269,6 +269,11 @@ def write_report(path, v2_result, v1_result, proof_rows):
     L.append("- Directional accuracy is given as the closest common-ground "
              "metric (does the sign / side agree with the label). No overclaim "
              "is made from the MSE columns.")
+    L.append("- Even the directional-accuracy column is NOT on matched samples: "
+             "each model's accuracy is on its OWN held-out split (different "
+             "val fractions) using each label space's natural threshold "
+             "(v1: sign vs 0; v2: pred vs 0.5). Compare directions of agreement, "
+             "not a head-to-head on identical positions.")
     L.append("")
     if v1_result.get("available"):
         L.append("| model | val MSE | train MSE | const floor | dir. acc |")
@@ -329,9 +334,9 @@ def write_report(path, v2_result, v1_result, proof_rows):
     # (d) honest framing
     L.append("## 4. Honest framing (read this)")
     L.append("")
-    L.append("- The corpus is 1048 examples whose WDL labels come from the "
-             "SIGN of v1's continuous target — there are no real draws and the "
-             "dataset is tiny.")
+    L.append(f"- The corpus is {v2_result['dataset_size']} examples whose WDL "
+             "labels come from the SIGN of v1's continuous target — there are no "
+             "real draws and the dataset is tiny.")
     L.append("- This report validates the v2 REPRESENTATION, the training/eval "
              "PLUMBING, and BOARD-SIZE GENERALITY.")
     L.append("- It does NOT and MUST NOT claim the bot is competitively "
