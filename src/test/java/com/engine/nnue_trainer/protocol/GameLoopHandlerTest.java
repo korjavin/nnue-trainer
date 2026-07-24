@@ -67,36 +67,47 @@ public class GameLoopHandlerTest {
   @Test
   public void testUsesInjectedSearchEngine() {
     messageSender = mock(MessageSender.class);
-    gameLoopHandler =
-        new GameLoopHandler(
-            messageSender,
-            new SearchEngine() {
-              @Override
-              public SearchResult findBestActionWithTimeLimitUsingModel(
-                  Board board, int player, long timeLimitMs, boolean canPlaceNeutral) {
-                return new SearchResult(new MoveAction(new Pos(1, 2)), 1.0f, 1, 1, 1);
-              }
-            });
+    // Default search is now the GoBot engine; opt into the injected negamax engine for this test.
+    String prev = System.getProperty("SEARCH");
+    System.setProperty("SEARCH", "NEGAMAX");
+    try {
+      gameLoopHandler =
+          new GameLoopHandler(
+              messageSender,
+              new SearchEngine() {
+                @Override
+                public SearchResult findBestActionWithTimeLimitUsingModel(
+                    Board board, int player, long timeLimitMs, boolean canPlaceNeutral) {
+                  return new SearchResult(new MoveAction(new Pos(1, 2)), 1.0f, 1, 1, 1);
+                }
+              });
 
-    gameLoopHandler.handleMessage(
-        "{\"type\":\"multiplayer_game_start\",\"gameId\":\"game-123\",\"yourPlayer\":1,"
-            + "\"snapshot\":{"
-            + "  \"rows\":3,\"cols\":3,"
-            + "  \"currentPlayer\":1,"
-            + "  \"movesLeft\":3,"
-            + "  \"gameOver\":false,"
-            + "  \"neutralUsed\":[false,false],"
-            + "  \"board\":["
-            + "    [{\"Owner\":1,\"Kind\":2},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
-            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
-            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":2,\"Kind\":2}]"
-            + "  ]"
-            + "}}");
+      gameLoopHandler.handleMessage(
+          "{\"type\":\"multiplayer_game_start\",\"gameId\":\"game-123\",\"yourPlayer\":1,"
+              + "\"snapshot\":{"
+              + "  \"rows\":3,\"cols\":3,"
+              + "  \"currentPlayer\":1,"
+              + "  \"movesLeft\":3,"
+              + "  \"gameOver\":false,"
+              + "  \"neutralUsed\":[false,false],"
+              + "  \"board\":["
+              + "    [{\"Owner\":1,\"Kind\":2},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+              + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+              + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":2,\"Kind\":2}]"
+              + "  ]"
+              + "}}");
 
-    ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-    verify(messageSender).send(messageCaptor.capture());
-    String sentMessage = messageCaptor.getValue();
-    assertTrue(sentMessage.contains("\"row\":1"));
-    assertTrue(sentMessage.contains("\"col\":2"));
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      verify(messageSender).send(messageCaptor.capture());
+      String sentMessage = messageCaptor.getValue();
+      assertTrue(sentMessage.contains("\"row\":1"));
+      assertTrue(sentMessage.contains("\"col\":2"));
+    } finally {
+      if (prev == null) {
+        System.clearProperty("SEARCH");
+      } else {
+        System.setProperty("SEARCH", prev);
+      }
+    }
   }
 }

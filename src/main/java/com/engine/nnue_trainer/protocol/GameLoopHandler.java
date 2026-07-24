@@ -178,7 +178,8 @@ public class GameLoopHandler {
 
   // SEARCH=GOBOT selects the ported GoBot search (book -> iterative-deepening minimax -> HandTuned
   // leaf); with EVAL=HANDTUNED that is a GoBot clone by construction. Mirrors EVAL detection.
-  private static final boolean USE_GOBOT_SEARCH = gobotSearchFromEnv();
+  // Read at construction (not class-load) so the SEARCH flag is honoured per instance and testable.
+  private final boolean useGobotSearch = gobotSearchFromEnv();
 
   // Per-move node budget for the deterministic live GoBot search. ~GoBot's 1s worth of nodes and
   // then some (GoBot does ~17-55k/move); at 60k the clone beats GoBot 6-0. Overridable via env.
@@ -241,7 +242,7 @@ public class GameLoopHandler {
   private void makeMove(
       JsonNode snapshot, Board board, boolean canPlaceNeutral, boolean[] neutralUsed) {
     SearchResult searchResult =
-        USE_GOBOT_SEARCH
+        useGobotSearch
             ? gobotSearch(snapshot, neutralUsed)
             : searchEngine.findBestActionWithTimeLimitUsingModel(
                 board, myPlayerIndex, 5000, canPlaceNeutral);
