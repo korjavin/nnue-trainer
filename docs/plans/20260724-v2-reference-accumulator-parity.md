@@ -128,12 +128,16 @@ side only.
       (3 tests, 0 failures; jacoco.skip used since single-class run trips the coverage gate.)
 
 ### Task 4: Verify acceptance criteria
-- [ ] Variable board size + OOB handled (fixture includes a non-12x12 and a
+- [x] Variable board size + OOB handled (fixture includes a non-12x12 and a
       corner/edge board); no 12x12 hardcode anywhere in the accumulator.
-- [ ] Unseen patterns ignored (lookup -1 skipped), counts (not booleans) used.
-- [ ] STM/NSTM canonicalization matches the contract (perspective owner passed to
-      `extractWindows`).
-- [ ] run full v2 suite: `./mvnw test -Dtest='com.engine.nnue_trainer.v2.*'`.
+      (fixture: non_square 5x8 + corners board; grep for "12" in accumulator empty.)
+- [x] Unseen patterns ignored (lookup -1 skipped), counts (not booleans) used.
+      (`if (id < 0) continue;` + `counts.merge(id, 1, Integer::sum)`.)
+- [x] STM/NSTM canonicalization matches the contract (perspective owner passed to
+      `extractWindows`). (`activePlayer` for STM, `3 - activePlayer` for NSTM.)
+- [x] run full v2 suite (surefire glob `.*` matches no tests; list classes instead):
+      `./mvnw test -Dtest='DenseFeaturesTest,NNUEv2AccumulatorTest,PatternContractTest,PatternDictionaryTest' -Djacoco.skip=true`
+      — 11 tests, 0 failures, BUILD SUCCESS.
 
 ## Technical Details
 
