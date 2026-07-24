@@ -36,18 +36,6 @@ V2_SEED = 0
 V2_VAL_FRAC = 0.2
 
 
-def _split_indices(n, val_frac, seed):
-    """Replicate train_v2.train_model's held-out split so we can score the same
-    val set (train_model does the split internally and does not expose it)."""
-    gen = torch.Generator().manual_seed(seed)
-    perm = torch.randperm(n, generator=gen).tolist()
-    n_val = int(round(n * val_frac))
-    val_idx = set(perm[:n_val])
-    train_ex = [i for i in range(n) if i not in val_idx]
-    val_ex = [i for i in range(n) if i in val_idx]
-    return train_ex, val_ex
-
-
 def _v2_predictions(model, examples, batch_size=1024):
     """Model WDL predictions over `examples`, in order."""
     model.eval()
@@ -55,10 +43,7 @@ def _v2_predictions(model, examples, batch_size=1024):
     with torch.no_grad():
         for start in range(0, len(examples), batch_size):
             batch = train_v2.collate(examples[start:start + batch_size])
-            out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
-                        batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
-                        batch["dense"])
-            preds.extend(out.tolist())
+            preds.extend(train_v2.forward_batch(model, batch).tolist())
     return preds
 
 
@@ -81,7 +66,8 @@ def run_v2_training(dict_path=None, examples_path=None):
         lr=V2_LR, seed=V2_SEED, val_frac=V2_VAL_FRAC,
         on_epoch=lambda e, tr, va: curve.append((e, tr, va)))
 
-    train_i, val_i = _split_indices(len(examples), V2_VAL_FRAC, V2_SEED)
+    gen = torch.Generator().manual_seed(V2_SEED)
+    train_i, val_i = train_v2.split_indices(len(examples), V2_VAL_FRAC, gen)
     train_wdl = [examples[i]["wdl"] for i in train_i]
     val_wdl = [examples[i]["wdl"] for i in val_i]
     # Constant-predictor floor: best you can do without features = predict mean.
@@ -189,9 +175,7 @@ def eval_board(model, board, pattern_to_id):
     batch = train_v2.collate([example])
     model.eval()
     with torch.no_grad():
-        out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
-                    batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
-                    batch["dense"])
+        out = train_v2.forward_batch(model, batch)
     assert tuple(out.shape) == (1,), f"expected scalar eval, got shape {tuple(out.shape)}"
     value = out.item()
     return {

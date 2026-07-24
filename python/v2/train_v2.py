@@ -123,6 +123,28 @@ def set_seed(seed):
     torch.manual_seed(seed)
 
 
+def split_indices(n, val_frac, gen):
+    """Deterministic held-out split -> (train_idx, val_idx), ascending order.
+
+    Single source of truth for train_model and validators. Advances `gen` by
+    one randperm(n) so callers reusing the generator (e.g. epoch shuffles) keep
+    their downstream RNG state unchanged.
+    """
+    perm = torch.randperm(n, generator=gen).tolist()
+    n_val = int(round(n * val_frac))
+    val_set = set(perm[:n_val])
+    train_idx = [i for i in range(n) if i not in val_set]
+    val_idx = [i for i in range(n) if i in val_set]
+    return train_idx, val_idx
+
+
+def forward_batch(model, batch):
+    """Run a collate() batch through the model (unpacks the fixed tensor keys)."""
+    return model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
+                 batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
+                 batch["dense"])
+
+
 def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
                 lr=1e-3, seed=0, val_frac=0.2, on_epoch=None):
     """Deterministic float training; returns (model, train_mse, val_mse).
@@ -134,12 +156,9 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
     if batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
     gen = torch.Generator().manual_seed(seed)
-    n = len(examples)
-    perm = torch.randperm(n, generator=gen).tolist()
-    n_val = int(round(n * val_frac))
-    val_idx = set(perm[:n_val])
-    train_ex = [examples[i] for i in range(n) if i not in val_idx]
-    val_ex = [examples[i] for i in range(n) if i in val_idx]
+    train_i, val_i = split_indices(len(examples), val_frac, gen)
+    train_ex = [examples[i] for i in train_i]
+    val_ex = [examples[i] for i in val_i]
     # A random model would otherwise be saved as if trained.
     if not train_ex:
         raise ValueError(
@@ -157,9 +176,7 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
             idx = order[start:start + batch_size]
             batch = collate([train_ex[i] for i in idx])
             opt.zero_grad()
-            out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
-                        batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
-                        batch["dense"])
+            out = forward_batch(model, batch)
             loss = loss_fn(out, batch["wdl"])
             loss.backward()
             opt.step()
@@ -182,9 +199,7 @@ def _eval_mse(model, examples, batch_size=1024):
     with torch.no_grad():
         for start in range(0, len(examples), batch_size):
             batch = collate(examples[start:start + batch_size])
-            out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
-                        batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
-                        batch["dense"])
+            out = forward_batch(model, batch)
             total_sq += torch.sum((out - batch["wdl"]) ** 2).item()
     return total_sq / len(examples)
 
