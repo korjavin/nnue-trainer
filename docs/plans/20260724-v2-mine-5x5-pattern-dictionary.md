@@ -72,24 +72,24 @@ pattern dictionary from REAL game positions. The pipeline:
 ## Implementation Steps
 
 ### Task 1: Signature + board-decoder + miner core in `python/v2/mine_patterns.py`
-- [ ] add `window_signature(window)` → deterministic string:
+- [x] add `window_signature(window)` → deterministic string:
       `",".join(str(s) for s in window.symbols) + "|" + str(window.distance_bucket)`.
       This IS the canonical signature (perspective already normalized by the
       contract). No rotation/mirror dedup.
-- [ ] add `decode_v1_record(features)` → `pattern_contract.Board`: derive
+- [x] add `decode_v1_record(features)` → `pattern_contract.Board`: derive
       `side = int(round(len(features)/6) ** 0.5)`, assert `side*side*6 == len(features)`,
       build `Board(side, side)`, map each cell's 6-way one-hot to
       `Cell(owner, CellKind)` per the v1 encoding above (owner 1=self, 2=opp).
       NO literal board-size constant.
-- [ ] add `iter_boards(dataset_path)` generator: load JSON, yield a decoded
+- [x] add `iter_boards(dataset_path)` generator: load JSON, yield a decoded
       Board per record (in file order).
-- [ ] add `count_signatures(boards, stm_owner=1)` → `collections.Counter`:
+- [x] add `count_signatures(boards, stm_owner=1)` → `collections.Counter`:
       for each board call `PatternContract.extract_windows`, signature each
       window, increment counter. Also return total window count for coverage.
-- [ ] add `build_dictionary(counter, min_count)` → `(pattern_to_id, retained,
+- [x] add `build_dictionary(counter, min_count)` → `(pattern_to_id, retained,
       total_promoted_occurrences)`: keep signatures with `count >= min_count`,
       sort by `(-count, signature)`, assign ids `0..N-1`.
-- [ ] write tests (Task 2) — do not proceed until they pass.
+- [x] write tests (Task 2) — do not proceed until they pass. (tests are Task 2, next iteration; core smoke-verified)
 
 ### Task 2: `python/v2/mine_patterns_test.py`
 - [ ] test `window_signature` is stable/deterministic for a known Window.
