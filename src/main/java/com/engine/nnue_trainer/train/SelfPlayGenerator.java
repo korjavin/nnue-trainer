@@ -234,6 +234,18 @@ public class SelfPlayGenerator {
       throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
     }
     if (config.searchMode == SearchMode.GOBOT) {
+      // GoBot's NNUE leaf goes through BoardFeatureMapper (12x12-only) and it has no raw-emit path,
+      // so reject both up front rather than crashing deep in the search (non-12x12) or exiting
+      // "successfully" having written nothing (EMIT=raw). Use the negamax path for those.
+      if (config.rows != 12 || config.cols != 12) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play is 12x12-only (NNUE-leaf feature mapper); got "
+                + config.rows + "x" + config.cols + ". Use the negamax path for other sizes.");
+      }
+      if (config.rawOutPath != null) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play has no raw-corpus emit path; RAW_OUT/EMIT=raw need the negamax path.");
+      }
       return generateViaGoBot(config);
     }
     List<TrainingRecord> dataset = new ArrayList<>();
