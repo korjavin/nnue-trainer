@@ -141,13 +141,15 @@ pattern dictionary from REAL game positions. The pipeline:
 - [x] run `./mvnw test -Dtest=PatternDictionaryTest` — must pass.
 
 ### Task 6: Verify acceptance criteria
-- [ ] `python3 -m unittest discover -s python/v2 -p "*_test.py"` passes.
-- [ ] `./mvnw test -Dtest=PatternDictionaryTest` passes.
-- [ ] `python3 python/v2/mine_patterns.py` runs and prints threshold + dict size
-      + retained coverage; artifact committed.
-- [ ] confirm no `12` board-size literal in `mine_patterns.py` or
-      `PatternDictionary.java`.
-- [ ] confirm signatures are NOT rotation/mirror-deduped and NOT coalesced.
+- [x] `python3 -m unittest discover -s python/v2 -p "*_test.py"` passes. (13 tests OK)
+- [x] `./mvnw test -Dtest=PatternDictionaryTest` passes. (3 tests, BUILD SUCCESS)
+- [x] `python3 python/v2/mine_patterns.py` runs and prints threshold + dict size
+      + retained coverage; artifact committed. (min_count=5, 5571 patterns,
+      65.45% coverage; re-run byte-identical → deterministic)
+- [x] confirm no `12` board-size literal in `mine_patterns.py` or
+      `PatternDictionary.java`. (grep clean)
+- [x] confirm signatures are NOT rotation/mirror-deduped and NOT coalesced. (only a
+      comment noting perspective normalization; no dedup code)
 
 ## Post-Completion
 *Informational — no checkboxes.*
