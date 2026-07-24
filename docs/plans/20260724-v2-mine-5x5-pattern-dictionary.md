@@ -123,14 +123,14 @@ pattern dictionary from REAL game positions. The pipeline:
 - [x] verify the JSON parses and `metadata.num_patterns == len(pattern_to_id)`.
 
 ### Task 4: `PatternDictionary.java` loader
-- [ ] create `src/main/java/com/engine/nnue_trainer/v2/PatternDictionary.java`:
+- [x] create `src/main/java/com/engine/nnue_trainer/v2/PatternDictionary.java`:
       load a dictionary JSON (path or InputStream) via Jackson into
       `Map<String,Integer> patternToId` + parse metadata (`numPatterns`,
       `minCount`, `version`).
-- [ ] method `int lookup(String signature)` → id, or `-1` on miss (unseen
+- [x] method `int lookup(String signature)` → id, or `-1` on miss (unseen
       pattern ignored per spec). Add `boolean contains(String)` and `int size()`.
-- [ ] no hardcoded board size anywhere.
-- [ ] write tests (Task 5).
+- [x] no hardcoded board size anywhere.
+- [x] write tests (Task 5). (tests are Task 5, next iteration)
 
 ### Task 5: `PatternDictionaryTest.java`
 - [ ] load the committed `python/v2/nnue_v2_dictionary.json` (resolve via repo
