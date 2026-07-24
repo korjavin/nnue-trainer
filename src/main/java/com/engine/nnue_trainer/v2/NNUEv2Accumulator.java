@@ -88,6 +88,12 @@ public class NNUEv2Accumulator {
       System.arraycopy(hiddenBias, 0, accumNSTM, 0, K);
     }
 
+    if (hiddenWeights == null) {
+      // No first-layer weights: accumulators stay at the bias (mirrors null bias
+      // handling above). Skip the count/accumulate step entirely.
+      return assemble(accumSTM, accumNSTM, denseFeatures);
+    }
+
     int nstmPlayer = 3 - activePlayer;
 
     Map<Integer, Integer> stmCounts = countPatterns(board, activePlayer);
@@ -108,15 +114,17 @@ public class NNUEv2Accumulator {
       }
     }
 
+    return assemble(accumSTM, accumNSTM, denseFeatures);
+  }
+
+  private float[] assemble(float[] accumSTM, float[] accumNSTM, float[] denseFeatures) {
     if (denseFeatures == null) {
       denseFeatures = new float[denseSize];
     }
-
     float[] result = new float[K * 2 + denseSize];
     System.arraycopy(accumSTM, 0, result, 0, K);
     System.arraycopy(accumNSTM, 0, result, K, K);
     System.arraycopy(denseFeatures, 0, result, K * 2, denseSize);
-
     return result;
   }
 }

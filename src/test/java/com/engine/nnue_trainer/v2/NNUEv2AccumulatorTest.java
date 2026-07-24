@@ -2,6 +2,7 @@ package com.engine.nnue_trainer.v2;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
@@ -55,6 +56,13 @@ public class NNUEv2AccumulatorTest {
     PatternContract.Window w = new PatternContract.Window(2, 2, symbols, 7);
     String expected = "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|7";
     assertEquals(expected, NNUEv2Accumulator.signature(w));
+
+    // Non-7 bucket must be serialized verbatim (guards the bucket component,
+    // which the promoted dictionary — all bucket 7 — cannot exercise).
+    PatternContract.Window near = new PatternContract.Window(2, 2, symbols, 3);
+    assertEquals(
+        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|3",
+        NNUEv2Accumulator.signature(near));
   }
 
   @Test
@@ -71,16 +79,25 @@ public class NNUEv2AccumulatorTest {
     }
     NNUEv2Accumulator acc = new NNUEv2Accumulator(dict, weights, null, K, denseSize);
 
-    // A single piece on a small board — reuse fixture-style board.
-    Board board = new Board(6, 6);
-    board.setCell(2, 2, new Cell(1, CellKind.NORMAL));
+    // Two identical, isolated, fully-interior pieces so every signature recurs
+    // (count == 2) — this is what distinguishes count*weight from a boolean
+    // add-once-per-id. Mirrors the "repeated_pattern" parity fixture board.
+    Board board = new Board(12, 20);
+    board.setCell(5, 5, new Cell(1, CellKind.NORMAL));
+    board.setCell(5, 12, new Cell(1, CellKind.NORMAL));
 
-    int totalStm = totalCount(acc.countPatterns(board, 1));
+    Map<Integer, Integer> stmCounts = acc.countPatterns(board, 1);
+    int totalStm = totalCount(stmCounts);
     int totalNstm = totalCount(acc.countPatterns(board, 2));
+    // Guard the premise: at least one id must recur, else boolean vs
+    // multiplicative would be indistinguishable and this test would be vacuous.
+    assertTrue(
+        totalStm > stmCounts.size(), "board must produce a count > 1 to exercise multiplicativity");
 
     float[] out = acc.computeFull(board, 1, null);
     assertEquals(K * 2 + denseSize, out.length);
-    // Every weight column is all-ones, so accum[i] == total occurrence count.
+    // Every weight column is all-ones, so accum[i] == total occurrence count
+    // (sum of counts), which exceeds the distinct-id count under multiplicativity.
     for (int i = 0; i < K; i++) {
       assertEquals((float) totalStm, out[i], "STM accum multiplicative sum");
       assertEquals((float) totalNstm, out[K + i], "NSTM accum multiplicative sum");

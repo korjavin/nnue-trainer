@@ -38,12 +38,21 @@ def _board(rows, cols, cells):
 # - single_piece: no base -> bucket 7 everywhere; owner-1 NORMAL hits symbol-4
 #   patterns for perspective 1 and symbol-5 patterns for perspective 2 (both
 #   populous in the dictionary), guaranteeing non-empty maps on BOTH sides.
-# - small_with_bases: two BASEs so distance buckets vary across windows.
+# - repeated_pattern: two identical, isolated, fully-interior NORMAL pieces far
+#   enough apart that no 5x5 window contains both -> every signature recurs
+#   exactly twice, so expected counts are 2 (exercises count*weight, not booleans).
+# - small_with_bases: BASEs make every window's bucket != 7; the promoted
+#   dictionary only holds bucket-7 keys, so this board verifies base windows
+#   produce ALL-MISSES (empty maps) instead of spurious dictionary hits.
 # - non_square: rectangular, non-12x12, variable size.
 # - corners: pieces in corners so windows hit OOB edges.
 _BOARDS = [
     ("single_piece", 6, 6, [
         (2, 2, 1, CellKind.NORMAL),
+    ]),
+    ("repeated_pattern", 12, 20, [
+        (5, 5, 1, CellKind.NORMAL),
+        (5, 12, 1, CellKind.NORMAL),
     ]),
     ("small_with_bases", 7, 7, [
         (1, 1, 1, CellKind.BASE),
@@ -97,6 +106,12 @@ def main():
     single = next(f for f in fixtures if f["name"] == "single_piece")
     assert single["expected"]["1"] and single["expected"]["2"], (
         "single_piece must hit real dictionary ids for BOTH perspectives"
+    )
+
+    repeated = next(f for f in fixtures if f["name"] == "repeated_pattern")
+    assert max(repeated["expected"]["1"].values()) >= 2, (
+        "repeated_pattern must produce a recurring signature (count >= 2) to "
+        "exercise multiplicative count*weight accumulation"
     )
 
     os.makedirs(os.path.dirname(_OUT_PATH), exist_ok=True)
