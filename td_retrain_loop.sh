@@ -64,7 +64,9 @@ for gen in $(seq 1 "$GENERATIONS"); do
   # A per-gen SEED makes each rejected generation a DISTINCT attempt (self-play/train are otherwise
   # deterministic, so a fixed seed would regenerate the same rejected challenger every generation).
   SEED="$((SEED_BASE + gen))" OUT_PATH="$CHALLENGER" ./td_leaf_pass_gobot.sh 2>&1 | tee /tmp/td_retrain_gen.log
-  val=$(grep -oE 'val MSE [0-9.]+' /tmp/td_retrain_gen.log | tail -1 | awk '{print $3}')
+  # `|| true`: under set -euo pipefail a no-match grep would abort the whole loop before the
+  # `${val:=?}` fallback runs. A missing val MSE line is non-fatal — log '?' and gate anyway.
+  val=$(grep -oE 'val MSE [0-9.]+' /tmp/td_retrain_gen.log | tail -1 | awk '{print $3}' || true)
   : "${val:=?}"
 
   # Gate: RetrainGate promotes (exit 10) or keeps (exit 0); it never throws on a normal outcome.
@@ -78,7 +80,7 @@ for gen in $(seq 1 "$GENERATIONS"); do
     echo ">> RetrainGate failed (exit $code)"; exit "$code"
   fi
 
-  wl=$(echo "$gateout" | grep -oE 'vsChampion=\[[^]]*\]' | head -1)
+  wl=$(echo "$gateout" | grep -oE 'vsChampion=\[[^]]*\]' | head -1 || true)
   echo "gen=$gen valMSE=$val ${wl:-vsChampion=?} promoted=$promoted" | tee -a "$RUN_LOG"
 
   # Optional slow live vs-GoBot sanity (off by default): the offline gate is the real per-gen
@@ -86,7 +88,7 @@ for gen in $(seq 1 "$GENERATIONS"); do
   if [ "$LIVE_SANITY_EVERY" -gt 0 ] && [ $((gen % LIVE_SANITY_EVERY)) -eq 0 ]; then
     if [ -f eval_java_vs_go.py ]; then
       echo ">> live sanity: champion vs GoBot ($LIVE_SANITY_GAMES games) — slow"
-      sanity=$(python3 eval_java_vs_go.py "$LIVE_SANITY_GAMES" 2>&1 | tail -1)
+      sanity=$(python3 eval_java_vs_go.py "$LIVE_SANITY_GAMES" 2>&1 | tail -1 || true)
       echo "gen=$gen liveSanity: $sanity" | tee -a "$RUN_LOG"
     else
       echo ">> live sanity requested but eval_java_vs_go.py missing — skipping" | tee -a "$RUN_LOG"
