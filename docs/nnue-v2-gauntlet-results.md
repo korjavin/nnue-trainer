@@ -18,7 +18,19 @@ Structurally identical to the proven v1 NNUE leaf path.
 
 ## Results (from v2's perspective, seed 7, 12x12)
 
-<!-- RESULTS_TABLE -->
+| matchup | depth | games | W-L-D (v2) | win% (v2) | wall |
+|---|---|---|---|---|---|
+| v2 vs HAND_TUNED | 3 | 24 | 0-24-0 | **0.0%** | 249s |
+| v2 vs v1-NNUE | 3 | 24 | 3-21-0 | **12.5%** | 2756s |
+| v2 vs HAND_TUNED | 4 | 12 | _pending_ | | |
+| v2 vs v1-NNUE | 4 | 8 | _pending_ | | |
+
+Win% = (wins + 0.5·draws) / games, from v2's perspective. Seed 7.
+
+**Depth 4 uses reduced game counts** (12 / 8 vs 24): fixed-depth-4 search with
+the ~5.8k eval/s v2 leaf is ~15x slower per game than depth 3, so 24×2 games at
+depth 4 would run many hours. Depth 3 (the primary fair comparison) keeps the
+full 24 games per matchup.
 
 ## Speed caveat (honest)
 
