@@ -98,15 +98,15 @@ Deliberate behavior change — owner-reviewed before merge. Merge target: master
 - [x] run `./mvnw test` — must pass before next task
 
 ### Task 4: Add challenger unit tests
-- [ ] periodic fire: inject a mock `ScheduledExecutorService`, call `start()`, capture the `Runnable`
+- [x] periodic fire: inject a mock `ScheduledExecutorService`, call `start()`, capture the `Runnable`
       passed to `scheduleAtFixedRate`, invoke it after caching one eligible user → verify a challenge sent
-- [ ] random eligible pick: cache several eligible users, seeded `Random`, call `challengeTick()` →
+- [x] random eligible pick: cache several eligible users, seeded `Random`, call `challengeTick()` →
       verify the challenge targets the expected user id for that seed (no go/bot filter)
-- [ ] skip-while-in-game: `isInGame` supplier returns true → `challengeTick()` sends nothing
-- [ ] self-exclusion: welcome sets selfId; cache list containing only self → no challenge; cache with self
+- [x] skip-while-in-game: `isInGame` supplier returns true → `challengeTick()` sends nothing
+- [x] self-exclusion: welcome sets selfId; cache list containing only self → no challenge; cache with self
       + one other → challenges the other
-- [ ] no-eligible no-op: cache empty / all in-game → `challengeTick()` sends nothing
-- [ ] run `./mvnw test` — all green
+- [x] no-eligible no-op: cache empty / all in-game → `challengeTick()` sends nothing
+- [x] run `./mvnw test` — all green
 
 ### Task 5: Verify acceptance criteria
 - [ ] verify: idle challenger bot picks a RANDOM eligible online player about every ~5 min via the timer
