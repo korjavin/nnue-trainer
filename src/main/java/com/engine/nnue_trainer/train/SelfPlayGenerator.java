@@ -382,8 +382,10 @@ public class SelfPlayGenerator {
 
         Action chosen;
         if (config.exploreTemperature > 0.0 && ply < exploreWindow) {
-          // Near-best softmax sampling across the explore window (diverse-but-sensible).
-          chosen = explore.sampleMove(r);
+          // Near-best softmax sampling across the explore window (diverse-but-sensible). A book
+          // move has no alternatives, so mirror the live challenger and randomize the opening
+          // instead — else sampleMove(r) just returns the canonical book action and diversity dies.
+          chosen = fromBook ? explore.sampleOpening(legal) : explore.sampleMove(r);
           if (chosen == null) chosen = legal.get(0);
         } else if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
           chosen = legal.get(random.nextInt(legal.size()));
