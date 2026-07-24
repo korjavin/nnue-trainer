@@ -65,8 +65,14 @@ class TestTraining(unittest.TestCase):
         self.assertEqual(a, b)
 
     def test_read_num_patterns_from_real_dictionary(self):
+        # Read the committed dict's own metadata rather than a magic constant,
+        # so re-mining the dictionary (different corpus/threshold) doesn't break
+        # this test. It verifies read_num_patterns tracks metadata.num_patterns.
         dict_path = os.path.join(os.path.dirname(__file__), "nnue_v2_dictionary.json")
-        self.assertEqual(read_num_patterns(dict_path), 5571)
+        with open(dict_path) as f:
+            expected = json.load(f)["metadata"]["num_patterns"]
+        self.assertEqual(read_num_patterns(dict_path), expected)
+        self.assertGreater(expected, 0)
 
 
 class TestMain(unittest.TestCase):
