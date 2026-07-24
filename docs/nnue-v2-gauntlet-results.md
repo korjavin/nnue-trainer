@@ -22,8 +22,8 @@ Structurally identical to the proven v1 NNUE leaf path.
 |---|---|---|---|---|---|
 | v2 vs HAND_TUNED | 3 | 24 | 0-24-0 | **0.0%** | 249s |
 | v2 vs v1-NNUE | 3 | 24 | 3-21-0 | **12.5%** | 2756s |
-| v2 vs HAND_TUNED | 4 | 12 | _pending_ | | |
-| v2 vs v1-NNUE | 4 | 8 | _pending_ | | |
+| v2 vs HAND_TUNED | 4 | 12 | 0-12-0 | **0.0%** | 3068s |
+| v2 vs v1-NNUE | 4 | 8 | _running (best-effort; depth-4 v1 games are very slow)_ | | |
 
 Win% = (wins + 0.5·draws) / games, from v2's perspective. Seed 7.
 
