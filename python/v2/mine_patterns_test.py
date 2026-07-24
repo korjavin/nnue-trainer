@@ -3,6 +3,7 @@
     python3 -m unittest discover -s python/v2 -p "*_test.py"
 """
 import collections
+import json
 import os
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from python.v2.mine_patterns import (
     count_signatures,
     decode_v1_record,
     export_dictionary,
+    iter_boards_corpus,
     window_signature,
 )
 from python.v2.pattern_contract import Board, Cell, CellKind, PatternContract
@@ -113,6 +115,43 @@ class EndToEndDeterminismTest(unittest.TestCase):
                 export_dictionary(pattern_to_id, min_count=1, out_path=out)
             with open(p1, "rb") as f1, open(p2, "rb") as f2:
                 self.assertEqual(f1.read(), f2.read())
+
+
+class CorpusReaderTest(unittest.TestCase):
+    def _empty_cells(self, rows, cols):
+        return [[{"kind": "EMPTY", "owner": -1} for _ in range(cols)] for _ in range(rows)]
+
+    def test_7x7_line_reconstructs_and_mines(self):
+        # Size-agnostic: a 7x7 raw position with a base, a neutral, and a stone.
+        cells = self._empty_cells(7, 7)
+        cells[0][0] = {"kind": "BASE", "owner": 1}
+        cells[6][6] = {"kind": "BASE", "owner": 2}
+        cells[3][3] = {"kind": "NORMAL", "owner": 1}
+        cells[2][4] = {"kind": "NEUTRAL", "owner": -1}
+        line = {"rows": 7, "cols": 7, "cells": cells, "stm": 1, "wdl": 1.0}
+
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "corpus.jsonl")
+            with open(p, "w") as f:
+                f.write(json.dumps(line) + "\n")
+                f.write("\n")  # blank lines are skipped
+
+            pairs = list(iter_boards_corpus(p))
+            self.assertEqual(len(pairs), 1)
+            board, stm = pairs[0]
+            self.assertEqual((board.rows, board.cols, stm), (7, 7, 1))
+            self.assertEqual(board.get_cell(0, 0).kind, CellKind.BASE)
+            self.assertEqual(board.get_cell(6, 6).owner, 2)
+            self.assertEqual(board.get_cell(3, 3).kind, CellKind.NORMAL)
+            self.assertEqual(board.get_cell(2, 4).kind, CellKind.NEUTRAL)
+            self.assertEqual(board.get_cell(1, 1).kind, CellKind.EMPTY)
+
+            # Per-position perspective flows through count_signatures -> build_dictionary.
+            counter, total = count_signatures(pairs)
+            self.assertGreater(total, 0)
+            pattern_to_id, retained, _ = build_dictionary(counter, min_count=1)
+            self.assertEqual(retained, len(counter))
+            self.assertGreater(retained, 0)
 
 
 if __name__ == "__main__":
