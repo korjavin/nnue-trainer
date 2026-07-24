@@ -43,6 +43,8 @@ public class SelfPlayGenerator {
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
+    public int rows = 12;
+    public int cols = 12;
     public double epsilon = 0.1;
     public int exploreTurns = 6;
     public int searchDepth = 2;
@@ -113,6 +115,8 @@ public class SelfPlayGenerator {
     // wrapper can drive the whole TD-leaf pass without editing code.
     config.numGames = envInt("NUM_GAMES", config.numGames);
     config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
+    config.rows = envInt("ROWS", config.rows);
+    config.cols = envInt("COLS", config.cols);
     config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
     config.seed = envLong("SEED", config.seed);
     config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
@@ -192,11 +196,7 @@ public class SelfPlayGenerator {
     for (int game = 1; game <= config.numGames; game++) {
       // System.out.println("Simulating game " + game + "/" + config.numGames);
       List<TurnData> turns = new ArrayList<>();
-      Board board = new Board(12, 12);
-
-      // Initialize bases
-      board.setCell(0, 0, new Cell(1, CellKind.BASE));
-      board.setCell(11, 11, new Cell(2, CellKind.BASE));
+      Board board = startBoard(config.rows, config.cols);
 
       int currentPlayer = 1;
       int winner = 0;
@@ -257,21 +257,24 @@ public class SelfPlayGenerator {
         currentPlayer = 3 - currentPlayer;
       }
 
-      // Process collected turns to dataset
-      for (TurnData turnData : turns) {
-        float target =
-            computeTarget(
-                engine,
-                turnData.board,
-                turnData.activePlayer,
-                turnData.canPlaceNeutral,
-                winner,
-                config);
-        float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-        dataset.add(new TrainingRecord(features, target));
+      // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
+      // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record exists.
+      if (config.rows == 12 && config.cols == 12) {
+        for (TurnData turnData : turns) {
+          float target =
+              computeTarget(
+                  engine,
+                  turnData.board,
+                  turnData.activePlayer,
+                  turnData.canPlaceNeutral,
+                  winner,
+                  config);
+          float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
+          dataset.add(new TrainingRecord(features, target));
 
-        uniquePositionHashes.add(Arrays.hashCode(features));
-        totalPositions++;
+          uniquePositionHashes.add(Arrays.hashCode(features));
+          totalPositions++;
+        }
       }
     }
 
@@ -323,7 +326,9 @@ public class SelfPlayGenerator {
 
     for (int game = 1; game <= config.numGames; game++) {
       List<GoPly> plies = new ArrayList<>();
-      GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
+      GoState state =
+          GoState.fromBoard(
+              startBoard(config.rows, config.cols), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
 
       for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
         List<Action> legal = state.legalActions();
@@ -387,10 +392,11 @@ public class SelfPlayGenerator {
     return GoBotSearcher.chooseNodeBudget(state, config.gobotNodeLimit);
   }
 
-  private static Board freshBoard() {
-    Board board = new Board(12, 12);
+  /** A starting board of the given size with both bases at opposite corners. No size literal. */
+  private static Board startBoard(int rows, int cols) {
+    Board board = new Board(rows, cols);
     board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+    board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
     return board;
   }
 

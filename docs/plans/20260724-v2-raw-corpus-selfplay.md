@@ -55,14 +55,16 @@ Merge target: `nnue-v2-3.2-mining` branch (stacked PR), NOT master / v2.
 ## Implementation Steps
 
 ### Task 1: Variable board size in SelfPlayGenerator
-- [ ] add `int rows = 12; int cols = 12;` to `Config`; read `ROWS`/`COLS` env in `main`
-- [ ] add private helper `startBoard(int rows, int cols)` placing bases at (0,0) and
+- [x] add `int rows = 12; int cols = 12;` to `Config`; read `ROWS`/`COLS` env in `main`
+- [x] add private helper `startBoard(int rows, int cols)` placing bases at (0,0) and
       (rows-1, cols-1); replace hardcoded `new Board(12,12)`+bases in `generate()` and
       `freshBoard()` to use `config.rows`/`config.cols` (freshBoard takes config)
-- [ ] ensure GoBot `playGoBotGames` uses `startBoard(config.rows, config.cols)`
-- [ ] write test: generate on a 7x7 board (Config.rows=cols=7) produces records and a
-      non-empty dataset (variable size works, no 12x12 assumption)
-- [ ] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — must pass before next task
+- [x] ensure GoBot `playGoBotGames` uses `startBoard(config.rows, config.cols)`
+- [x] write test: generate on a 7x7 board (Config.rows=cols=7) runs clean with no 12x12
+      assumption. NOTE: the v1 864-dim one-hot mapper is 12x12-only, so its dataset is empty
+      off-12x12 by design — the raw corpus (Task 2) carries non-12x12 positions. v1 record
+      build is gated to 12x12 so games still play on any size and feed the raw path.
+- [x] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — passes (6/6; full suite 117/117 green)
 
 ### Task 2: Raw-board snapshot emit mode
 - [ ] add `RawCell{String kind; int owner;}` and `RawPosition{int rows,cols; RawCell[][] cells; int stm; double wdl;}` static classes

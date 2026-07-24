@@ -84,6 +84,23 @@ class SelfPlayGeneratorTest {
   }
 
   @Test
+  void testVariableBoardSizeGeneration() {
+    // A 7x7 board (not the historical 12x12) plays through generate() with no 12x12 assumption.
+    // The v1 864-dim one-hot mapper is 12x12-only, so the v1 dataset is empty off-12x12 by design
+    // (the raw corpus path carries non-12x12 data); the point here is that generation runs clean.
+    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
+    config.rows = 7;
+    config.cols = 7;
+    config.numGames = 1;
+    config.maxTurns = 15;
+    config.seed = 42;
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+
+    assertTrue(result != null && result.dataset != null, "7x7 generation should complete.");
+  }
+
+  @Test
   void testDiverseDatasetGeneration() {
     SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
     config.numGames = 1;
