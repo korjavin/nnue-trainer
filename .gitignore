@@ -42,3 +42,6 @@ dataset.json
 # Python venv and run logs
 .venv/
 *.log
+nnue_v2_weights.json
+__pycache__/
+python/v2/__pycache__/
