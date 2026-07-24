@@ -51,31 +51,31 @@ larger/variable-size corpus (bead d4a.3.4) drops in unchanged.
 ## Implementation Steps
 
 ### Task 1: Core extractor module `python/v2/extract_examples.py`
-- [ ] Add repo-root `sys.path` shim (mirror `mine_patterns.py`) and import
+- [x] Add repo-root `sys.path` shim (mirror `mine_patterns.py`) and import
       `decode_v1_record`, `window_signature` from `python.v2.mine_patterns`,
       `PatternContract` from `python.v2.pattern_contract`,
       `extract_dense_features` from `python.v2.dense_features`.
-- [ ] `load_dictionary(path)` -> returns the `pattern_to_id` dict via `json.load`.
-- [ ] `board_to_grid(board)` -> list-of-lists where each cell is `None` for EMPTY or
+- [x] `load_dictionary(path)` -> returns the `pattern_to_id` dict via `json.load`.
+- [x] `board_to_grid(board)` -> list-of-lists where each cell is `None` for EMPTY or
       `{'kind': cell.kind.name, 'owner': cell.owner}` otherwise (adapter for
       `extract_dense_features`); uses `board.rows`/`board.cols` (no hardcoded size).
-- [ ] `pattern_counts(board, stm_owner, pattern_to_id)` -> `dict[str(id) -> count]`:
+- [x] `pattern_counts(board, stm_owner, pattern_to_id)` -> `dict[str(id) -> count]`:
       iterate `extract_windows(board, stm_owner)`, compute `window_signature`, look up
       id, SKIP dict misses, aggregate per-occurrence counts (counted, NOT one-hot, NOT
       normalized for board size). Keys are stringified ids so JSON round-trips cleanly.
-- [ ] `wdl_from_target(target)` -> `1.0` if `target > 0`, `0.0` if `target < 0`,
+- [x] `wdl_from_target(target)` -> `1.0` if `target > 0`, `0.0` if `target < 0`,
       else `0.5` (STM-perspective WDL reduction of the continuous target).
-- [ ] `extract_example(record, pattern_to_id)` -> dict
+- [x] `extract_example(record, pattern_to_id)` -> dict
       `{stm_pattern_counts, nstm_pattern_counts, dense (14 floats), rows, cols, wdl}`:
       decode board, STM counts via `stm_owner=1`, NSTM via `stm_owner=2`, dense via
       the grid adapter with `active_player=1, turn_number=0, rows=board.rows,
       cols=board.cols`.
-- [ ] `iter_examples(dataset_path, pattern_to_id)` generator over all records in order.
-- [ ] `main(argv)`: argparse `--dataset` (default repo-root `dataset.json`),
+- [x] `iter_examples(dataset_path, pattern_to_id)` generator over all records in order.
+- [x] `main(argv)`: argparse `--dataset` (default repo-root `dataset.json`),
       `--dict` (default `python/v2/nnue_v2_dictionary.json`), `--out` (default
       `python/v2/nnue_v2_examples.jsonl`); write one JSON object per line
       (`sort_keys=True` for determinism); print example count and one sample record.
-- [ ] run `python3 python/v2/extract_examples.py` end-to-end to confirm it writes.
+- [x] run `python3 python/v2/extract_examples.py` end-to-end to confirm it writes.
 
 ### Task 2: Tests `python/v2/extract_examples_test.py`
 - [ ] Test `pattern_counts`: build a small `Board`, assert counted (per-occurrence,

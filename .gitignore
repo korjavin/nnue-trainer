@@ -38,6 +38,7 @@ build/
 .beads-credential-key
 .beads/proxieddb/
 dataset.json
+python/v2/nnue_v2_examples.jsonl
 
 # Python venv and run logs
 .venv/
