@@ -122,6 +122,15 @@ def set_seed(seed):
 def train(examples, num_patterns, W=1024, epochs=20, batch_size=64, lr=1e-3,
           seed=0, val_frac=0.2):
     """Deterministic float training; returns (train_mse, val_mse)."""
+    _, train_mse, val_mse = train_model(
+        examples, num_patterns, W=W, epochs=epochs, batch_size=batch_size,
+        lr=lr, seed=seed, val_frac=val_frac)
+    return train_mse, val_mse
+
+
+def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
+                lr=1e-3, seed=0, val_frac=0.2):
+    """Deterministic float training; returns (model, train_mse, val_mse)."""
     set_seed(seed)
     gen = torch.Generator().manual_seed(seed)
     n = len(examples)
@@ -149,7 +158,9 @@ def train(examples, num_patterns, W=1024, epochs=20, batch_size=64, lr=1e-3,
             loss.backward()
             opt.step()
 
-    return _eval_mse(model, train_ex, loss_fn), _eval_mse(model, val_ex, loss_fn)
+    return (model,
+            _eval_mse(model, train_ex, loss_fn),
+            _eval_mse(model, val_ex, loss_fn))
 
 
 def _eval_mse(model, examples, loss_fn):
@@ -162,3 +173,61 @@ def _eval_mse(model, examples, loss_fn):
                     batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
                     batch["dense"])
         return loss_fn(out, batch["wdl"]).item()
+
+
+def model_metadata(model):
+    """Serialisable metadata describing a trained NNUEv2 model."""
+    return {
+        "W": model.W,
+        "num_patterns": model.num_patterns,
+        "dense_size": model.dense_size,
+        "layers": {
+            "l1": list(model.l1.weight.shape),
+            "l2": list(model.l2.weight.shape),
+            "l3": list(model.l3.weight.shape),
+        },
+    }
+
+
+def main(argv=None):
+    import argparse
+
+    p = argparse.ArgumentParser(description="Train float NNUE v2 model")
+    p.add_argument("--dataset", default=_DEFAULT_DATASET)
+    p.add_argument("--dict", dest="dict_path", default=_DEFAULT_DICT)
+    p.add_argument("--examples", default=_DEFAULT_EXAMPLES)
+    p.add_argument("--regenerate", action="store_true")
+    p.add_argument("--out-model", default=os.path.join(_HERE, "nnue_v2_model.pt"))
+    p.add_argument("--out-meta", default=os.path.join(_HERE, "nnue_v2_model_meta.json"))
+    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--batch-size", type=int, default=64)
+    p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--width", type=int, default=1024)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--val-frac", type=float, default=0.2)
+    args = p.parse_args(argv)
+
+    num_patterns = read_num_patterns(args.dict_path)
+    examples = load_examples(args.examples, args.dataset, args.dict_path,
+                             regenerate=args.regenerate)
+    model, train_mse, val_mse = train_model(
+        examples, num_patterns, W=args.width, epochs=args.epochs,
+        batch_size=args.batch_size, lr=args.lr, seed=args.seed,
+        val_frac=args.val_frac)
+
+    torch.save(model.state_dict(), args.out_model)
+    meta = model_metadata(model)
+    meta.update({"train_mse": train_mse, "val_mse": val_mse,
+                 "num_examples": len(examples)})
+    with open(args.out_meta, "w") as f:
+        json.dump(meta, f, indent=2)
+
+    print(f"num_patterns={num_patterns} examples={len(examples)} "
+          f"train_mse={train_mse:.6f} val_mse={val_mse:.6f}")
+    print(f"saved model -> {args.out_model}")
+    print(f"saved meta  -> {args.out_meta}")
+    return train_mse, val_mse
+
+
+if __name__ == "__main__":
+    main()

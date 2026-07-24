@@ -102,14 +102,14 @@ must re-run UNCHANGED on the larger real-WDL corpus from bead d4a.3.4.
 - [x] run tests - must pass before next task
 
 ### Task 3: CLI, model + metadata save, MSE report
-- [ ] add `main(argv)` / `__main__`: parse args (`--dataset`, `--dict`,
+- [x] add `main(argv)` / `__main__`: parse args (`--dataset`, `--dict`,
       `--examples`, `--out-model`, `--out-meta`, `--epochs`, etc.), regenerate
       examples if needed, set seed, build model, train, print train/val MSE.
-- [ ] save model weights to a `.pt` (`torch.save(state_dict)`) and a metadata
+- [x] save model weights to a `.pt` (`torch.save(state_dict)`) and a metadata
       JSON containing `W`, `num_patterns`, `dense_size`, and the layer shapes.
-- [ ] write test: after a 1-epoch `main` run on a tiny dataset, the `.pt` and
+- [x] write test: after a 1-epoch `main` run on a tiny dataset, the `.pt` and
       metadata JSON exist and metadata has W/num_patterns/dense_size/layer shapes.
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 4: Verify acceptance criteria
 - [ ] run full suite: `python3 -m unittest discover -s python/v2 -p "*_test.py"`.

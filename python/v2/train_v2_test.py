@@ -1,9 +1,11 @@
+import json
 import os
+import tempfile
 import unittest
 
 import torch
 
-from python.v2.train_v2 import NNUEv2, collate, read_num_patterns, train
+from python.v2.train_v2 import NNUEv2, collate, main, read_num_patterns, train
 
 
 def _ex(stm, nstm, dense=None, wdl=1.0):
@@ -65,6 +67,34 @@ class TestTraining(unittest.TestCase):
     def test_read_num_patterns_from_real_dictionary(self):
         dict_path = os.path.join(os.path.dirname(__file__), "nnue_v2_dictionary.json")
         self.assertEqual(read_num_patterns(dict_path), 5571)
+
+
+class TestMain(unittest.TestCase):
+    def test_main_writes_model_and_metadata(self):
+        here = os.path.dirname(__file__)
+        dict_path = os.path.join(here, "nnue_v2_dictionary.json")
+        num_patterns = read_num_patterns(dict_path)
+        with tempfile.TemporaryDirectory() as d:
+            # Tiny pre-made examples file so main() doesn't regenerate the corpus.
+            ex_path = os.path.join(d, "ex.jsonl")
+            with open(ex_path, "w") as f:
+                for i in range(8):
+                    f.write(json.dumps(_ex({str(i % 7): 1}, {str((i + 1) % 5): 1},
+                                           dense=[0.0] * 14, wdl=float(i % 2))) + "\n")
+            out_model = os.path.join(d, "model.pt")
+            out_meta = os.path.join(d, "meta.json")
+            main(["--dict", dict_path, "--examples", ex_path,
+                  "--out-model", out_model, "--out-meta", out_meta,
+                  "--epochs", "1", "--batch-size", "4", "--width", "4"])
+            self.assertTrue(os.path.exists(out_model))
+            self.assertTrue(os.path.exists(out_meta))
+            with open(out_meta) as f:
+                meta = json.load(f)
+            self.assertEqual(meta["W"], 4)
+            self.assertEqual(meta["num_patterns"], num_patterns)
+            self.assertEqual(meta["dense_size"], 14)
+            self.assertIn("layers", meta)
+            self.assertEqual(meta["layers"]["l1"], [16, 2 * 4 + 14])
 
 
 if __name__ == "__main__":
