@@ -113,18 +113,19 @@ side only.
       confirm it writes deterministic output. (Re-run yields byte-identical file.)
 
 ### Task 3: Rewrite NNUEv2AccumulatorTest as a real parity test
-- [ ] Load `python/v2/nnue_v2_dictionary.json` via `PatternDictionary.load`.
-- [ ] Load `src/test/resources/v2/accumulator_parity_fixture.json` (Jackson).
-- [ ] For each fixture board: reconstruct the `Board` (map kind name -> CellKind),
+- [x] Load `python/v2/nnue_v2_dictionary.json` via `PatternDictionary.load`.
+- [x] Load `src/test/resources/v2/accumulator_parity_fixture.json` (Jackson).
+- [x] For each fixture board: reconstruct the `Board` (map kind name -> CellKind),
       call `accumulator.countPatterns(board, 1)` and `(board, 2)`, and assert the
       resulting (id->count) map equals the fixture's `expected["1"]`/`["2"]`.
-- [ ] Add one direct assertion that `NNUEv2Accumulator.signature(w)` for a
+- [x] Add one direct assertion that `NNUEv2Accumulator.signature(w)` for a
       hand-built Window equals the expected `"...|bucket"` string (guards the
       exact format).
-- [ ] Add one `computeFull` assertion on a tiny board with a stub weights matrix
+- [x] Add one `computeFull` assertion on a tiny board with a stub weights matrix
       sized to `dict.numPatterns()`, verifying counts are applied multiplicatively
       (count * weight) and the output length is `2*K + denseSize`.
-- [ ] run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — parity test green.
+- [x] run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — parity test green.
+      (3 tests, 0 failures; jacoco.skip used since single-class run trips the coverage gate.)
 
 ### Task 4: Verify acceptance criteria
 - [ ] Variable board size + OOB handled (fixture includes a non-12x12 and a
