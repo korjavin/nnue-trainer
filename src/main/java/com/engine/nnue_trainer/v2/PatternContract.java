@@ -75,34 +75,47 @@ public class PatternContract {
     return null;
   }
 
+  /**
+   * Builds the 5x5 window centered on {@code (r,c)} using the emission rule: returns {@code null}
+   * when every symbol is EMPTY or OUT_OF_BOUNDS (matching {@link #extractWindows}); otherwise a
+   * {@link Window} with the distance bucket computed against {@code enemyBase}.
+   */
+  public static Window buildWindow(Board board, int r, int c, int stmOwner, Pos enemyBase) {
+    int[] symbols = new int[25];
+    boolean allEmptyOrOob = true;
+    int idx = 0;
+
+    for (int wr = r - 2; wr <= r + 2; wr++) {
+      for (int wc = c - 2; wc <= c + 2; wc++) {
+        int sym;
+        if (!board.isValidPos(wr, wc)) {
+          sym = OUT_OF_BOUNDS;
+        } else {
+          Cell cell = board.getCell(wr, wc);
+          sym = getSymbol(cell, stmOwner);
+        }
+        symbols[idx++] = sym;
+        if (sym != EMPTY && sym != OUT_OF_BOUNDS) {
+          allEmptyOrOob = false;
+        }
+      }
+    }
+
+    if (allEmptyOrOob) {
+      return null;
+    }
+    return new Window(r, c, symbols, getDistanceBucket(r, c, enemyBase));
+  }
+
   public static List<Window> extractWindows(Board board, int stmOwner) {
     List<Window> windows = new ArrayList<>();
     Pos enemyBase = findEnemyBase(board, stmOwner);
 
     for (int r = 0; r < board.rows; r++) {
       for (int c = 0; c < board.cols; c++) {
-        int[] symbols = new int[25];
-        boolean allEmptyOrOob = true;
-        int idx = 0;
-
-        for (int wr = r - 2; wr <= r + 2; wr++) {
-          for (int wc = c - 2; wc <= c + 2; wc++) {
-            int sym;
-            if (!board.isValidPos(wr, wc)) {
-              sym = OUT_OF_BOUNDS;
-            } else {
-              Cell cell = board.getCell(wr, wc);
-              sym = getSymbol(cell, stmOwner);
-            }
-            symbols[idx++] = sym;
-            if (sym != EMPTY && sym != OUT_OF_BOUNDS) {
-              allEmptyOrOob = false;
-            }
-          }
-        }
-
-        if (!allEmptyOrOob) {
-          windows.add(new Window(r, c, symbols, getDistanceBucket(r, c, enemyBase)));
+        Window w = buildWindow(board, r, c, stmOwner, enemyBase);
+        if (w != null) {
+          windows.add(w);
         }
       }
     }

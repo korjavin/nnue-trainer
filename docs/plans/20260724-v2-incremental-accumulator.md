@@ -97,9 +97,9 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 ## Implementation Steps
 
 ### Task 1: Factor a single-window builder in PatternContract
-- [ ] Add `public static Window buildWindow(Board board, int r, int c, int stmOwner, Pos enemyBase)` that builds the 25 symbols for center `(r,c)`, returns `null` if all-empty/OOB (emission rule), else a `Window` with `getDistanceBucket(r,c,enemyBase)` — identical logic to the inner loop of `extractWindows`.
-- [ ] Refactor `extractWindows` to call `buildWindow` per center (single source of truth; behavior unchanged).
-- [ ] Run `./mvnw test -Dtest=PatternContractTest,NNUEv2AccumulatorTest` — must still pass (proves the refactor is behavior-preserving) before Task 2.
+- [x] Add `public static Window buildWindow(Board board, int r, int c, int stmOwner, Pos enemyBase)` that builds the 25 symbols for center `(r,c)`, returns `null` if all-empty/OOB (emission rule), else a `Window` with `getDistanceBucket(r,c,enemyBase)` — identical logic to the inner loop of `extractWindows`.
+- [x] Refactor `extractWindows` to call `buildWindow` per center (single source of truth; behavior unchanged).
+- [x] Run `./mvnw test -Dtest=PatternContractTest,NNUEv2AccumulatorTest` — must still pass (proves the refactor is behavior-preserving) before Task 2.
 
 ### Task 2: Add count-based State + deterministic reduction to NNUEv2Accumulator
 - [ ] Add a public nested `State` holding `Map<Integer,Integer> stmCounts`, `Map<Integer,Integer> nstmCounts`, and `int activePlayer`, with accessors.
