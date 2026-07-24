@@ -29,8 +29,12 @@ VAL_FRAC = 0.15
 WEIGHT_DECAY = 0.0
 PATIENCE = 6          # early stop after this many epochs with no val improvement
 
-DATASET = "/Users/iv/Projects/nnue-trainer/dataset.json"
-OUT_PATH = "/Users/iv/Projects/nnue-trainer/src/main/resources/nnue_weights.json"
+# Repo-relative defaults (this script lives at the repo root). Override with env
+# vars DATASET / OUT_PATH so the maintainer can point at any dataset/weights file.
+_REPO = os.path.dirname(os.path.abspath(__file__))
+DATASET = os.environ.get("DATASET", os.path.join(_REPO, "dataset.json"))
+OUT_PATH = os.environ.get(
+    "OUT_PATH", os.path.join(_REPO, "src/main/resources/nnue_weights.json"))
 
 
 def clipped_relu(x):
@@ -151,8 +155,9 @@ def sweep():
 
 def main():
     if not os.path.exists(DATASET):
-        print(f"Error: {DATASET} not found. Run import_games.py first.")
-        return
+        # Exit non-zero so td_leaf_pass.sh (set -e) fails instead of reporting "done".
+        print(f"Error: {DATASET} not found. Run import_games.py first.", file=sys.stderr)
+        sys.exit(1)
     if "--sweep" in sys.argv:
         sweep()
         return
@@ -160,6 +165,9 @@ def main():
     X, y = load_data()
     Xtr, ytr, Xval, yval = split(X, y)
     print(f"Loaded {len(y)} positions | train={len(ytr)} val={len(yval)}")
+    # Label-noise floor: best constant predictor on val = predict mean(train).
+    floor = float(((yval - ytr.mean()) ** 2).mean())
+    print(f"Constant-predictor val MSE (label-noise upper bound): {floor:.5f}")
     val, tr, weights = train(Xtr, ytr, Xval, yval, verbose=True)
     print(f"Best: train MSE {tr:.5f}  val MSE {val:.5f}")
     export(weights)

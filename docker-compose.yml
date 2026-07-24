@@ -12,6 +12,10 @@ services:
     environment:
       - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws?bot=true&namePrefix=JavaBot}
       - CHALLENGER_MODE=${CHALLENGER_MODE:-false}
+      # Deploy the STRONG bot: GoBot search + hand-tuned eval (beats GoBot 6-0). Without these
+      # the bot runs the default negamax+NNUE config, which is weaker. Override via env if needed.
+      - SEARCH=${SEARCH:-GOBOT}
+      - EVAL=${EVAL:-HANDTUNED}
 
 networks:
   virusgame-network:
