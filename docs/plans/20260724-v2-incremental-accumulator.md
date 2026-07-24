@@ -102,12 +102,12 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 - [x] Run `./mvnw test -Dtest=PatternContractTest,NNUEv2AccumulatorTest` — must still pass (proves the refactor is behavior-preserving) before Task 2.
 
 ### Task 2: Add count-based State + deterministic reduction to NNUEv2Accumulator
-- [ ] Add a public nested `State` holding `Map<Integer,Integer> stmCounts`, `Map<Integer,Integer> nstmCounts`, and `int activePlayer`, with accessors.
-- [ ] Add `public State newState(Board board, int activePlayer)` that builds both count maps via the existing `countPatterns` (STM=activePlayer, NSTM=3-activePlayer).
-- [ ] Add a private `accumFromCounts(Map<Integer,Integer> counts)` that returns `float[K]` = bias + sum over ids **in ascending sorted order** of `count*col` (handles null weights -> bias only, null bias -> zeros), and a `public float[] output(State state, float[] dense)` that assembles `[STM, NSTM, dense]` from the two count maps via `accumFromCounts` + the existing `assemble`.
-- [ ] Refactor `computeFull(board, activePlayer, dense)` to `return output(newState(board, activePlayer), dense)` so full and incremental share the IDENTICAL float reduction (guarantees byte-exact parity). Keep the existing constructors, `signature`, and `countPatterns` unchanged.
-- [ ] Add a package-private/private `idAt(Board board, int r, int c, int owner, Pos enemyBase)` returning `dict.lookup(signature(buildWindow(...)))` or `-1` when the window is unemitted (buildWindow null) or a dict miss.
-- [ ] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — existing parity + multiplicativity tests must still pass before Task 3.
+- [x] Add a public nested `State` holding `Map<Integer,Integer> stmCounts`, `Map<Integer,Integer> nstmCounts`, and `int activePlayer`, with accessors.
+- [x] Add `public State newState(Board board, int activePlayer)` that builds both count maps via the existing `countPatterns` (STM=activePlayer, NSTM=3-activePlayer).
+- [x] Add a private `accumFromCounts(Map<Integer,Integer> counts)` that returns `float[K]` = bias + sum over ids **in ascending sorted order** of `count*col` (handles null weights -> bias only, null bias -> zeros), and a `public float[] output(State state, float[] dense)` that assembles `[STM, NSTM, dense]` from the two count maps via `accumFromCounts` + the existing `assemble`.
+- [x] Refactor `computeFull(board, activePlayer, dense)` to `return output(newState(board, activePlayer), dense)` so full and incremental share the IDENTICAL float reduction (guarantees byte-exact parity). Keep the existing constructors, `signature`, and `countPatterns` unchanged.
+- [x] Add a package-private/private `idAt(Board board, int r, int c, int owner, Pos enemyBase)` returning `dict.lookup(signature(buildWindow(...)))` or `-1` when the window is unemitted (buildWindow null) or a dict miss.
+- [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — existing parity + multiplicativity tests must still pass before Task 3.
 
 ### Task 3: Implement the incremental applyMove
 - [ ] Add `public void applyMove(State state, Board oldBoard, Board newBoard, java.util.Collection<Pos> changedCells)` using `state.activePlayer` (STM=activePlayer, NSTM=3-activePlayer). No-op when `hiddenWeights == null`? No — counts are weight-independent, so still update counts (output derives correctly regardless).
