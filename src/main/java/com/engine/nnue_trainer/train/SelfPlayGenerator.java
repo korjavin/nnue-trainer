@@ -43,6 +43,8 @@ public class SelfPlayGenerator {
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
+    public int rows = 12;
+    public int cols = 12;
     public double epsilon = 0.1;
     public int exploreTurns = 6;
     public int searchDepth = 2;
@@ -60,6 +62,40 @@ public class SelfPlayGenerator {
 
     /** GoBot mode fixed depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int gobotFixedDepth = 0;
+
+    /** When non-null, the negamax path also emits raw-board snapshots (JSONL) to this path. */
+    public String rawOutPath = null;
+
+    /** Sample every Nth collected turn for the raw corpus (1 = every position). */
+    public int rawSampleEvery = 1;
+  }
+
+  /** One cell in a raw-board snapshot. owner = -1 for EMPTY/NEUTRAL (no owner). */
+  public static class RawCell {
+    public String kind;
+    public int owner;
+
+    public RawCell(String kind, int owner) {
+      this.kind = kind;
+      this.owner = owner;
+    }
+  }
+
+  /** A raw-board position for the v2 corpus (see CANONICAL v2 RAW-POSITION SCHEMA in the plan). */
+  public static class RawPosition {
+    public int rows;
+    public int cols;
+    public RawCell[][] cells;
+    public int stm;
+    public double wdl;
+
+    public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
+      this.rows = rows;
+      this.cols = cols;
+      this.cells = cells;
+      this.stm = stm;
+      this.wdl = wdl;
+    }
   }
 
   public static class TrainingRecord {
@@ -75,6 +111,8 @@ public class SelfPlayGenerator {
   public static class GenerationResult {
     public List<TrainingRecord> dataset;
     public double distinctGameRatio;
+    /** Raw-board snapshots (null unless {@code config.rawOutPath} was set). */
+    public List<RawPosition> rawPositions;
 
     public GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio) {
       this.dataset = dataset;
@@ -113,6 +151,8 @@ public class SelfPlayGenerator {
     // wrapper can drive the whole TD-leaf pass without editing code.
     config.numGames = envInt("NUM_GAMES", config.numGames);
     config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
+    config.rows = envInt("ROWS", config.rows);
+    config.cols = envInt("COLS", config.cols);
     config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
     config.seed = envLong("SEED", config.seed);
     config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
@@ -135,6 +175,16 @@ public class SelfPlayGenerator {
     config.gobotFixedDepth = envInt("GOBOT_FIXED_DEPTH", config.gobotFixedDepth);
     outputPath = System.getenv().getOrDefault("OUT", outputPath);
 
+    // Raw-corpus emit (Task 2): RAW_OUT enables the JSONL snapshot path; EMIT=raw additionally
+    // skips the v1 one-hot dataset write (default keeps writing v1 as before).
+    String rawOut = System.getenv("RAW_OUT");
+    if (rawOut != null && !rawOut.isBlank()) {
+      config.rawOutPath = rawOut.trim();
+    }
+    config.rawSampleEvery = envInt("RAW_SAMPLE_EVERY", config.rawSampleEvery);
+    String emit = System.getenv("EMIT");
+    boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
+
     System.out.println(
         "Starting self-play: games="
             + config.numGames
@@ -147,7 +197,21 @@ public class SelfPlayGenerator {
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
-    saveDataset(result.dataset, outputPath);
+    if (result.rawPositions != null) {
+      saveRawCorpus(result.rawPositions, config.rawOutPath);
+    }
+    if (!rawOnly) {
+      if (result.dataset.isEmpty()) {
+        // Off-12x12 the v1 one-hot mapper produces no records; refuse to clobber the output
+        // (a committed resource by default) with an empty dataset. Use EMIT=raw for non-12x12.
+        System.err.println(
+            "WARNING: v1 dataset is empty (board is not 12x12) — skipping write of "
+                + outputPath
+                + ". Set EMIT=raw with RAW_OUT for non-12x12 corpus generation.");
+      } else {
+        saveDataset(result.dataset, outputPath);
+      }
+    }
   }
 
   private static int envInt(String key, int fallback) {
@@ -170,6 +234,18 @@ public class SelfPlayGenerator {
       throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
     }
     if (config.searchMode == SearchMode.GOBOT) {
+      // GoBot's NNUE leaf goes through BoardFeatureMapper (12x12-only) and it has no raw-emit path,
+      // so reject both up front rather than crashing deep in the search (non-12x12) or exiting
+      // "successfully" having written nothing (EMIT=raw). Use the negamax path for those.
+      if (config.rows != 12 || config.cols != 12) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play is 12x12-only (NNUE-leaf feature mapper); got "
+                + config.rows + "x" + config.cols + ". Use the negamax path for other sizes.");
+      }
+      if (config.rawOutPath != null) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play has no raw-corpus emit path; RAW_OUT/EMIT=raw need the negamax path.");
+      }
       return generateViaGoBot(config);
     }
     List<TrainingRecord> dataset = new ArrayList<>();
@@ -188,15 +264,12 @@ public class SelfPlayGenerator {
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
+    List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
 
     for (int game = 1; game <= config.numGames; game++) {
       // System.out.println("Simulating game " + game + "/" + config.numGames);
       List<TurnData> turns = new ArrayList<>();
-      Board board = new Board(12, 12);
-
-      // Initialize bases
-      board.setCell(0, 0, new Cell(1, CellKind.BASE));
-      board.setCell(11, 11, new Cell(2, CellKind.BASE));
+      Board board = startBoard(config.rows, config.cols);
 
       int currentPlayer = 1;
       int winner = 0;
@@ -257,27 +330,57 @@ public class SelfPlayGenerator {
         currentPlayer = 3 - currentPlayer;
       }
 
-      // Process collected turns to dataset
-      for (TurnData turnData : turns) {
-        float target =
-            computeTarget(
-                engine,
-                turnData.board,
-                turnData.activePlayer,
-                turnData.canPlaceNeutral,
-                winner,
-                config);
-        float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-        dataset.add(new TrainingRecord(features, target));
+      // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
+      // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record exists.
+      if (config.rows == 12 && config.cols == 12) {
+        for (TurnData turnData : turns) {
+          float target =
+              computeTarget(
+                  engine,
+                  turnData.board,
+                  turnData.activePlayer,
+                  turnData.canPlaceNeutral,
+                  winner,
+                  config);
+          float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
+          dataset.add(new TrainingRecord(features, target));
 
-        uniquePositionHashes.add(Arrays.hashCode(features));
-        totalPositions++;
+          uniquePositionHashes.add(Arrays.hashCode(features));
+          totalPositions++;
+        }
+      }
+
+      // Raw corpus is board-size-agnostic: sample every Nth collected turn regardless of size.
+      if (rawPositions != null) {
+        int every = Math.max(1, config.rawSampleEvery);
+        for (int i = 0; i < turns.size(); i += every) {
+          rawPositions.add(toRawPosition(turns.get(i), winner));
+        }
       }
     }
 
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+    GenerationResult result = new GenerationResult(dataset, distinctGameRatio);
+    result.rawPositions = rawPositions;
+    return result;
+  }
+
+  /** Build a raw snapshot from a recorded turn; wdl is STM-relative (winner==0 → draw 0.5). */
+  private static RawPosition toRawPosition(TurnData turn, int winner) {
+    Board b = turn.board;
+    RawCell[][] cells = new RawCell[b.rows][b.cols];
+    for (int r = 0; r < b.rows; r++) {
+      for (int c = 0; c < b.cols; c++) {
+        Cell cell = b.getCell(r, c);
+        CellKind kind = cell != null ? cell.kind : CellKind.EMPTY;
+        int owner =
+            (kind == CellKind.EMPTY || kind == CellKind.NEUTRAL) ? -1 : (cell != null ? cell.owner : -1);
+        cells[r][c] = new RawCell(kind.name(), owner);
+      }
+    }
+    double wdl = winner == 0 ? 0.5 : (winner == turn.activePlayer ? 1.0 : 0.0);
+    return new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */
@@ -323,7 +426,9 @@ public class SelfPlayGenerator {
 
     for (int game = 1; game <= config.numGames; game++) {
       List<GoPly> plies = new ArrayList<>();
-      GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
+      GoState state =
+          GoState.fromBoard(
+              startBoard(config.rows, config.cols), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
 
       for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
         List<Action> legal = state.legalActions();
@@ -387,10 +492,11 @@ public class SelfPlayGenerator {
     return GoBotSearcher.chooseNodeBudget(state, config.gobotNodeLimit);
   }
 
-  private static Board freshBoard() {
-    Board board = new Board(12, 12);
+  /** A starting board of the given size with both bases at opposite corners. No size literal. */
+  private static Board startBoard(int rows, int cols) {
+    Board board = new Board(rows, cols);
     board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+    board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
     return board;
   }
 
@@ -477,5 +583,24 @@ public class SelfPlayGenerator {
     ObjectMapper mapper = new ObjectMapper();
     mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
     System.out.println("Dataset saved to " + filepath);
+  }
+
+  /** Write the raw corpus as compact JSONL (one position per line), no pretty printer. */
+  private static void saveRawCorpus(List<RawPosition> positions, String filepath)
+      throws IOException {
+    File file = new File(filepath);
+    File parent = file.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    try (java.io.BufferedWriter w =
+        java.nio.file.Files.newBufferedWriter(file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+      for (RawPosition p : positions) {
+        w.write(mapper.writeValueAsString(p));
+        w.newLine();
+      }
+    }
+    System.out.println("Raw corpus saved to " + filepath + " (" + positions.size() + " positions)");
   }
 }
