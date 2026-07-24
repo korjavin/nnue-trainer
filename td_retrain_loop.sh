@@ -47,6 +47,11 @@ fi
 
 mkdir -p "$(dirname "$RUN_LOG")" "$(dirname "$CHALLENGER")"
 
+# Per-run temp log (mktemp, not a fixed /tmp path): a hardcoded world-writable path lets tee follow
+# a pre-planted symlink (CWE-377) and clobbers between concurrent runs. Cleaned up on exit.
+GEN_LOG="$(mktemp "${TMPDIR:-/tmp}/td_retrain_gen.XXXXXX.log")"
+trap 'rm -f "$GEN_LOG"' EXIT
+
 echo ">> compiling + resolving classpath"
 ./mvnw -q -DskipTests compile
 CP="target/classes:$(./mvnw -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout | tail -1)"
@@ -63,10 +68,10 @@ for gen in $(seq 1 "$GENERATIONS"); do
   # Train the challenger to $CHALLENGER; OUT_PATH points train.py there so the champion is untouched.
   # A per-gen SEED makes each rejected generation a DISTINCT attempt (self-play/train are otherwise
   # deterministic, so a fixed seed would regenerate the same rejected challenger every generation).
-  SEED="$((SEED_BASE + gen))" OUT_PATH="$CHALLENGER" ./td_leaf_pass_gobot.sh 2>&1 | tee /tmp/td_retrain_gen.log
+  SEED="$((SEED_BASE + gen))" OUT_PATH="$CHALLENGER" ./td_leaf_pass_gobot.sh 2>&1 | tee "$GEN_LOG"
   # `|| true`: under set -euo pipefail a no-match grep would abort the whole loop before the
   # `${val:=?}` fallback runs. A missing val MSE line is non-fatal — log '?' and gate anyway.
-  val=$(grep -oE 'val MSE [0-9.]+' /tmp/td_retrain_gen.log | tail -1 | awk '{print $3}' || true)
+  val=$(grep -oE 'val MSE [0-9.]+' "$GEN_LOG" | tail -1 | awk '{print $3}' || true)
   : "${val:=?}"
 
   # Gate: RetrainGate promotes (exit 10) or keeps (exit 0); it never throws on a normal outcome.
