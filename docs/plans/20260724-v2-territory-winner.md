@@ -59,19 +59,19 @@ it. Only a genuine equal-territory tie stays 0 → 0.5.
 ## Implementation Steps
 
 ### Task 1: Add canonical terminal-outcome to GoState
-- [ ] add `public int outcomeWinner()` to `GoState.java`: for players 1..players,
+- [x] add `public int outcomeWinner()` to `GoState.java`: for players 1..players,
       count those that are `active(p) && hasMove(p)`; if exactly one survives,
       return it (real elimination rule — last player able to move wins). Otherwise
       (both able to move at a turn cap, or both simultaneously stuck) decide by
       territory: more owned cells wins; equal → return 0 (genuine tie).
-- [ ] add a private `ownedCells(int player)` helper counting `cells[i].owner==player`.
-- [ ] javadoc: note this is the size-general game outcome used to label self-play
+- [x] add a private `ownedCells(int player)` helper counting `cells[i].owner==player`.
+- [x] javadoc: note this is the size-general game outcome used to label self-play
       positions, and that base-destruction is already covered (a lost base makes a
       player inactive, so the survivor wins).
-- [ ] write `GoStateTest.outcomeWinner` (or extend existing) covering: territory
+- [x] write `GoStateTest.outcomeWinner` (or extend existing) covering: territory
       decides a both-bases-alive fill ending; equal territory → 0; base destroyed
       for one player → the other wins.
-- [ ] `./mvnw -q test -Dtest=GoStateTest` (or full) — must pass before Task 2.
+- [x] `./mvnw -q test -Dtest=GoStateTest` (or full) — must pass before Task 2.
 
 ### Task 2: Route SelfPlayGenerator raw winner decisions through GoState
 - [ ] add a private helper `canonicalWinner(Board board, int currentPlayer)` that
