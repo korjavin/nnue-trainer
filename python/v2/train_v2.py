@@ -122,15 +122,6 @@ def set_seed(seed):
     torch.manual_seed(seed)
 
 
-def train(examples, num_patterns, W=1024, epochs=20, batch_size=64, lr=1e-3,
-          seed=0, val_frac=0.2):
-    """Deterministic float training; returns (train_mse, val_mse)."""
-    _, train_mse, val_mse = train_model(
-        examples, num_patterns, W=W, epochs=epochs, batch_size=batch_size,
-        lr=lr, seed=seed, val_frac=val_frac)
-    return train_mse, val_mse
-
-
 def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
                 lr=1e-3, seed=0, val_frac=0.2):
     """Deterministic float training; returns (model, train_mse, val_mse)."""
@@ -162,20 +153,25 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
             opt.step()
 
     return (model,
-            _eval_mse(model, train_ex, loss_fn),
-            _eval_mse(model, val_ex, loss_fn))
+            _eval_mse(model, train_ex, batch_size),
+            _eval_mse(model, val_ex, batch_size))
 
 
-def _eval_mse(model, examples, loss_fn):
+def _eval_mse(model, examples, batch_size=1024):
+    """MSE over `examples`, evaluated in mini-batches so a large corpus does
+    not materialize one giant accumulator tensor (would OOM the CPU box)."""
     if not examples:
         return float("nan")
     model.eval()
+    total_sq = 0.0
     with torch.no_grad():
-        batch = collate(examples)
-        out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
-                    batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
-                    batch["dense"])
-        return loss_fn(out, batch["wdl"]).item()
+        for start in range(0, len(examples), batch_size):
+            batch = collate(examples[start:start + batch_size])
+            out = model(batch["stm_ids"], batch["stm_off"], batch["stm_w"],
+                        batch["nstm_ids"], batch["nstm_off"], batch["nstm_w"],
+                        batch["dense"])
+            total_sq += torch.sum((out - batch["wdl"]) ** 2).item()
+    return total_sq / len(examples)
 
 
 def model_metadata(model):

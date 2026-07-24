@@ -5,7 +5,7 @@ import unittest
 
 import torch
 
-from python.v2.train_v2 import NNUEv2, collate, main, read_num_patterns, train
+from python.v2.train_v2 import NNUEv2, collate, main, read_num_patterns, train_model
 
 
 def _ex(stm, nstm, dense=None, wdl=1.0):
@@ -60,8 +60,8 @@ class TestTraining(unittest.TestCase):
 
     def test_same_seed_is_deterministic(self):
         data = self._synthetic()
-        a = train(data, num_patterns=50, W=4, epochs=3, batch_size=4, seed=123)
-        b = train(data, num_patterns=50, W=4, epochs=3, batch_size=4, seed=123)
+        a = train_model(data, num_patterns=50, W=4, epochs=3, batch_size=4, seed=123)[1:]
+        b = train_model(data, num_patterns=50, W=4, epochs=3, batch_size=4, seed=123)[1:]
         self.assertEqual(a, b)
 
     def test_read_num_patterns_from_real_dictionary(self):
