@@ -62,44 +62,51 @@ cycles correctly.
 ## Implementation Steps
 
 ### Task 1: Offline net-vs-net match harness
-- [ ] add a `GauntletMatch` (mirror `SearchAB`): GoBot search on both sides (`EVAL=NNUE`),
+- [x] add a `GauntletMatch` (mirror `SearchAB`): GoBot search on both sides (`EVAL=NNUE`),
       load champion + challenger via `NNUEModel.load(pathA/pathB)`, play N games alternating colors
       with a fixed node budget + seeds, return `{wins, losses, draws}`; also support a side being
       `HandTunedEval` (challenger-vs-hand-tuned-bar)
-- [ ] unit-test: identical weights → ~even; deterministic given seeds
-- [ ] `./mvnw test` green
+- [x] unit-test: identical weights → ~even; deterministic given seeds
+- [x] `./mvnw test` green
 
 ### Task 2: Promotion decision + champion management
-- [ ] a champion store (e.g. `champions/` dir + a `champion.json` pointer / history log); current
+- [x] a champion store (e.g. `champions/` dir + a `champion.json` pointer / history log); current
       champion = the net currently in `nnue_weights.json`
-- [ ] promotion rule: promote challenger iff it beats champion by margin ≥ `PROMOTE_MARGIN` (env,
+- [x] promotion rule: promote challenger iff it beats champion by margin ≥ `PROMOTE_MARGIN` (env,
       default e.g. wins − losses ≥ 2 over the match) AND does not lose to the hand-tuned bar by more
       than the champion does (never regress below the 6-0 clone's level)
-- [ ] on promote: copy challenger → `nnue_weights.json`, append to champion history with its W-L;
+- [x] on promote: copy challenger → `nnue_weights.json`, append to champion history with its W-L;
       on reject: keep champion, log the rejected challenger's W-L
-- [ ] unit-test the decision + history append
-- [ ] `./mvnw test` green
+- [x] unit-test the decision + history append
+- [x] `./mvnw test` green
 
 ### Task 3: The loop driver
-- [ ] `td_retrain_loop.sh` (or extend `PeriodicRetrainer`): for `GENERATIONS` (env), each gen:
+- [x] `td_retrain_loop.sh` (or extend `PeriodicRetrainer`): for `GENERATIONS` (env), each gen:
       self-play with the current champion via `td_leaf_pass_gobot.sh` knobs (diverse: `EPSILON`,
       `EXPLORE_TURNS`) → train challenger → `GauntletMatch` challenger-vs-champion → promote-or-keep
       → append a per-generation line (gen, val MSE, W-L vs champion, promoted?) to a run log
-- [ ] a hard budget guard (max generations / wall-clock) so it can't run away
-- [ ] document the exact maintainer command + env knobs
-- [ ] `./mvnw test` green (logic unit-tested; the script itself smoke-run once)
+- [x] a hard budget guard (max generations / wall-clock) so it can't run away
+- [x] document the exact maintainer command + env knobs
+- [x] `./mvnw test` green (logic unit-tested; the script itself smoke-run once)
 
 ### Task 4: Safety + sanity
-- [ ] never mutate `nnue_weights.json` except via a passed promotion (atomic: write temp, then move)
-- [ ] optional periodic live sanity: every K generations, run `eval_java_vs_go.py` vs GoBot and log
-      (off by default — it's slow); champion-vs-hand-tuned offline check each gen instead
-- [ ] a small integration smoke: 1 generation, tiny settings, asserts champion only changes on a
-      real improvement and the run log is written
-- [ ] `./mvnw test` green; `./mvnw spotless:check` clean
+- [x] never mutate `nnue_weights.json` except via a passed promotion (atomic: write temp, then move)
+      — `ChampionStore.atomicReplace` runs only inside `promote()`; training writes the challenger to
+      `OUT_PATH=$CHALLENGER` (inherited by `train.py`), never the champion
+- [x] optional periodic live sanity: every K generations, run `eval_java_vs_go.py` vs GoBot and log
+      (off by default — `LIVE_SANITY_EVERY=0`); champion-vs-hand-tuned offline check each gen instead
+- [x] a small integration smoke: 1 generation, tiny settings, asserts champion only changes on a
+      real improvement and the run log is written (`RetrainSmokeTest`)
+- [x] `./mvnw test` green; `./mvnw spotless:check` clean
 
 ### Task 5: Verify + notes
-- [ ] full suite green, spotless clean, weights untouched unless a genuine promotion in a smoke
-- [ ] record the exact maintainer command to run the loop for N generations + how to read the log
+- [x] full suite green (107 tests, 0 failures), spotless clean, weights untouched (`git status` clean
+      after `./mvnw test` — `nnue_weights.json` only ever changes via a genuine `promote()`)
+- [x] record the exact maintainer command to run the loop for N generations + how to read the log —
+      documented in `td_retrain_loop.sh` header:
+      `GENERATIONS=20 NUM_GAMES=200 EPSILON=0.15 EXPLORE_TURNS=8 ./td_retrain_loop.sh`;
+      read the log with `cat champions/run.log` (per-gen: gen, val MSE, W-L vs champion, promoted?),
+      detail in `champions/history.log`
 
 ## Technical Details
 - Gating on an **offline net-vs-net match** (deterministic, fast) is what makes continuous retrain
