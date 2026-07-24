@@ -20,7 +20,8 @@ public class GameLoopHandler {
   private final MessageSender messageSender;
   private final SearchEngine searchEngine;
   private int myPlayerIndex = -1;
-  private String currentGameId = "";
+  // volatile: written on the message worker thread, read from the challenger's scheduler thread.
+  private volatile String currentGameId = "";
 
   public GameLoopHandler(MessageSender messageSender) {
     this(messageSender, new SearchEngine());
@@ -29,6 +30,11 @@ public class GameLoopHandler {
   public GameLoopHandler(MessageSender messageSender, SearchEngine searchEngine) {
     this.messageSender = messageSender;
     this.searchEngine = searchEngine;
+  }
+
+  /** True while a game is in progress (used by the challenger to skip challenging mid-game). */
+  public boolean isInGame() {
+    return !currentGameId.isEmpty();
   }
 
   public void handleMessage(String jsonMessage) {

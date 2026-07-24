@@ -57,12 +57,12 @@ Deliberate behavior change — owner-reviewed before merge. Merge target: master
 ## Implementation Steps
 
 ### Task 1: Add `isInGame()` to GameLoopHandler
-- [ ] make `currentGameId` field `volatile` (read from the scheduler thread, written on the worker thread)
-- [ ] add `public boolean isInGame()` returning `!currentGameId.isEmpty()`
-- [ ] add a test in a suitable protocol test (or `HandshakeHandlerTest` companion) OR verify via the
+- [x] make `currentGameId` field `volatile` (read from the scheduler thread, written on the worker thread)
+- [x] add `public boolean isInGame()` returning `!currentGameId.isEmpty()`
+- [x] add a test in a suitable protocol test (or `HandshakeHandlerTest` companion) OR verify via the
       existing GameLoopHandler tests that `isInGame()` is false initially, true after a `game_start`
       message, and false again after `game_end`
-- [ ] run `./mvnw test` — must pass before next task
+- [x] run `./mvnw test` — must pass before next task
 
 ### Task 2: Rewrite HandshakeHandler as timer-driven challenger with injectable config
 - [ ] add fields: `BooleanSupplier isInGame`, `ScheduledExecutorService scheduler`, `Random random`,
