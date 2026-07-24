@@ -84,6 +84,10 @@ public final class GauntletMatch {
    * plays the hand-tuned bar instead. Alternates which side moves first each game.
    */
   public static Result play(NNUEModel modelA, NNUEModel modelB, Config config) {
+    // Color balance (and exact cancellation of identical nets) requires games to come in
+    // color-flipped pairs; an odd count leaves one unpaired game that always makes A the first
+    // mover, a deterministic margin bias that never washes out. Round up to the next even count.
+    config.games = (config.games + 1) & ~1;
     GoBotSearcher.LeafConfig prev =
         GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null);
     try {
