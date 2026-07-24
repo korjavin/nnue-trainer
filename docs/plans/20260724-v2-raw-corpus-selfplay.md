@@ -103,10 +103,13 @@ Merge target: `nnue-v2-3.2-mining` branch (stacked PR), NOT master / v2.
 - [x] run tests - full `SelfPlayGeneratorTest` + `mine_patterns_test.py` must pass (7/7, 10/10)
 
 ### Task 5: Verify acceptance criteria
-- [ ] `./mvnw test` green (SelfPlayGenerator tests pass, v1 path intact)
-- [ ] a small `RAW_OUT` run produces valid schema JSONL
-- [ ] `python3 python/v2/mine_patterns.py --corpus <sample>` runs clean
-- [ ] run linters/formatters if configured
+- [x] `./mvnw test` green (SelfPlayGenerator tests pass, v1 path intact) — full suite exit 0
+- [x] a small `RAW_OUT` run produces valid schema JSONL — gen_v2_corpus.sh NUM_GAMES=2:
+      2436 positions across 5 sizes; all lines parse, cells dims == rows×cols, wdl ∈ {0,0.5,1},
+      owner==-1 exactly for EMPTY/NEUTRAL (owner-mismatch=0)
+- [x] `python3 python/v2/mine_patterns.py --corpus <sample>` runs clean — 1718 patterns @ 92.28%
+      coverage on the smoke corpus (re-mined dict restored; promotion is owner's call)
+- [x] run linters/formatters if configured — none configured for Python; Java build clean via mvnw
 
 ## Technical Details
 - Raw JSONL is written compact (one line/position) via a Jackson `ObjectMapper`
