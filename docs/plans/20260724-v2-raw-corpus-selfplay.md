@@ -67,19 +67,19 @@ Merge target: `nnue-v2-3.2-mining` branch (stacked PR), NOT master / v2.
 - [x] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — passes (6/6; full suite 117/117 green)
 
 ### Task 2: Raw-board snapshot emit mode
-- [ ] add `RawCell{String kind; int owner;}` and `RawPosition{int rows,cols; RawCell[][] cells; int stm; double wdl;}` static classes
-- [ ] add `String rawOutPath` and `int rawSampleEvery=1` to `Config`; add
+- [x] add `RawCell{String kind; int owner;}` and `RawPosition{int rows,cols; RawCell[][] cells; int stm; double wdl;}` static classes
+- [x] add `String rawOutPath` and `int rawSampleEvery=1` to `Config`; add
       `List<RawPosition> rawPositions` to `GenerationResult` (null unless requested)
-- [ ] in the negamax `generate()` path, when `config.rawOutPath != null`, sample the
+- [x] in the negamax `generate()` path, when `config.rawOutPath != null`, sample the
       collected `turns` at stride `rawSampleEvery` and build `RawPosition` with wdl =
       (winner==0 ? 0.5 : winner==activePlayer ? 1.0 : 0.0), owner=-1 for EMPTY/NEUTRAL
-- [ ] add `saveRawCorpus(List<RawPosition>, path)` writing one compact JSON object per
+- [x] add `saveRawCorpus(List<RawPosition>, path)` writing one compact JSON object per
       line (JSONL, no pretty print) via Jackson
-- [ ] wire `main`: read `RAW_OUT` (path), `RAW_SAMPLE_EVERY`; if `EMIT=raw` skip the v1
+- [x] wire `main`: read `RAW_OUT` (path), `RAW_SAMPLE_EVERY`; if `EMIT=raw` skip the v1
       `saveDataset` (else keep writing v1 one-hot as before)
-- [ ] write test: raw emit produces valid JSONL — each line parses, has rows/cols/stm,
+- [x] write test: raw emit produces valid JSONL — each line parses, has rows/cols/stm,
       cells dims == rows×cols, wdl ∈ {0.0,0.5,1.0}, owner==-1 exactly for EMPTY/NEUTRAL
-- [ ] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — must pass before next task
+- [x] run `./mvnw test -Dtest=SelfPlayGeneratorTest` — passes (7/7)
 
 ### Task 3: mine_patterns.py --corpus reader
 - [ ] add `iter_boards_corpus(path)` in `mine_patterns.py`: read JSONL, map kind string

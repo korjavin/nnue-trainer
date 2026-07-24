@@ -62,6 +62,44 @@ public class SelfPlayGenerator {
 
     /** GoBot mode fixed depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int gobotFixedDepth = 0;
+
+    /** When non-null, the negamax path also emits raw-board snapshots (JSONL) to this path. */
+    public String rawOutPath = null;
+
+    /** Sample every Nth collected turn for the raw corpus (1 = every position). */
+    public int rawSampleEvery = 1;
+  }
+
+  /** One cell in a raw-board snapshot. owner = -1 for EMPTY/NEUTRAL (no owner). */
+  public static class RawCell {
+    public String kind;
+    public int owner;
+
+    public RawCell() {}
+
+    public RawCell(String kind, int owner) {
+      this.kind = kind;
+      this.owner = owner;
+    }
+  }
+
+  /** A raw-board position for the v2 corpus (see CANONICAL v2 RAW-POSITION SCHEMA in the plan). */
+  public static class RawPosition {
+    public int rows;
+    public int cols;
+    public RawCell[][] cells;
+    public int stm;
+    public double wdl;
+
+    public RawPosition() {}
+
+    public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
+      this.rows = rows;
+      this.cols = cols;
+      this.cells = cells;
+      this.stm = stm;
+      this.wdl = wdl;
+    }
   }
 
   public static class TrainingRecord {
@@ -77,6 +115,8 @@ public class SelfPlayGenerator {
   public static class GenerationResult {
     public List<TrainingRecord> dataset;
     public double distinctGameRatio;
+    /** Raw-board snapshots (null unless {@code config.rawOutPath} was set). */
+    public List<RawPosition> rawPositions;
 
     public GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio) {
       this.dataset = dataset;
@@ -139,6 +179,16 @@ public class SelfPlayGenerator {
     config.gobotFixedDepth = envInt("GOBOT_FIXED_DEPTH", config.gobotFixedDepth);
     outputPath = System.getenv().getOrDefault("OUT", outputPath);
 
+    // Raw-corpus emit (Task 2): RAW_OUT enables the JSONL snapshot path; EMIT=raw additionally
+    // skips the v1 one-hot dataset write (default keeps writing v1 as before).
+    String rawOut = System.getenv("RAW_OUT");
+    if (rawOut != null && !rawOut.isBlank()) {
+      config.rawOutPath = rawOut.trim();
+    }
+    config.rawSampleEvery = envInt("RAW_SAMPLE_EVERY", config.rawSampleEvery);
+    String emit = System.getenv("EMIT");
+    boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
+
     System.out.println(
         "Starting self-play: games="
             + config.numGames
@@ -151,7 +201,12 @@ public class SelfPlayGenerator {
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
-    saveDataset(result.dataset, outputPath);
+    if (result.rawPositions != null) {
+      saveRawCorpus(result.rawPositions, config.rawOutPath);
+    }
+    if (!rawOnly) {
+      saveDataset(result.dataset, outputPath);
+    }
   }
 
   private static int envInt(String key, int fallback) {
@@ -192,6 +247,7 @@ public class SelfPlayGenerator {
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
+    List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
 
     for (int game = 1; game <= config.numGames; game++) {
       // System.out.println("Simulating game " + game + "/" + config.numGames);
@@ -276,11 +332,38 @@ public class SelfPlayGenerator {
           totalPositions++;
         }
       }
+
+      // Raw corpus is board-size-agnostic: sample every Nth collected turn regardless of size.
+      if (rawPositions != null) {
+        int every = Math.max(1, config.rawSampleEvery);
+        for (int i = 0; i < turns.size(); i += every) {
+          rawPositions.add(toRawPosition(turns.get(i), winner));
+        }
+      }
     }
 
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+    GenerationResult result = new GenerationResult(dataset, distinctGameRatio);
+    result.rawPositions = rawPositions;
+    return result;
+  }
+
+  /** Build a raw snapshot from a recorded turn; wdl is STM-relative (winner==0 → draw 0.5). */
+  private static RawPosition toRawPosition(TurnData turn, int winner) {
+    Board b = turn.board;
+    RawCell[][] cells = new RawCell[b.rows][b.cols];
+    for (int r = 0; r < b.rows; r++) {
+      for (int c = 0; c < b.cols; c++) {
+        Cell cell = b.getCell(r, c);
+        CellKind kind = cell != null ? cell.kind : CellKind.EMPTY;
+        int owner =
+            (kind == CellKind.EMPTY || kind == CellKind.NEUTRAL) ? -1 : (cell != null ? cell.owner : -1);
+        cells[r][c] = new RawCell(kind.name(), owner);
+      }
+    }
+    double wdl = winner == 0 ? 0.5 : (winner == turn.activePlayer ? 1.0 : 0.0);
+    return new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */
@@ -483,5 +566,24 @@ public class SelfPlayGenerator {
     ObjectMapper mapper = new ObjectMapper();
     mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
     System.out.println("Dataset saved to " + filepath);
+  }
+
+  /** Write the raw corpus as compact JSONL (one position per line), no pretty printer. */
+  private static void saveRawCorpus(List<RawPosition> positions, String filepath)
+      throws IOException {
+    File file = new File(filepath);
+    File parent = file.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    try (java.io.BufferedWriter w =
+        java.nio.file.Files.newBufferedWriter(file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+      for (RawPosition p : positions) {
+        w.write(mapper.writeValueAsString(p));
+        w.newLine();
+      }
+    }
+    System.out.println("Raw corpus saved to " + filepath + " (" + positions.size() + " positions)");
   }
 }
