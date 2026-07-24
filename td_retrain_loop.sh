@@ -93,7 +93,10 @@ for gen in $(seq 1 "$GENERATIONS"); do
   if [ "$LIVE_SANITY_EVERY" -gt 0 ] && [ $((gen % LIVE_SANITY_EVERY)) -eq 0 ]; then
     if [ -f eval_java_vs_go.py ]; then
       echo ">> live sanity: champion vs GoBot ($LIVE_SANITY_GAMES games) — slow"
-      sanity=$(python3 eval_java_vs_go.py "$LIVE_SANITY_GAMES" 2>&1 | tail -1 || true)
+      # Force the promoted config: the JavaBot exercises the NNUE champion only as the GoBot-search
+      # leaf (GameLoopHandler.gobotLeafEvalFor needs BOTH flags). eval_java_vs_go.py inherits our env
+      # into the mvnw child, so without this the sanity check measures the wrong bot mode.
+      sanity=$(SEARCH=GOBOT EVAL=NNUE python3 eval_java_vs_go.py "$LIVE_SANITY_GAMES" 2>&1 | tail -1 || true)
       echo "gen=$gen liveSanity: $sanity" | tee -a "$RUN_LOG"
     else
       echo ">> live sanity requested but eval_java_vs_go.py missing — skipping" | tee -a "$RUN_LOG"
