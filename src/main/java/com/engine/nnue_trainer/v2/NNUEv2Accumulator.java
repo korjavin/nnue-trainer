@@ -37,8 +37,12 @@ public class NNUEv2Accumulator {
       throw new IllegalArgumentException(
           "hiddenWeights row count does not match dict.numPatterns()");
     }
-    if (hiddenWeights != null && hiddenWeights.length > 0 && hiddenWeights[0].length != K) {
-      throw new IllegalArgumentException("hiddenWeights K dimension does not match expected K");
+    if (hiddenWeights != null) {
+      for (int r = 0; r < hiddenWeights.length; r++) {
+        if (hiddenWeights[r] == null || hiddenWeights[r].length != K) {
+          throw new IllegalArgumentException("hiddenWeights K dimension does not match expected K");
+        }
+      }
     }
     if (hiddenBias != null && hiddenBias.length != K) {
       throw new IllegalArgumentException("hiddenBias dimension does not match expected K");
