@@ -104,23 +104,23 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 3: validate_v2.py — board-size independence proof
-- [ ] Add `synth_board(rows, cols)` building a `Board` with both bases, a small
+- [x] Add `synth_board(rows, cols)` building a `Board` with both bases, a small
       INTERIOR cluster of NORMAL_SELF/NORMAL_OPPONENT cells (dense enough that
       interior 5x5 windows can match the 12x12-mined dictionary), and a neutral —
       all placements derived from `rows`/`cols`, zero hardcoded 12.
-- [ ] Add `eval_board(model, board, pattern_to_id)`: build STM/NSTM counts via
+- [x] Add `eval_board(model, board, pattern_to_id)`: build STM/NSTM counts via
       `extract_examples.pattern_counts`, dense via `board_to_grid` +
       `extract_dense_features(rows=board.rows, cols=board.cols)`, `collate` a
       single example, run `model.forward` under `torch.no_grad()`, and return
       `{rows, cols, stm_matched, nstm_matched, eval, finite}`.
-- [ ] Add `board_size_proof(model, pattern_to_id, sizes)` running at least the
+- [x] Add `board_size_proof(model, pattern_to_id, sizes)` running at least the
       sizes `[(5,5),(5,7),(7,9),(9,9)]` (>=2 non-12x12) plus 12x12 as a sanity
       anchor. Assert every eval is finite and scalar-shaped. Return the per-size
       rows for the report.
-- [ ] Create `python/v2/validate_v2_test.py`: a randomly-initialized (untrained,
+- [x] Create `python/v2/validate_v2_test.py`: a randomly-initialized (untrained,
       tiny-W) `NNUEv2` runs `board_size_proof` over two non-12x12 sizes; assert
       finiteness, correct shape, and determinism across two identical runs. Fast.
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 4: validate_v2.py — report generation + main()
 - [ ] Add `write_report(path, v2_result, v1_result, proof_rows)` that writes
