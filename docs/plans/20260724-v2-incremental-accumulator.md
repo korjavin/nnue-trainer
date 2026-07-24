@@ -133,9 +133,9 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 - [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 6.
 
 ### Task 6: Verify acceptance criteria
-- [ ] Verify all six required parity cases + the property test are present and green.
-- [ ] Confirm no 12x12 hardcode, signature contract unchanged, Python side untouched, PatternDictionary/extractWindows/signature reused (not reinvented).
-- [ ] Run full `./mvnw test -Dtest=NNUEv2AccumulatorTest,PatternContractTest,PatternDictionaryTest,DenseFeaturesTest` — all green.
+- [x] Verify all six required parity cases + the property test are present and green.
+- [x] Confirm no 12x12 hardcode, signature contract unchanged, Python side untouched, PatternDictionary/extractWindows/signature reused (not reinvented).
+- [x] Run full `./mvnw test -Dtest=NNUEv2AccumulatorTest,PatternContractTest,PatternDictionaryTest,DenseFeaturesTest` — all green.
 
 ## Technical Details
 
