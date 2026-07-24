@@ -4,7 +4,7 @@ version: "3.8"
 services:
   nnue-trainer-bot:
     # The image tag will be replaced by the GitHub Actions workflow in the deploy branch
-    image: ghcr.io/korjavin/nnue-trainer:latest
+    image: ghcr.io/korjavin/nnue-trainer:e40d44f594e420165aa5c4c75cd0b36f28bf2e40
     container_name: nnue-trainer-bot
     networks:
       - virusgame-network
