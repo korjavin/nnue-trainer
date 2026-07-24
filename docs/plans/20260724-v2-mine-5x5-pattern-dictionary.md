@@ -106,10 +106,10 @@ pattern dictionary from REAL game positions. The pipeline:
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 3: CLI export + generate the `nnue_v2_dictionary.json` artifact
-- [ ] add `export_dictionary(pattern_to_id, min_count, out_path)` writing
+- [x] add `export_dictionary(pattern_to_id, min_count, out_path)` writing
       `{"pattern_to_id": {...}, "metadata": {"num_patterns": N, "min_count": M,
       "version": 2}}` with `json.dump(..., sort_keys=True, indent=2)`.
-- [ ] add `main()` / `if __name__ == "__main__":` with argparse:
+- [x] add `main()` / `if __name__ == "__main__":` with argparse:
       `--dataset` (default repo-root `dataset.json`), `--min-count` (default
       chosen after measuring — start at a value that lands the dict in range or,
       if unreachable, the value giving best honest coverage), `--out` (default
@@ -117,9 +117,10 @@ pattern dictionary from REAL game positions. The pipeline:
       distinct signatures, chosen `min_count`, `num_patterns`, and **retained
       coverage** = promoted-occurrences / total-window-occurrences (as %).
       NO silent truncation — if fewer/more than 2k–10k, print an explicit note.
-- [ ] run `python3 python/v2/mine_patterns.py` and commit the generated
+      (measured: min_count=5 → 5571 patterns, 65.45% coverage, in 2k–10k range)
+- [x] run `python3 python/v2/mine_patterns.py` and commit the generated
       `python/v2/nnue_v2_dictionary.json`.
-- [ ] verify the JSON parses and `metadata.num_patterns == len(pattern_to_id)`.
+- [x] verify the JSON parses and `metadata.num_patterns == len(pattern_to_id)`.
 
 ### Task 4: `PatternDictionary.java` loader
 - [ ] create `src/main/java/com/engine/nnue_trainer/v2/PatternDictionary.java`:

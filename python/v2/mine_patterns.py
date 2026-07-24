@@ -3,8 +3,16 @@
 Reuses python/v2/pattern_contract.py for window extraction and perspective
 normalization. See docs/plans/20260724-v2-mine-5x5-pattern-dictionary.md.
 """
+import argparse
 import collections
 import json
+import os
+import sys
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# allow `python3 python/v2/mine_patterns.py` (script dir, not repo root, on sys.path)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from python.v2.pattern_contract import Board, Cell, CellKind, PatternContract
 
@@ -89,3 +97,48 @@ def build_dictionary(counter, min_count):
     pattern_to_id = {sig: i for i, (sig, _) in enumerate(promoted)}
     total_promoted_occurrences = sum(cnt for _, cnt in promoted)
     return pattern_to_id, len(promoted), total_promoted_occurrences
+
+
+def export_dictionary(pattern_to_id, min_count, out_path):
+    """Write the dictionary JSON deterministically (sort_keys, indent=2)."""
+    doc = {
+        "pattern_to_id": pattern_to_id,
+        "metadata": {
+            "num_patterns": len(pattern_to_id),
+            "min_count": min_count,
+            "version": 2,
+        },
+    }
+    with open(out_path, "w") as f:
+        json.dump(doc, f, sort_keys=True, indent=2)
+        f.write("\n")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Mine 5x5 pattern dictionary.")
+    parser.add_argument("--dataset", default=os.path.join(_REPO_ROOT, "dataset.json"))
+    parser.add_argument("--min-count", type=int, default=5)
+    parser.add_argument(
+        "--out", default=os.path.join(_REPO_ROOT, "python", "v2", "nnue_v2_dictionary.json")
+    )
+    args = parser.parse_args(argv)
+
+    counter, total = count_signatures(iter_boards(args.dataset))
+    pattern_to_id, retained, promoted_occ = build_dictionary(counter, args.min_count)
+    coverage = (promoted_occ / total * 100.0) if total else 0.0
+
+    export_dictionary(pattern_to_id, args.min_count, args.out)
+
+    print("dataset:            %s" % args.dataset)
+    print("total windows:      %d" % total)
+    print("distinct signatures:%d" % len(counter))
+    print("min_count:          %d" % args.min_count)
+    print("num_patterns:       %d" % retained)
+    print("retained coverage:  %.2f%% (%d/%d occurrences)" % (coverage, promoted_occ, total))
+    if not (2000 <= retained <= 10000):
+        print("NOTE: num_patterns %d is outside the 2k-10k target range." % retained)
+    print("wrote:              %s" % args.out)
+
+
+if __name__ == "__main__":
+    main()
