@@ -1,0 +1,40 @@
+{
+  "W": 1024,
+  "activation": "relu",
+  "concat_dim": 2062,
+  "concat_order": [
+    "stm_acc(W)",
+    "nstm_acc(W)",
+    "dense(dense_size)"
+  ],
+  "dense_size": 14,
+  "embeddings": {
+    "mode": "sum",
+    "note": "counted pattern ids -> sum of rows == STM/NSTM accumulator",
+    "nstm_embed": [
+      8135,
+      1024
+    ],
+    "stm_embed": [
+      8135,
+      1024
+    ]
+  },
+  "format": "nnue-v2-weights-json/1",
+  "layers": {
+    "l1": {
+      "in": 2062,
+      "out": 16
+    },
+    "l2": {
+      "in": 16,
+      "out": 32
+    },
+    "l3": {
+      "in": 32,
+      "out": 1
+    }
+  },
+  "num_patterns": 8135,
+  "regen": "python3 python/v2/export_weights.py --model python/v2/nnue_v2_model.pt --dict python/v2/nnue_v2_dictionary.json"
+}
