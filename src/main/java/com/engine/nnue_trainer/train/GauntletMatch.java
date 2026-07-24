@@ -8,6 +8,7 @@ import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
+import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -84,20 +85,29 @@ public final class GauntletMatch {
    * plays the hand-tuned bar instead. Alternates which side moves first each game.
    */
   public static Result play(NNUEModel modelA, NNUEModel modelB, Config config) {
+    return play((Object) modelA, (Object) modelB, config);
+  }
+
+  /**
+   * Generalized match. Each side is one of: {@code null} (hand-tuned bar), an {@link NNUEModel} (v1
+   * leaf), or an {@link NNUEv2Evaluator} (v2 leaf). Same GoBot search both sides — only the leaf
+   * eval differs.
+   */
+  public static Result play(Object sideA, Object sideB, Config config) {
     // Color balance (and exact cancellation of identical nets) requires games to come in
     // color-flipped pairs; an odd count leaves one unpaired game that always makes A the first
     // mover, a deterministic margin bias that never washes out. Round up to the next even count.
     config.games = (config.games + 1) & ~1;
     GoBotSearcher.LeafConfig prev =
-        GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null);
+        GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, (NNUEModel) null);
     try {
-      return playGames(modelA, modelB, config);
+      return playGames(sideA, sideB, config);
     } finally {
       GoBotSearcher.restoreDefaultLeafEval(prev);
     }
   }
 
-  private static Result playGames(NNUEModel modelA, NNUEModel modelB, Config config) {
+  private static Result playGames(Object modelA, Object modelB, Config config) {
     int wins = 0;
     int losses = 0;
     int draws = 0;
@@ -119,7 +129,7 @@ public final class GauntletMatch {
   }
 
   private static int playGame(
-      NNUEModel modelA, NNUEModel modelB, boolean aIsP1, long seed, Config config) {
+      Object modelA, Object modelB, boolean aIsP1, long seed, Config config) {
     GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
@@ -131,7 +141,7 @@ public final class GauntletMatch {
         break; // stuck player — GoState elimination normally sets gameOver first
       }
       // Point the process-wide leaf eval at whichever side is on the move, then search.
-      NNUEModel moverModel = ((state.currentPlayer() == 1) == aIsP1) ? modelA : modelB;
+      Object moverModel = ((state.currentPlayer() == 1) == aIsP1) ? modelA : modelB;
       applyLeaf(moverModel);
       GoResult r = chooseMove(state, config);
 
@@ -151,11 +161,14 @@ public final class GauntletMatch {
     return state.gameOver() ? state.winner() : 0;
   }
 
-  private static void applyLeaf(NNUEModel model) {
-    if (model == null) {
-      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null);
+  private static void applyLeaf(Object side) {
+    if (side == null) {
+      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, (NNUEModel) null);
+    } else if (side instanceof NNUEv2Evaluator) {
+      GoBotSearcher.configureDefaultLeafEval(
+          GoBotSearcher.LeafEval.NNUEV2, (NNUEv2Evaluator) side);
     } else {
-      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, model);
+      GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, (NNUEModel) side);
     }
   }
 
