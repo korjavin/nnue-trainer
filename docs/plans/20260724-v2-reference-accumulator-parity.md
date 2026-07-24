@@ -92,7 +92,7 @@ side only.
       Test-compile passes (exit 0); old test stubbed to compile, real parity test in Task 3.
 
 ### Task 2: Generate + commit a shared parity fixture from the Python contract
-- [ ] Add `python/v2/gen_accumulator_fixture.py`: define a few boards in-process
+- [x] Add `python/v2/gen_accumulator_fixture.py`: define a few boards in-process
       using `pattern_contract.Board/Cell/CellKind` — at minimum: (a) a small board
       with two players' pieces incl. an enemy BASE so distance buckets vary,
       (b) a NON-12x12 board of a different size, (c) a board with pieces in
@@ -100,16 +100,17 @@ side only.
       (stm_owner in {1,2}), run `PatternContract.extract_windows`, build
       `window_signature`, look up ids in `nnue_v2_dictionary.json` (skip misses),
       and count per id.
-- [ ] Write `src/test/resources/v2/accumulator_parity_fixture.json`:
+- [x] Write `src/test/resources/v2/accumulator_parity_fixture.json`:
       a list of `{name, rows, cols, cells:[{r,c,owner,kind}], expected:{"1":{id:count},"2":{id:count}}}`
       where `kind` is the CellKind NAME (EMPTY/NORMAL/BASE/FORTIFIED/NEUTRAL) and
       the perspective keys "1"/"2" map owner -> (id->count). Only non-empty cells
       listed. Commit both the generator and the fixture.
-- [ ] Ensure at least one board's expected maps are non-empty for BOTH perspectives
+- [x] Ensure at least one board's expected maps are non-empty for BOTH perspectives
       (sanity that the dictionary actually contains the produced signatures);
       if a hand-built board yields all-misses, adjust it until it hits real ids.
-- [ ] run the generator (`python3 python/v2/gen_accumulator_fixture.py`) and
-      confirm it writes deterministic output.
+      (single_piece board: p1=8 ids, p2=5 ids; generator asserts this.)
+- [x] run the generator (`python3 python/v2/gen_accumulator_fixture.py`) and
+      confirm it writes deterministic output. (Re-run yields byte-identical file.)
 
 ### Task 3: Rewrite NNUEv2AccumulatorTest as a real parity test
 - [ ] Load `python/v2/nnue_v2_dictionary.json` via `PatternDictionary.load`.
