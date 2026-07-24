@@ -75,8 +75,6 @@ public class SelfPlayGenerator {
     public String kind;
     public int owner;
 
-    public RawCell() {}
-
     public RawCell(String kind, int owner) {
       this.kind = kind;
       this.owner = owner;
@@ -90,8 +88,6 @@ public class SelfPlayGenerator {
     public RawCell[][] cells;
     public int stm;
     public double wdl;
-
-    public RawPosition() {}
 
     public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
       this.rows = rows;
@@ -205,7 +201,16 @@ public class SelfPlayGenerator {
       saveRawCorpus(result.rawPositions, config.rawOutPath);
     }
     if (!rawOnly) {
-      saveDataset(result.dataset, outputPath);
+      if (result.dataset.isEmpty()) {
+        // Off-12x12 the v1 one-hot mapper produces no records; refuse to clobber the output
+        // (a committed resource by default) with an empty dataset. Use EMIT=raw for non-12x12.
+        System.err.println(
+            "WARNING: v1 dataset is empty (board is not 12x12) — skipping write of "
+                + outputPath
+                + ". Set EMIT=raw with RAW_OUT for non-12x12 corpus generation.");
+      } else {
+        saveDataset(result.dataset, outputPath);
+      }
     }
   }
 
