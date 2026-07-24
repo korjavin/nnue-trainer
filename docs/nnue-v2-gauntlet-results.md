@@ -23,7 +23,11 @@ Structurally identical to the proven v1 NNUE leaf path.
 | v2 vs HAND_TUNED | 3 | 24 | 0-24-0 | **0.0%** | 249s |
 | v2 vs v1-NNUE | 3 | 24 | 3-21-0 | **12.5%** | 2756s |
 | v2 vs HAND_TUNED | 4 | 12 | 0-12-0 | **0.0%** | 3068s |
-| v2 vs v1-NNUE | 4 | 8 | _running (best-effort; depth-4 v1 games are very slow)_ | | |
+| v2 vs v1-NNUE | 4 | 8 | not completed¹ | | |
+
+¹ Killed after ~60 min without finishing 8 games — depth-4 games between two
+learned nets run very long at ~5.8k eval/s. Redundant anyway: depth 3 already
+shows v2 losing 3-21 to v1, and the depth-4 bar confirms the depth-3 trend.
 
 Win% = (wins + 0.5·draws) / games, from v2's perspective. Seed 7.
 
@@ -42,4 +46,13 @@ full 24 games per matchup.
 
 ## Verdict
 
-<!-- VERDICT -->
+**v2 does NOT beat the other bots.** As a fixed-depth GoBot leaf it loses every
+game to the hand-tuned bar (0% at depth 3 and 4) and loses 3-21 (12.5%) to its
+own v1 predecessor. Despite reasonable offline WDL metrics (val MSE 0.061,
+dir-acc 0.918), the v2 pattern eval is a weaker in-search leaf than both
+hand-tuned and v1. The mapping is verified zero-sum consistent and orientation
+is confirmed by the sanity check, so this is a genuine strength result, not a
+sign bug.
+
+Default behavior is unchanged: HAND_TUNED and v1-NNUE leaf paths are untouched;
+NNUEV2 is opt-in only.
