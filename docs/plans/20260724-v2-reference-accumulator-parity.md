@@ -70,25 +70,26 @@ side only.
 ## Implementation Steps
 
 ### Task 1: Rewrite NNUEv2Accumulator to the canonical contract + string dictionary
-- [ ] Replace the stale `extractPattern`/`Map<List<Integer>,Integer>` design.
+- [x] Replace the stale `extractPattern`/`Map<List<Integer>,Integer>` design.
       New fields: `PatternDictionary dict`, `float[][] hiddenWeights`
       (`[numPatterns][K]`, nullable), `float[] hiddenBias` (`[K]`, nullable),
       `int K`, `int denseSize` (default 14). Keep the K/bias dimension guards.
-- [ ] Add `static String signature(PatternContract.Window w)` producing
+- [x] Add `static String signature(PatternContract.Window w)` producing
       `",".join(symbols) + "|" + distanceBucket` — byte-identical to
       `python/v2/mine_patterns.py::window_signature`.
-- [ ] Add `Map<Integer,Integer> countPatterns(Board board, int perspectiveOwner)`:
+- [x] Add `Map<Integer,Integer> countPatterns(Board board, int perspectiveOwner)`:
       call `PatternContract.extractWindows(board, perspectiveOwner)`, build each
       signature, `dict.lookup(sig)`, skip `-1` (unseen), and count occurrences
       per id (`LinkedHashMap`/`HashMap`, `merge(id,1,Integer::sum)`). This yields
       COUNTED occurrences, not booleans.
-- [ ] Rewrite `computeFull(Board, int activePlayer, float[] denseFeatures)`:
+- [x] Rewrite `computeFull(Board, int activePlayer, float[] denseFeatures)`:
       `nstm = 3 - activePlayer`; init both accumulators from `hiddenBias`
       (zeros if null); for STM use `countPatterns(board, activePlayer)`, for NSTM
       `countPatterns(board, nstm)`; for each (id,count) add `count * hiddenWeights[id][i]`.
       Output layout unchanged: `[accumSTM(K)] ++ [accumNSTM(K)] ++ [dense(denseSize)]`.
-- [ ] Remove the old `extractPattern` method and the `List`/`Arrays` imports it needed.
-- [ ] run `./mvnw test -Dtest=NNUEv2AccumulatorTest` compiles (test rewritten in Task 3).
+- [x] Remove the old `extractPattern` method and the `List`/`Arrays` imports it needed.
+- [x] run `./mvnw test -Dtest=NNUEv2AccumulatorTest` compiles (test rewritten in Task 3).
+      Test-compile passes (exit 0); old test stubbed to compile, real parity test in Task 3.
 
 ### Task 2: Generate + commit a shared parity fixture from the Python contract
 - [ ] Add `python/v2/gen_accumulator_fixture.py`: define a few boards in-process
