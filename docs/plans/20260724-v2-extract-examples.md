@@ -78,15 +78,15 @@ larger/variable-size corpus (bead d4a.3.4) drops in unchanged.
 - [x] run `python3 python/v2/extract_examples.py` end-to-end to confirm it writes.
 
 ### Task 2: Tests `python/v2/extract_examples_test.py`
-- [ ] Test `pattern_counts`: build a small `Board`, assert counted (per-occurrence,
+- [x] Test `pattern_counts`: build a small `Board`, assert counted (per-occurrence,
       >1 where a pattern repeats), and that a signature absent from the dict is skipped.
-- [ ] Test `wdl_from_target`: positive->1.0, zero->0.5, negative->0.0.
-- [ ] Test `extract_example` record shape: keys present, `len(dense)==14`, `rows`/`cols`
+- [x] Test `wdl_from_target`: positive->1.0, zero->0.5, negative->0.0.
+- [x] Test `extract_example` record shape: keys present, `len(dense)==14`, `rows`/`cols`
       match the decoded board size, STM vs NSTM counts differ for an asymmetric board.
-- [ ] Test determinism: same input + dict yields byte-identical record dicts twice.
-- [ ] Test board-size-agnostic: a 5x5 decoded record yields `rows==cols==5` (no 12x12
+- [x] Test determinism: same input + dict yields byte-identical record dicts twice.
+- [x] Test board-size-agnostic: a 5x5 decoded record yields `rows==cols==5` (no 12x12
       hardcode).
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — all pass.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — all pass.
 
 ### Task 3: Verify acceptance criteria
 - [ ] Both perspectives present as counted sparse `{id:count}` maps; unseen patterns
