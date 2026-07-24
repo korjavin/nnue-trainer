@@ -81,13 +81,13 @@ cycles correctly.
 - [x] `./mvnw test` green
 
 ### Task 3: The loop driver
-- [ ] `td_retrain_loop.sh` (or extend `PeriodicRetrainer`): for `GENERATIONS` (env), each gen:
+- [x] `td_retrain_loop.sh` (or extend `PeriodicRetrainer`): for `GENERATIONS` (env), each gen:
       self-play with the current champion via `td_leaf_pass_gobot.sh` knobs (diverse: `EPSILON`,
       `EXPLORE_TURNS`) → train challenger → `GauntletMatch` challenger-vs-champion → promote-or-keep
       → append a per-generation line (gen, val MSE, W-L vs champion, promoted?) to a run log
-- [ ] a hard budget guard (max generations / wall-clock) so it can't run away
-- [ ] document the exact maintainer command + env knobs
-- [ ] `./mvnw test` green (logic unit-tested; the script itself smoke-run once)
+- [x] a hard budget guard (max generations / wall-clock) so it can't run away
+- [x] document the exact maintainer command + env knobs
+- [x] `./mvnw test` green (logic unit-tested; the script itself smoke-run once)
 
 ### Task 4: Safety + sanity
 - [ ] never mutate `nnue_weights.json` except via a passed promotion (atomic: write temp, then move)
