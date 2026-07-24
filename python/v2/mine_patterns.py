@@ -86,6 +86,25 @@ def count_signatures(boards, stm_owner=1):
     return counter, total
 
 
+def count_signatures_both(boards):
+    """Count signatures over BOTH perspectives (stm_owner 1 and 2).
+
+    Signatures are perspective-normalized (SELF/OPP relative to stm_owner), so an
+    owner-1 view and an owner-2 view of the same board yield swapped symbols. The
+    two-accumulator model (accumulator.py) looks up STM *and* NSTM windows against
+    the SAME dictionary, so mining one perspective starves the NSTM accumulator.
+    Mine both so the promoted dictionary covers NSTM windows too.
+    """
+    boards = list(boards)
+    counter = collections.Counter()
+    total = 0
+    for stm_owner in (1, 2):
+        c, t = count_signatures(boards, stm_owner)
+        counter.update(c)
+        total += t
+    return counter, total
+
+
 def build_dictionary(counter, min_count):
     """Promote signatures with count >= min_count into an id map.
 
@@ -123,7 +142,7 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    counter, total = count_signatures(iter_boards(args.dataset))
+    counter, total = count_signatures_both(iter_boards(args.dataset))
     pattern_to_id, retained, promoted_occ = build_dictionary(counter, args.min_count)
     coverage = (promoted_occ / total * 100.0) if total else 0.0
 

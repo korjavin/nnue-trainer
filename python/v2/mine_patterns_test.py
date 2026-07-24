@@ -10,6 +10,7 @@ import unittest
 from python.v2.mine_patterns import (
     build_dictionary,
     count_signatures,
+    count_signatures_both,
     decode_v1_record,
     export_dictionary,
     window_signature,
@@ -64,6 +65,35 @@ class CountSignaturesTest(unittest.TestCase):
         counter, total = count_signatures([board], stm_owner=1)
         self.assertEqual(total, 25)
         self.assertEqual(sum(counter.values()), 25)
+
+
+class CountSignaturesBothTest(unittest.TestCase):
+    def test_dictionary_covers_nstm_windows(self):
+        # An asymmetric board (self NORMAL vs opponent FORTIFIED) has NSTM
+        # (owner-2) windows whose SELF/OPP symbols are swapped vs the STM view.
+        # Mining owner-1 only leaves NSTM windows unmatched; mining both covers
+        # them. This is what the two-accumulator model (accumulator.py) needs.
+        board = Board(5, 5)
+        board.set_cell(1, 1, Cell(1, CellKind.NORMAL))
+        board.set_cell(3, 3, Cell(2, CellKind.FORTIFIED))
+
+        counter1, _ = count_signatures([board], stm_owner=1)
+        dict1, _, _ = build_dictionary(counter1, min_count=1)
+        nstm_sigs = [
+            window_signature(w)
+            for w in PatternContract.extract_windows(board, 2)
+        ]
+        self.assertTrue(nstm_sigs)
+        self.assertFalse(any(s in dict1 for s in nstm_sigs))  # owner-1-only misses
+
+        counter_both, _ = count_signatures_both([board])
+        dict_both, _, _ = build_dictionary(counter_both, min_count=1)
+        self.assertTrue(all(s in dict_both for s in nstm_sigs))  # both covers NSTM
+        stm_sigs = [
+            window_signature(w)
+            for w in PatternContract.extract_windows(board, 1)
+        ]
+        self.assertTrue(all(s in dict_both for s in stm_sigs))  # and still STM
 
 
 class BuildDictionaryTest(unittest.TestCase):
