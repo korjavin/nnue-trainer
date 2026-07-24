@@ -111,6 +111,7 @@ public class SelfPlayGenerator {
   public static class GenerationResult {
     public List<TrainingRecord> dataset;
     public double distinctGameRatio;
+
     /** Raw-board snapshots (null unless {@code config.rawOutPath} was set). */
     public List<RawPosition> rawPositions;
 
@@ -240,7 +241,10 @@ public class SelfPlayGenerator {
       if (config.rows != 12 || config.cols != 12) {
         throw new IllegalArgumentException(
             "GOBOT self-play is 12x12-only (NNUE-leaf feature mapper); got "
-                + config.rows + "x" + config.cols + ". Use the negamax path for other sizes.");
+                + config.rows
+                + "x"
+                + config.cols
+                + ". Use the negamax path for other sizes.");
       }
       if (config.rawOutPath != null) {
         throw new IllegalArgumentException(
@@ -283,11 +287,10 @@ public class SelfPlayGenerator {
           List<Action> legalActions =
               MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
           if (legalActions.isEmpty()) {
-            if (engine.isTerminal(board)) {
-              winner = determineWinner(board);
-            } else {
-              winner = 3 - currentPlayer;
-            }
+            // Terminal-by-base or a stuck current player: both decided by the real size-general
+            // rule (last player able to move wins, territory tiebreak) rather than a base check /
+            // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
+            winner = canonicalWinner(board, currentPlayer);
             break;
           }
 
@@ -322,7 +325,7 @@ public class SelfPlayGenerator {
           }
 
           if (engine.isTerminal(board)) {
-            winner = determineWinner(board);
+            winner = canonicalWinner(board, currentPlayer);
             break;
           }
         }
@@ -330,8 +333,15 @@ public class SelfPlayGenerator {
         currentPlayer = 3 - currentPlayer;
       }
 
+      // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
+      // decided by the real territory rule instead of defaulting to draw.
+      if (winner == 0) {
+        winner = canonicalWinner(board, currentPlayer);
+      }
+
       // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
-      // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record exists.
+      // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record
+      // exists.
       if (config.rows == 12 && config.cols == 12) {
         for (TurnData turnData : turns) {
           float target =
@@ -375,7 +385,9 @@ public class SelfPlayGenerator {
         Cell cell = b.getCell(r, c);
         CellKind kind = cell != null ? cell.kind : CellKind.EMPTY;
         int owner =
-            (kind == CellKind.EMPTY || kind == CellKind.NEUTRAL) ? -1 : (cell != null ? cell.owner : -1);
+            (kind == CellKind.EMPTY || kind == CellKind.NEUTRAL)
+                ? -1
+                : (cell != null ? cell.owner : -1);
         cells[r][c] = new RawCell(kind.name(), owner);
       }
     }
@@ -539,23 +551,15 @@ public class SelfPlayGenerator {
     return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
   }
 
-  private static int determineWinner(Board board) {
-    boolean player1BaseAlive = false;
-    boolean player2BaseAlive = false;
-
-    for (int r = 0; r < board.rows; r++) {
-      for (int c = 0; c < board.cols; c++) {
-        Cell cell = board.getCell(r, c);
-        if (cell != null && cell.kind == CellKind.BASE) {
-          if (cell.owner == 1) player1BaseAlive = true;
-          if (cell.owner == 2) player2BaseAlive = true;
-        }
-      }
-    }
-
-    if (player1BaseAlive && !player2BaseAlive) return 1;
-    if (!player1BaseAlive && player2BaseAlive) return 2;
-    return 0; // Draw or both destroyed (shouldn't happen in standard play but just in case)
+  /**
+   * The canonical, size-general game outcome for a raw board, via {@link GoState#outcomeWinner()}
+   * (last player able to move wins; territory tiebreak; base-destruction already covered since a
+   * lost base makes a player inactive). {@code currentPlayer} does not affect the outcome — the
+   * snapshot's whose-turn/movesLeft/neutral state is irrelevant to {@code outcomeWinner}.
+   */
+  private static int canonicalWinner(Board board, int currentPlayer) {
+    return GoState.fromBoard(board, currentPlayer, GoState.ACTIONS_PER_TURN, new boolean[2])
+        .outcomeWinner();
   }
 
   private static Board copyBoard(Board original) {
@@ -595,7 +599,8 @@ public class SelfPlayGenerator {
     }
     ObjectMapper mapper = new ObjectMapper();
     try (java.io.BufferedWriter w =
-        java.nio.file.Files.newBufferedWriter(file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+        java.nio.file.Files.newBufferedWriter(
+            file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
       for (RawPosition p : positions) {
         w.write(mapper.writeValueAsString(p));
         w.newLine();

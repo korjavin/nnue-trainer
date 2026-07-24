@@ -74,23 +74,23 @@ it. Only a genuine equal-territory tie stays 0 → 0.5.
 - [x] `./mvnw -q test -Dtest=GoStateTest` (or full) — must pass before Task 2.
 
 ### Task 2: Route SelfPlayGenerator raw winner decisions through GoState
-- [ ] add a private helper `canonicalWinner(Board board, int currentPlayer)` that
+- [x] add a private helper `canonicalWinner(Board board, int currentPlayer)` that
       returns `GoState.fromBoard(board, currentPlayer, GoState.ACTIONS_PER_TURN,
       new boolean[2]).outcomeWinner()`.
-- [ ] replace both `determineWinner(board)` calls (terminal-by-base sites) with
+- [x] replace both `determineWinner(board)` calls (terminal-by-base sites) with
       `canonicalWinner(board, currentPlayer)`.
-- [ ] route the current-stuck branch (`winner = 3 - currentPlayer`) through
+- [x] route the current-stuck branch (`winner = 3 - currentPlayer`) through
       `canonicalWinner` too, so a simultaneous board-fill is decided by territory
       rather than always awarding the opponent.
-- [ ] after the `for (turn ...)` loop, if `winner == 0`, set
+- [x] after the `for (turn ...)` loop, if `winner == 0`, set
       `winner = canonicalWinner(board, currentPlayer)` so turn-capped games are
       decided by territory instead of defaulting to draw.
-- [ ] delete the now-unused `determineWinner(Board)` method.
-- [ ] add a `SelfPlayGeneratorTest` labeling test: a board-fill-with-both-bases-alive
+- [x] delete the now-unused `determineWinner(Board)` method.
+- [x] add a `SelfPlayGeneratorTest` labeling test: a board-fill-with-both-bases-alive
       position is labeled by territory (winner != 0 / wdl != 0.5), and a genuine
       equal-territory tie stays wdl 0.5 (via `toRawPosition`/`computeTarget` or
       `GoState.outcomeWinner` directly).
-- [ ] `./mvnw test` — full suite must pass before Task 3.
+- [x] `./mvnw test` — full suite must pass before Task 3.
 
 ### Task 3: Verify acceptance criteria
 - [ ] confirm raw winner determination uses the canonical size-general outcome on

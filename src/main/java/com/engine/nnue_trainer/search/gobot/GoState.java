@@ -168,8 +168,8 @@ public final class GoState {
    * for a snapshot — this recomputes the outcome from the grid.
    *
    * <p>Real rule: the last player still able to move wins. A destroyed base makes a player inactive
-   * (so its opponent, still able to move, wins here — base-destruction stays decisive). When neither
-   * side can move (simultaneous board-fill) or both still can (a turn cap), the tiebreak is
+   * (so its opponent, still able to move, wins here — base-destruction stays decisive). When
+   * neither side can move (simultaneous board-fill) or both still can (a turn cap), the tiebreak is
    * territory: more owned cells wins; a genuine equal-territory tie returns 0 (maps to wdl 0.5).
    *
    * @return the winning player (1..players), or 0 for a genuine equal-territory tie

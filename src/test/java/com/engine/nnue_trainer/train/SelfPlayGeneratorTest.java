@@ -8,6 +8,7 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
@@ -161,12 +162,59 @@ class SelfPlayGeneratorTest {
   }
 
   @Test
+  void territoryFilledPositionIsLabeledDecisiveNotDraw() {
+    // A full both-bases-alive board (nobody can move) with p1 owning the majority: the generator's
+    // canonical winner (fromBoard().outcomeWinner(), same call canonicalWinner makes) must pick p1,
+    // and OUTCOME labeling must then map it to a decisive ±1 — not the old base-survival draw.
+    Board b = new Board(5, 5);
+    b.setCell(0, 0, new Cell(1, CellKind.BASE));
+    b.setCell(4, 4, new Cell(2, CellKind.BASE));
+    for (int r = 0; r < 5; r++) {
+      for (int c = 0; c < 5; c++) {
+        if ((r == 0 && c == 0) || (r == 4 && c == 4)) {
+          continue;
+        }
+        b.setCell(r, c, new Cell(r <= 2 ? 1 : 2, CellKind.FORTIFIED)); // p1 territory majority
+      }
+    }
+    int winner = GoState.fromBoard(b, 1, GoState.ACTIONS_PER_TURN, new boolean[2]).outcomeWinner();
+    assertEquals(1, winner, "both bases alive but p1 has more territory → p1 wins, not a draw");
+
+    SearchEngine engine = new SearchEngine();
+    SelfPlayGenerator.Config outcome = new SelfPlayGenerator.Config();
+    assertEquals(
+        1.0f,
+        SelfPlayGenerator.computeTarget(engine, b, 1, false, winner, outcome),
+        1e-6,
+        "territory winner labels the side-to-move position decisively (wdl 1.0, not 0.5)");
+  }
+
+  @Test
+  void generatedCorpusIsNotAllDraws() {
+    // The bug: every non-12x12 / turn-capped game defaulted to draw (wdl 0.5). With canonical
+    // territory labeling, decisive results must appear across a few seeded games on a small board.
+    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
+    config.rows = 5;
+    config.cols = 5;
+    config.numGames = 4;
+    config.maxTurns = 30;
+    config.seed = 7;
+    config.rawOutPath = "unused"; // enables raw collection; nothing is written from generate()
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+    assertTrue(
+        result.rawPositions.stream().anyMatch(p -> p.wdl != 0.5),
+        "at least one position should carry a decisive territory label, not all-draws");
+  }
+
+  @Test
   void testDiverseDatasetGeneration() {
     SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
     config.numGames = 1;
     config.maxTurns = 15;
     config.epsilon = 1.0;
     config.exploreTurns = 15;
+    config.seed = 42; // deterministic: an unseeded Random here flakes below the 0.8 threshold
 
     SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
 
