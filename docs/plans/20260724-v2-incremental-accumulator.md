@@ -128,9 +128,9 @@ Merge target: `nnue-v2-1.1-accumulator` branch (stacked PR), NOT master/v2/3.2.
 - [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 5.
 
 ### Task 5: Randomized property parity test
-- [ ] Add a seeded (`new Random(SEED)`) property test: start from a small/medium board with two bases, then for N iterations mutate 1–3 random cells (place/convert/clear NORMAL/FORTIFIED/NEUTRAL, occasionally a base to exercise the fallback), snapshot old board (deep copy), apply the change to a new board, `applyMove(state, old, new, diffCells(...))`, and assert incremental counts AND float output equal full recompute at EVERY step. Run with activePlayer 1 and 2.
-- [ ] Add a tiny deep-copy board helper in the test (new Board + copy cells) since Board has no clone.
-- [ ] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 6.
+- [x] Add a seeded (`new Random(SEED)`) property test: start from a small/medium board with two bases, then for N iterations mutate 1–3 random cells (place/convert/clear NORMAL/FORTIFIED/NEUTRAL, occasionally a base to exercise the fallback), snapshot old board (deep copy), apply the change to a new board, `applyMove(state, old, new, diffCells(...))`, and assert incremental counts AND float output equal full recompute at EVERY step. Run with activePlayer 1 and 2.
+- [x] Add a tiny deep-copy board helper in the test (new Board + copy cells) since Board has no clone. (Reused existing `copy` helper from Task 4.)
+- [x] Run `./mvnw test -Dtest=NNUEv2AccumulatorTest` — must pass before Task 6.
 
 ### Task 6: Verify acceptance criteria
 - [ ] Verify all six required parity cases + the property test are present and green.

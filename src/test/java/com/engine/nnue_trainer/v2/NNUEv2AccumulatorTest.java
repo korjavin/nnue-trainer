@@ -176,6 +176,45 @@ public class NNUEv2AccumulatorTest {
     assertParityBoth(old, neu);
   }
 
+  // ---- Task 5: seeded randomized property parity across a move sequence ----
+
+  // Play a long sequence of random 1-3 cell mutations (occasionally a base, to hit the
+  // base-move fallback) and assert incremental counts AND float output equal full recompute
+  // at EVERY step, for both perspectives. The `copy` helper is the required deep-copy snapshot.
+  @Test
+  public void testRandomizedPropertyParity() throws Exception {
+    NNUEv2Accumulator acc = buildAccumulator();
+    for (int activePlayer = 1; activePlayer <= 2; activePlayer++) {
+      java.util.Random rng = new java.util.Random(0xB0BACAFEL + activePlayer);
+      Board board = new Board(8, 9);
+      board.setCell(1, 1, new Cell(1, CellKind.BASE));
+      board.setCell(6, 7, new Cell(2, CellKind.BASE));
+      for (int iter = 0; iter < 200; iter++) {
+        Board old = copy(board);
+        int mutations = 1 + rng.nextInt(3);
+        for (int m = 0; m < mutations; m++) {
+          board.setCell(rng.nextInt(board.rows), rng.nextInt(board.cols), randomCell(rng));
+        }
+        assertParity(acc, old, board, activePlayer);
+      }
+    }
+  }
+
+  private static Cell randomCell(java.util.Random rng) {
+    int roll = rng.nextInt(12);
+    if (roll == 0) return new Cell(rng.nextInt(2) + 1, CellKind.BASE); // rare -> base-move fallback
+    switch (roll % 4) {
+      case 0:
+        return new Cell(0, CellKind.EMPTY);
+      case 1:
+        return new Cell(rng.nextInt(2) + 1, CellKind.NORMAL);
+      case 2:
+        return new Cell(rng.nextInt(2) + 1, CellKind.FORTIFIED);
+      default:
+        return new Cell(rng.nextInt(2) + 1, CellKind.NEUTRAL);
+    }
+  }
+
   /** Non-trivial weights/bias so the derived float output is a real (not all-ones) parity check. */
   private static NNUEv2Accumulator buildAccumulator() throws Exception {
     PatternDictionary dict = PatternDictionary.load(DICT);
