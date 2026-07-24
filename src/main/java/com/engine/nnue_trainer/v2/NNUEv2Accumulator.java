@@ -4,6 +4,7 @@ import com.engine.nnue_trainer.board.Board;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * v2 accumulator over the canonical 3.1 pattern contract. Builds window
@@ -31,6 +32,11 @@ public class NNUEv2Accumulator {
       float[] hiddenBias,
       int K,
       int denseSize) {
+    Objects.requireNonNull(dict, "dict");
+    if (hiddenWeights != null && hiddenWeights.length != dict.numPatterns()) {
+      throw new IllegalArgumentException(
+          "hiddenWeights row count does not match dict.numPatterns()");
+    }
     if (hiddenWeights != null && hiddenWeights.length > 0 && hiddenWeights[0].length != K) {
       throw new IllegalArgumentException("hiddenWeights K dimension does not match expected K");
     }
