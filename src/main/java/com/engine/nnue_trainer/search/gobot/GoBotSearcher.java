@@ -63,7 +63,20 @@ public final class GoBotSearcher {
    * (a few thousand) while staying inside {@code ±MATE_SCORE}. Value is a calibration knob — only
    * the ordering matters for fixed-depth play.
    */
-  static final long NNUEV2_SCALE = 4000L;
+  static final long NNUEV2_SCALE = scaleFromEnv();
+
+  /** WDL-&gt;score scale: env {@code NNUEV2_SCALE} (diagnostic sweep knob), default 4000. */
+  private static long scaleFromEnv() {
+    String s = System.getenv("NNUEV2_SCALE");
+    if (s != null && !s.isBlank()) {
+      try {
+        return Long.parseLong(s.trim());
+      } catch (NumberFormatException ignored) {
+        // fall through to default
+      }
+    }
+    return 4000L;
+  }
 
   /**
    * Immutable (mode, model) snapshot so newSearcher reads a consistent view in one volatile read.
