@@ -98,12 +98,18 @@ public final class ChampionStore {
       Files.createDirectories(dir);
     }
     Path tmp = Files.createTempFile(dir, "champion", ".tmp");
-    Files.copy(from, tmp, StandardCopyOption.REPLACE_EXISTING);
     try {
-      Files.move(tmp, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-    } catch (IOException | UnsupportedOperationException e) {
-      // ponytail: atomic move unsupported on some filesystems — fall back to a plain move.
-      Files.move(tmp, to, StandardCopyOption.REPLACE_EXISTING);
+      Files.copy(from, tmp, StandardCopyOption.REPLACE_EXISTING);
+      try {
+        Files.move(tmp, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+      } catch (IOException | UnsupportedOperationException e) {
+        // ponytail: atomic move unsupported on some filesystems — fall back to a plain move.
+        Files.move(tmp, to, StandardCopyOption.REPLACE_EXISTING);
+      }
+    } catch (IOException | RuntimeException e) {
+      // Never leave a stray champion*.tmp behind in the resources dir on failure.
+      Files.deleteIfExists(tmp);
+      throw e;
     }
   }
 }

@@ -20,8 +20,8 @@ import java.nio.file.Path;
  *
  * <p>Run: {@code java -cp <cp> com.engine.nnue_trainer.train.RetrainGate <gen> <challenger.json>
  * <champion.json> <history.log>}. Env knobs: {@code GAUNTLET_GAMES}, {@code GAUNTLET_NODE_LIMIT},
- * {@code PROMOTE_MARGIN}. Prints a single {@code RUN gen=..} summary line
- * (stdout) for the run log; exit 0 = kept, 10 = promoted (so the loop can react without parsing).
+ * {@code PROMOTE_MARGIN}. Prints a single {@code RUN gen=..} summary line (stdout) for the run log;
+ * exit 0 = kept, 10 = promoted (so the loop can react without parsing).
  */
 public final class RetrainGate {
 
