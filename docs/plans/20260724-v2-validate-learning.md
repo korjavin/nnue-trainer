@@ -86,7 +86,7 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 2: validate_v2.py — v2 learning curves + v1 comparison
-- [ ] Create `python/v2/validate_v2.py`. Add `run_v2_training(...)`: load the
+- [x] Create `python/v2/validate_v2.py`. Add `run_v2_training(...)`: load the
       dictionary (`read_num_patterns`) and examples (`load_examples`), train with
       the real config (W=1024, epochs=20, batch=64, lr=1e-3, seed=0,
       val_frac=0.2) passing an `on_epoch` collector to capture per-epoch
@@ -94,14 +94,14 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
       metrics, dictionary size, and dataset size. Also compute a constant-
       predictor val MSE baseline (predict mean train WDL) as a learning floor,
       and a directional accuracy on the v2 val split ((pred>0.5) vs (wdl>0.5)).
-- [ ] Add `run_v1_baseline(...)`: import `train` (repo-root v1), call
+- [x] Add `run_v1_baseline(...)`: import `train` (repo-root v1), call
       `load_data`/`split`/`train` with seed=0 to get v1 best val MSE + train MSE,
       plus v1 directional accuracy on its val split (sign(pred) vs sign(target))
       and its constant-predictor floor. Wrap in try/except so a missing
       `dataset.json` degrades gracefully (report "v1 baseline unavailable").
-- [ ] Ensure `dataset.json` path resolves to repo root; the script must not
+- [x] Ensure `dataset.json` path resolves to repo root; the script must not
       assume a 12x12 side anywhere (v1 side is derived by existing code).
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 3: validate_v2.py — board-size independence proof
 - [ ] Add `synth_board(rows, cols)` building a `Board` with both bases, a small
