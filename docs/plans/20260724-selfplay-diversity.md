@@ -144,12 +144,12 @@ only, default OFF for anything that isn't the data-gen challenger.
 - [x] run tests — must pass before next task.
 
 ### Task 5: Verify acceptance criteria
-- [ ] flag OFF still plays deterministic best-move (live + offline).
-- [ ] flag ON produces sharply higher unique-game / unique-position ratios.
-- [ ] existing `SelfPlayGeneratorTest`, `GoBotSelfPlayTest`, `GoOpeningBookTest`,
+- [x] flag OFF still plays deterministic best-move (live + offline).
+- [x] flag ON produces sharply higher unique-game / unique-position ratios.
+- [x] existing `SelfPlayGeneratorTest`, `GoBotSelfPlayTest`, `GoOpeningBookTest`,
   `GoBotSearcherTest`, `GameLoopHandlerTest` all green.
-- [ ] run full `./mvnw test`.
-- [ ] run the formatter/linter if the build enforces one (spotless) — fix issues.
+- [x] run full `./mvnw test`.
+- [x] run the formatter/linter if the build enforces one (spotless) — fix issues.
 
 ## Technical Details
 
