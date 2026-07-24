@@ -70,15 +70,15 @@ cycles correctly.
 - [x] `./mvnw test` green
 
 ### Task 2: Promotion decision + champion management
-- [ ] a champion store (e.g. `champions/` dir + a `champion.json` pointer / history log); current
+- [x] a champion store (e.g. `champions/` dir + a `champion.json` pointer / history log); current
       champion = the net currently in `nnue_weights.json`
-- [ ] promotion rule: promote challenger iff it beats champion by margin ≥ `PROMOTE_MARGIN` (env,
+- [x] promotion rule: promote challenger iff it beats champion by margin ≥ `PROMOTE_MARGIN` (env,
       default e.g. wins − losses ≥ 2 over the match) AND does not lose to the hand-tuned bar by more
       than the champion does (never regress below the 6-0 clone's level)
-- [ ] on promote: copy challenger → `nnue_weights.json`, append to champion history with its W-L;
+- [x] on promote: copy challenger → `nnue_weights.json`, append to champion history with its W-L;
       on reject: keep champion, log the rejected challenger's W-L
-- [ ] unit-test the decision + history append
-- [ ] `./mvnw test` green
+- [x] unit-test the decision + history append
+- [x] `./mvnw test` green
 
 ### Task 3: The loop driver
 - [ ] `td_retrain_loop.sh` (or extend `PeriodicRetrainer`): for `GENERATIONS` (env), each gen:
