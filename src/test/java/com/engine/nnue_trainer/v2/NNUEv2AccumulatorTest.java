@@ -2,102 +2,300 @@ package com.engine.nnue_trainer.v2;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
-import java.util.Arrays;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Byte-for-byte parity against the Python contract: the Java accumulator's
+ * per-perspective (id -> count) maps must equal the committed Python-generated
+ * fixture ({@code src/test/resources/v2/accumulator_parity_fixture.json}) using
+ * the SAME promoted dictionary both sides consume.
+ */
 public class NNUEv2AccumulatorTest {
 
+  private static final Path DICT = Path.of("python", "v2", "nnue_v2_dictionary.json");
+  private static final Path FIXTURE =
+      Path.of("src", "test", "resources", "v2", "accumulator_parity_fixture.json");
+
   @Test
-  public void testAccumulatorOutputVariableSize() {
-    // Mock a 5x5 pattern dictionary
-    Map<List<Integer>, Integer> patternDict = new HashMap<>();
+  public void testParityAgainstPythonFixture() throws Exception {
+    PatternDictionary dict = PatternDictionary.load(DICT);
+    NNUEv2Accumulator acc = new NNUEv2Accumulator(dict, null, null, 8);
 
-    Integer[] pattern1Array = new Integer[25];
-    Arrays.fill(pattern1Array, 12);
-    pattern1Array[12] = 0; // Center is STM normal (dist 0) -> 0 + 0 = 0
-    pattern1Array[24] = 10; // (4,4) is NSTM relative to (2,2) for P1 (dist 4) -> 6 + 4 = 10
-    List<Integer> pattern1 = Arrays.asList(pattern1Array);
-    patternDict.put(pattern1, 0);
+    JsonNode boards = new ObjectMapper().readTree(FIXTURE.toFile());
+    int nonEmptyBoards = 0;
+    for (JsonNode boardNode : boards) {
+      String name = boardNode.get("name").asText();
+      Board board = reconstruct(boardNode);
 
-    Integer[] pattern2Array = new Integer[25];
-    Arrays.fill(pattern2Array, 12);
-    pattern2Array[0] = 10; // (2,2) is NSTM relative to (4,4) for P1 (dist 4) -> 6 + 4 = 10
-    pattern2Array[12] =
-        0; // Center is STM normal (dist 0) for P2 -> wait, NSTM center? P1 extracts for NSTM (P2).
-    // For P2, (4,4) is their own piece. STM normal (dist 0) is 0
-    List<Integer> pattern2 = Arrays.asList(pattern2Array);
-    patternDict.put(pattern2, 1);
+      Map<Integer, Integer> expected1 = expectedFor(boardNode, "1");
+      Map<Integer, Integer> expected2 = expectedFor(boardNode, "2");
+      assertEquals(expected1, acc.countPatterns(board, 1), name + " perspective 1");
+      assertEquals(expected2, acc.countPatterns(board, 2), name + " perspective 2");
+      if (!expected1.isEmpty() && !expected2.isEmpty()) {
+        nonEmptyBoards++;
+      }
+    }
+    assertFalse(nonEmptyBoards == 0, "at least one board must hit real ids on both perspectives");
+  }
 
-    // extractPattern for P1 at (4,4):
-    // cell at (2,2) is P1 (perspective P1 -> STM) -> 0+4 = 4
-    // cell at (4,4) is P2 (perspective P1 -> NSTM) -> 6+0 = 6
-    pattern2Array[0] = 4;
-    pattern2Array[12] = 6;
-    patternDict.put(pattern2, 1);
+  @Test
+  public void testSignatureFormat() {
+    int[] symbols = new int[25];
+    symbols[24] = 4; // trailing NORMAL_SELF, rest EMPTY
+    PatternContract.Window w = new PatternContract.Window(2, 2, symbols, 7);
+    String expected = "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|7";
+    assertEquals(expected, NNUEv2Accumulator.signature(w));
 
-    // extractPattern for P2 at (2,2):
-    // cell at (2,2) is P1 (perspective P2 -> NSTM) -> 6+0 = 6
-    // cell at (4,4) is P2 (perspective P2 -> STM) -> 0+4 = 4
-    Integer[] pattern3Array = new Integer[25];
-    Arrays.fill(pattern3Array, 12);
-    pattern3Array[12] = 6;
-    pattern3Array[24] = 4;
-    List<Integer> pattern3 = Arrays.asList(pattern3Array);
-    patternDict.put(pattern3, 2);
+    // Non-7 bucket must be serialized verbatim (guards the bucket component,
+    // which the promoted dictionary — all bucket 7 — cannot exercise).
+    PatternContract.Window near = new PatternContract.Window(2, 2, symbols, 3);
+    assertEquals(
+        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|3",
+        NNUEv2Accumulator.signature(near));
+  }
 
-    // extractPattern for P2 at (4,4):
-    // cell at (2,2) is P1 (perspective P2 -> NSTM) -> 6+4 = 10
-    // cell at (4,4) is P2 (perspective P2 -> STM) -> 0+0 = 0
-    Integer[] pattern4Array = new Integer[25];
-    Arrays.fill(pattern4Array, 12);
-    pattern4Array[0] = 10;
-    pattern4Array[12] = 0;
-    List<Integer> pattern4 = Arrays.asList(pattern4Array);
-    patternDict.put(pattern4, 3);
+  @Test
+  public void testComputeFullAppliesCountsMultiplicatively() throws Exception {
+    PatternDictionary dict = PatternDictionary.load(DICT);
+    int K = 3;
+    int denseSize = 14;
+    // Stub weights: column id == constant so count*weight is easy to reason about.
+    float[][] weights = new float[dict.numPatterns()][K];
+    for (int id = 0; id < weights.length; id++) {
+      for (int i = 0; i < K; i++) {
+        weights[id][i] = 1.0f;
+      }
+    }
+    NNUEv2Accumulator acc = new NNUEv2Accumulator(dict, weights, null, K, denseSize);
 
-    int K = 2; // Accumulator size
-    int denseSize = 3;
+    // Two identical, isolated, fully-interior pieces so every signature recurs
+    // (count == 2) — this is what distinguishes count*weight from a boolean
+    // add-once-per-id. Mirrors the "repeated_pattern" parity fixture board.
+    Board board = new Board(12, 20);
+    board.setCell(5, 5, new Cell(1, CellKind.NORMAL));
+    board.setCell(5, 12, new Cell(1, CellKind.NORMAL));
 
-    // Weights: [pattern_id][k]
-    float[][] hiddenWeights = new float[4][K];
-    hiddenWeights[0] = new float[] {1.0f, 2.0f};
-    hiddenWeights[1] = new float[] {3.0f, 4.0f};
-    hiddenWeights[2] = new float[] {5.0f, 6.0f};
-    hiddenWeights[3] = new float[] {7.0f, 8.0f};
+    Map<Integer, Integer> stmCounts = acc.countPatterns(board, 1);
+    int totalStm = totalCount(stmCounts);
+    int totalNstm = totalCount(acc.countPatterns(board, 2));
+    // Guard the premise: at least one id must recur, else boolean vs
+    // multiplicative would be indistinguishable and this test would be vacuous.
+    assertTrue(
+        totalStm > stmCounts.size(), "board must produce a count > 1 to exercise multiplicativity");
 
-    float[] hiddenBias = new float[] {100.0f, 200.0f};
+    float[] out = acc.computeFull(board, 1, null);
+    assertEquals(K * 2 + denseSize, out.length);
+    // Every weight column is all-ones, so accum[i] == total occurrence count
+    // (sum of counts), which exceeds the distinct-id count under multiplicativity.
+    for (int i = 0; i < K; i++) {
+      assertEquals((float) totalStm, out[i], "STM accum multiplicative sum");
+      assertEquals((float) totalNstm, out[K + i], "NSTM accum multiplicative sum");
+    }
+  }
 
-    NNUEv2Accumulator accumulator =
-        new NNUEv2Accumulator(patternDict, hiddenWeights, hiddenBias, K, denseSize);
+  // ---- Task 4: incremental applyMove parity against full recompute ----
 
-    // Variable size board: 6x6
-    Board board = new Board(6, 6);
-    board.setCell(2, 2, new Cell(1, CellKind.NORMAL)); // Active player 1
-    board.setCell(4, 4, new Cell(2, CellKind.NORMAL)); // Active player 2
+  // Single-cell change on an interior empty cell.
+  @Test
+  public void testParitySingleCellChange() throws Exception {
+    Board old = new Board(12, 12);
+    old.setCell(2, 2, new Cell(1, CellKind.NORMAL));
+    Board neu = copy(old);
+    neu.setCell(6, 6, new Cell(1, CellKind.NORMAL));
+    assertParityBoth(old, neu);
+  }
 
-    float[] denseFeatures = new float[] {0.1f, 0.2f, 0.3f};
+  // Two changed cells within 4 of each other so their affected-window sets overlap,
+  // proving each shared window is decremented/incremented exactly once.
+  @Test
+  public void testParityMultiCellOverlappingWindows() throws Exception {
+    Board old = new Board(12, 12);
+    old.setCell(6, 6, new Cell(1, CellKind.NORMAL));
+    Board neu = copy(old);
+    neu.setCell(6, 6, new Cell(2, CellKind.NORMAL)); // convert
+    neu.setCell(6, 8, new Cell(1, CellKind.NORMAL)); // 2 away -> windows overlap
+    assertParityBoth(old, neu);
+  }
 
-    float[] result = accumulator.computeFull(board, 1, denseFeatures);
+  // Changed cells on the border of a small board so windows include OUT_OF_BOUNDS.
+  @Test
+  public void testParityEdgeAndOobWindows() throws Exception {
+    Board old = new Board(6, 6);
+    Board neu = copy(old);
+    neu.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    neu.setCell(5, 5, new Cell(2, CellKind.FORTIFIED));
+    assertParityBoth(old, neu);
+  }
 
-    // Assert size is K * 2 + denseSize = 2*2 + 3 = 7
-    assertEquals(7, result.length);
+  // Two identical isolated pieces share ids (count 2, no base -> bucket 7 -> real dict hits);
+  // removing one must decrement the shared ids by exactly the right amount.
+  @Test
+  public void testParityRepeatedPatternIds() throws Exception {
+    Board old = new Board(12, 20);
+    old.setCell(5, 5, new Cell(1, CellKind.NORMAL));
+    old.setCell(5, 12, new Cell(1, CellKind.NORMAL));
+    Board neu = copy(old);
+    neu.setCell(5, 12, new Cell(0, CellKind.EMPTY));
+    assertParityBoth(old, neu);
+  }
 
-    // patternSTM at (2,2) for P1 is pattern 0 -> {1.0, 2.0}
-    // patternSTM at (4,4) for P1 is pattern 1 -> {3.0, 4.0}
-    // accumSTM = {1.0 + 3.0, 2.0 + 4.0} = {4.0, 6.0}
+  // Windows near a (static) base carry a non-7 distance bucket, which the all-bucket-7
+  // dictionary never contains -> guaranteed misses; parity must hold with misses skipped.
+  @Test
+  public void testParityDictMissSkipped() throws Exception {
+    Board old = new Board(12, 12);
+    old.setCell(5, 5, new Cell(2, CellKind.BASE)); // enemy base for owner 1
+    old.setCell(5, 7, new Cell(1, CellKind.NORMAL));
+    Board neu = copy(old);
+    neu.setCell(5, 8, new Cell(1, CellKind.NORMAL)); // base static -> local path, misses skipped
+    assertParityBoth(old, neu);
+  }
 
-    // patternNSTM at (2,2) for P2 is pattern 2 -> {5.0, 6.0}
-    // patternNSTM at (4,4) for P2 is pattern 3 -> {7.0, 8.0}
-    // accumNSTM = {5.0 + 7.0 + 100.0, 6.0 + 8.0 + 200.0} = {112.0, 214.0}
+  // Relocating the enemy base shifts every window's bucket for owner 1, tripping the
+  // full-recompute fallback; parity must still be exact.
+  @Test
+  public void testParityBaseMoveFallback() throws Exception {
+    Board old = new Board(12, 12);
+    old.setCell(3, 3, new Cell(2, CellKind.BASE));
+    old.setCell(11, 11, new Cell(1, CellKind.NORMAL)); // far -> bucket 7 -> real hits
+    Board neu = copy(old);
+    neu.setCell(3, 3, new Cell(0, CellKind.EMPTY));
+    neu.setCell(4, 4, new Cell(2, CellKind.BASE)); // enemyBase moves for owner 1 -> fallback
+    assertParityBoth(old, neu);
+  }
 
-    float[] expected = new float[] {104.0f, 206.0f, 112.0f, 214.0f, 0.1f, 0.2f, 0.3f};
-    assertArrayEquals(expected, result, 1e-5f);
+  // ---- Task 5: seeded randomized property parity across a move sequence ----
+
+  // Play a long sequence of random 1-3 cell mutations (occasionally a base, to hit the
+  // base-move fallback) and assert incremental counts AND float output equal full recompute
+  // at EVERY step, for both perspectives. The `copy` helper is the required deep-copy snapshot.
+  @Test
+  public void testRandomizedPropertyParity() throws Exception {
+    NNUEv2Accumulator acc = buildAccumulator();
+    for (int activePlayer = 1; activePlayer <= 2; activePlayer++) {
+      java.util.Random rng = new java.util.Random(0xB0BACAFEL + activePlayer);
+      Board board = new Board(8, 9);
+      board.setCell(1, 1, new Cell(1, CellKind.BASE));
+      board.setCell(6, 7, new Cell(2, CellKind.BASE));
+      for (int iter = 0; iter < 200; iter++) {
+        Board old = copy(board);
+        int mutations = 1 + rng.nextInt(3);
+        for (int m = 0; m < mutations; m++) {
+          board.setCell(rng.nextInt(board.rows), rng.nextInt(board.cols), randomCell(rng));
+        }
+        assertParity(acc, old, board, activePlayer);
+      }
+    }
+  }
+
+  private static Cell randomCell(java.util.Random rng) {
+    int roll = rng.nextInt(12);
+    if (roll == 0) return new Cell(rng.nextInt(2) + 1, CellKind.BASE); // rare -> base-move fallback
+    switch (roll % 4) {
+      case 0:
+        return new Cell(0, CellKind.EMPTY);
+      case 1:
+        return new Cell(rng.nextInt(2) + 1, CellKind.NORMAL);
+      case 2:
+        return new Cell(rng.nextInt(2) + 1, CellKind.FORTIFIED);
+      default:
+        return new Cell(rng.nextInt(2) + 1, CellKind.NEUTRAL);
+    }
+  }
+
+  /** Non-trivial weights/bias so the derived float output is a real (not all-ones) parity check. */
+  private static NNUEv2Accumulator buildAccumulator() throws Exception {
+    PatternDictionary dict = PatternDictionary.load(DICT);
+    int K = 8;
+    int denseSize = 14;
+    float[][] weights = new float[dict.numPatterns()][K];
+    for (int id = 0; id < weights.length; id++) {
+      for (int i = 0; i < K; i++) {
+        weights[id][i] = (float) ((id * 31 + i) % 7) - 3;
+      }
+    }
+    float[] bias = new float[K];
+    for (int i = 0; i < K; i++) {
+      bias[i] = i - 2.5f;
+    }
+    return new NNUEv2Accumulator(dict, weights, bias, K, denseSize);
+  }
+
+  private static float[] denseFeatures() {
+    float[] d = new float[14];
+    for (int i = 0; i < d.length; i++) {
+      d[i] = i * 0.5f - 3;
+    }
+    return d;
+  }
+
+  private static Board copy(Board b) {
+    Board n = new Board(b.rows, b.cols);
+    for (int r = 0; r < b.rows; r++) {
+      for (int c = 0; c < b.cols; c++) {
+        Cell cell = b.getCell(r, c);
+        n.setCell(r, c, new Cell(cell.owner, cell.kind));
+      }
+    }
+    return n;
+  }
+
+  private static void assertParityBoth(Board old, Board neu) throws Exception {
+    NNUEv2Accumulator acc = buildAccumulator();
+    assertParity(acc, old, neu, 1);
+    assertParity(acc, old, neu, 2);
+  }
+
+  private static void assertParity(NNUEv2Accumulator acc, Board old, Board neu, int activePlayer) {
+    float[] dense = denseFeatures();
+    NNUEv2Accumulator.State s = acc.newState(old, activePlayer);
+    acc.applyMove(s, old, neu, NNUEv2Accumulator.diffCells(old, neu));
+    NNUEv2Accumulator.State full = acc.newState(neu, activePlayer);
+    String tag = "activePlayer=" + activePlayer;
+    assertEquals(full.stmCounts(), s.stmCounts(), "stm counts " + tag);
+    assertEquals(full.nstmCounts(), s.nstmCounts(), "nstm counts " + tag);
+    assertArrayEquals(
+        acc.computeFull(neu, activePlayer, dense), acc.output(s, dense), 0.0f, "output " + tag);
+  }
+
+  private static int totalCount(Map<Integer, Integer> counts) {
+    int total = 0;
+    for (int c : counts.values()) {
+      total += c;
+    }
+    return total;
+  }
+
+  private static Board reconstruct(JsonNode boardNode) {
+    Board board = new Board(boardNode.get("rows").asInt(), boardNode.get("cols").asInt());
+    for (JsonNode cell : boardNode.get("cells")) {
+      board.setCell(
+          cell.get("r").asInt(),
+          cell.get("c").asInt(),
+          new Cell(cell.get("owner").asInt(), CellKind.valueOf(cell.get("kind").asText())));
+    }
+    return board;
+  }
+
+  private static Map<Integer, Integer> expectedFor(JsonNode boardNode, String perspective) {
+    Map<Integer, Integer> map = new HashMap<>();
+    JsonNode expected = boardNode.get("expected").get(perspective);
+    for (Iterator<Map.Entry<String, JsonNode>> it = expected.fields(); it.hasNext(); ) {
+      Map.Entry<String, JsonNode> e = it.next();
+      map.put(Integer.parseInt(e.getKey()), e.getValue().asInt());
+    }
+    return map;
   }
 }
