@@ -133,12 +133,12 @@ pattern dictionary from REAL game positions. The pipeline:
 - [x] write tests (Task 5). (tests are Task 5, next iteration)
 
 ### Task 5: `PatternDictionaryTest.java`
-- [ ] load the committed `python/v2/nnue_v2_dictionary.json` (resolve via repo
+- [x] load the committed `python/v2/nnue_v2_dictionary.json` (resolve via repo
       path); assert `size() == metadata.num_patterns` and `> 0`.
-- [ ] assert a known signature key from the file maps to its stored id.
-- [ ] assert `lookup` of a fabricated unseen signature returns `-1`
+- [x] assert a known signature key from the file maps to its stored id.
+- [x] assert `lookup` of a fabricated unseen signature returns `-1`
       (miss handling).
-- [ ] run `./mvnw test -Dtest=PatternDictionaryTest` — must pass.
+- [x] run `./mvnw test -Dtest=PatternDictionaryTest` — must pass.
 
 ### Task 6: Verify acceptance criteria
 - [ ] `python3 -m unittest discover -s python/v2 -p "*_test.py"` passes.
