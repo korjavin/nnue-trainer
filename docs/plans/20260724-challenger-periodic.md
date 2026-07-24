@@ -65,30 +65,30 @@ Deliberate behavior change — owner-reviewed before merge. Merge target: master
 - [x] run `./mvnw test` — must pass before next task
 
 ### Task 2: Rewrite HandshakeHandler as timer-driven challenger with injectable config
-- [ ] add fields: `BooleanSupplier isInGame`, `ScheduledExecutorService scheduler`, `Random random`,
+- [x] add fields: `BooleanSupplier isInGame`, `ScheduledExecutorService scheduler`, `Random random`,
       `final boolean challengerMode`, `final int intervalSec`; keep `MessageSender`, `ObjectMapper`
-- [ ] add `volatile List<UsersUpdateMessage.User> onlineUsers` cache (init empty) and `volatile String selfId`
-- [ ] read env ONCE at construction: `CHALLENGER_MODE` (env or system property, "true" gate) and
+- [x] add `volatile List<UsersUpdateMessage.User> onlineUsers` cache (init empty) and `volatile String selfId`
+- [x] read env ONCE at construction: `CHALLENGER_MODE` (env or system property, "true" gate) and
       `CHALLENGE_INTERVAL_SEC` (default 300) into final fields via small private static helpers
-- [ ] keep the simple `HandshakeHandler(MessageSender)` constructor (isInGame → `() -> false`, own
+- [x] keep the simple `HandshakeHandler(MessageSender)` constructor (isInGame → `() -> false`, own
       single-thread scheduler, `new Random()`, env-derived config) so existing wiring/tests compile
-- [ ] add `HandshakeHandler(MessageSender, BooleanSupplier isInGame)` production constructor (env config,
+- [x] add `HandshakeHandler(MessageSender, BooleanSupplier isInGame)` production constructor (env config,
       own scheduler + Random)
-- [ ] add a fully-injectable constructor `(MessageSender, BooleanSupplier, ScheduledExecutorService, Random,
+- [x] add a fully-injectable constructor `(MessageSender, BooleanSupplier, ScheduledExecutorService, Random,
       boolean challengerMode, int intervalSec)` for tests
-- [ ] `handleWelcome`: capture `selfId` from `WelcomeMessage.getUserId()` (still no send)
-- [ ] `handleUsersUpdate`: cache `usersUpdateMessage.getUsers()` (null-safe → empty list); then, if
+- [x] `handleWelcome`: capture `selfId` from `WelcomeMessage.getUserId()` (still no send)
+- [x] `handleUsersUpdate`: cache `usersUpdateMessage.getUsers()` (null-safe → empty list); then, if
       challengerMode, do a 10s-throttled reactive `attemptChallenge()` (keeps existing reactive tests green)
-- [ ] add `void attemptChallenge()`: gate on `challengerMode`; return if `isInGame.getAsBoolean()`; build
+- [x] add `void attemptChallenge()`: gate on `challengerMode`; return if `isInGame.getAsBoolean()`; build
       eligible list from cache (id != null, id != selfId, `!user.isInGame()`, NO go/bot filter); if empty
       no-op; else pick `eligible.get(random.nextInt(eligible.size()))`, send `ChallengeMessage(id, 12, 12)`
-- [ ] add `void challengeTick()` (package-visible) = `attemptChallenge()` — the scheduled task body
-- [ ] add `void start()`: if challengerMode, `scheduler.scheduleAtFixedRate(this::challengeTick, initialDelay, intervalSec, SECONDS)` with a little jitter on the initial delay (seeded via `random`)
-- [ ] add `void shutdown()` → `scheduler.shutdownNow()`
-- [ ] update `testHandleUsersUpdateMessageDoesNotChallengeIfDisabled` to set `CHALLENGER_MODE=false`
+- [x] add `void challengeTick()` (package-visible) = `attemptChallenge()` — the scheduled task body
+- [x] add `void start()`: if challengerMode, `scheduler.scheduleAtFixedRate(this::challengeTick, initialDelay, intervalSec, SECONDS)` with a little jitter on the initial delay (seeded via `random`)
+- [x] add `void shutdown()` → `scheduler.shutdownNow()`
+- [x] update `testHandleUsersUpdateMessageDoesNotChallengeIfDisabled` to set `CHALLENGER_MODE=false`
       BEFORE constructing the handler (env read once at construction now) — construct a fresh handler in
       the test after setting the property
-- [ ] run `./mvnw test` — existing HandshakeHandlerTest cases must pass before next task
+- [x] run `./mvnw test` — existing HandshakeHandlerTest cases must pass before next task
 
 ### Task 3: Wire HandshakeHandler into BotWebSocketClient lifecycle
 - [ ] in `BotWebSocketClient` constructor, build `gameLoopHandler` first, then

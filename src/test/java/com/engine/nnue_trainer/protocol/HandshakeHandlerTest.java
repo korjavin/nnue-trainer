@@ -115,10 +115,12 @@ public class HandshakeHandlerTest {
 
   @Test
   public void testHandleUsersUpdateMessageDoesNotChallengeIfDisabled() {
+    // Env/config is read once at construction, so set the flag BEFORE building the handler.
     System.setProperty("CHALLENGER_MODE", "false");
+    HandshakeHandler disabledHandler = new HandshakeHandler(messageSender);
     String usersUpdateJson =
         "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
-    handshakeHandler.handleMessage(usersUpdateJson);
+    disabledHandler.handleMessage(usersUpdateJson);
 
     verify(messageSender, never()).send(anyString());
   }
