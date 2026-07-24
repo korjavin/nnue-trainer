@@ -109,11 +109,14 @@ Deliberate behavior change — owner-reviewed before merge. Merge target: master
 - [x] run `./mvnw test` — all green
 
 ### Task 5: Verify acceptance criteria
-- [ ] verify: idle challenger bot picks a RANDOM eligible online player about every ~5 min via the timer
-- [ ] verify: never challenges while `isInGame()` is true
-- [ ] verify: self excluded; declines survived (timer keeps firing; random pick avoids hammering)
-- [ ] run full `./mvnw test` — all green
-- [ ] run spotless/checkstyle if wired into the build (`./mvnw test` covers verification)
+- [x] verify: idle challenger bot picks a RANDOM eligible online player about every ~5 min via the timer
+      (unit-proven: testPeriodicTimerFiresChallenge captures the scheduleAtFixedRate Runnable + testRandomEligiblePick;
+      intervalSec default 300s; live ~5-min observation is the manual Post-Completion item)
+- [x] verify: never challenges while `isInGame()` is true (testSkipWhileInGame)
+- [x] verify: self excluded; declines survived (timer keeps firing; random pick avoids hammering)
+      (testSelfExclusion + testPeriodicTimerFiresChallenge)
+- [x] run full `./mvnw test` — all green (113 tests, 0 failures, BUILD SUCCESS)
+- [x] run spotless/checkstyle if wired into the build (`./mvnw test` covers verification)
 
 ## Technical Details
 - Eligibility predicate per cached `UsersUpdateMessage.User u`: `u.getId() != null && !u.getId().equals(selfId) && !u.isInGame()`.
