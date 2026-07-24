@@ -42,3 +42,6 @@ dataset.json
 # Python venv and run logs
 .venv/
 *.log
+
+# Ignore generated weights file
+nnue_v2_weights.json
