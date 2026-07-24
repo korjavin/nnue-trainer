@@ -100,8 +100,13 @@ cycles correctly.
 - [x] `./mvnw test` green; `./mvnw spotless:check` clean
 
 ### Task 5: Verify + notes
-- [ ] full suite green, spotless clean, weights untouched unless a genuine promotion in a smoke
-- [ ] record the exact maintainer command to run the loop for N generations + how to read the log
+- [x] full suite green (107 tests, 0 failures), spotless clean, weights untouched (`git status` clean
+      after `./mvnw test` — `nnue_weights.json` only ever changes via a genuine `promote()`)
+- [x] record the exact maintainer command to run the loop for N generations + how to read the log —
+      documented in `td_retrain_loop.sh` header:
+      `GENERATIONS=20 NUM_GAMES=200 EPSILON=0.15 EXPLORE_TURNS=8 ./td_retrain_loop.sh`;
+      read the log with `cat champions/run.log` (per-gen: gen, val MSE, W-L vs champion, promoted?),
+      detail in `champions/history.log`
 
 ## Technical Details
 - Gating on an **offline net-vs-net match** (deterministic, fast) is what makes continuous retrain
