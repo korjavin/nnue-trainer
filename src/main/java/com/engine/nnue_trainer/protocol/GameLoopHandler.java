@@ -8,6 +8,7 @@ import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoBotExploration;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
@@ -181,6 +182,12 @@ public class GameLoopHandler {
   // Read at construction (not class-load) so the SEARCH flag is honoured per instance and testable.
   private final boolean useGobotSearch = gobotSearchFromEnv();
 
+  // Env-gated, seeded near-best exploration for the data-gen challenger (opt-in only). Read at
+  // construction like useGobotSearch. Default OFF ⇒ byte-identical deterministic best-move play.
+  private final GoBotExploration exploration =
+      GoBotExploration.fromEnv(
+          "CHALLENGER_EXPLORE", "CHALLENGER_EXPLORE_TEMP", "CHALLENGER_EXPLORE_SEED", 0.6);
+
   // Per-move node budget for the deterministic live GoBot search. ~GoBot's 1s worth of nodes and
   // then some (GoBot does ~17-55k/move); at 60k the clone beats GoBot 6-0. Overridable via env.
   private static final long DEFAULT_LIVE_NODE_LIMIT = 60000L;
@@ -337,7 +344,16 @@ public class GameLoopHandler {
       // No legal action from this position; let makeMove log "No legal actions available."
       return new SearchResult(null, 0, 0, 0, System.currentTimeMillis() - start);
     }
+    // Exploration (opt-in): a book move (searchComplete && depth==0) is randomized over legal
+    // openings; any other result is softmax near-best sampled. Disabled ⇒ chosen == r.action.
+    Action chosen;
+    if (exploration.enabled && r.searchComplete && r.depth == 0) {
+      Action opening = exploration.sampleOpening(gs.legalActions());
+      chosen = opening != null ? opening : r.action;
+    } else {
+      chosen = exploration.sampleMove(r);
+    }
     return new SearchResult(
-        r.action, r.score, r.depth, (int) r.nodes, System.currentTimeMillis() - start);
+        chosen, r.score, r.depth, (int) r.nodes, System.currentTimeMillis() - start);
   }
 }
