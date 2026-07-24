@@ -47,9 +47,16 @@ public final class GauntletV2Run {
     System.out.println("matchup            mode        games  W-L-D (v2)   win%(v2)   secs");
     System.out.println("-----------------  ----------  -----  -----------  --------   ------");
 
+    // MATCHUP env filters which matchups run: "bar" (vs hand-tuned only), "v1" (vs v1 only), or
+    // "both" (default). Lets the slow v2-vs-v1 matchup be sized separately from the cheap bar.
+    String matchup = sysval("MATCHUP", "both").toLowerCase();
+    boolean doBar = !matchup.equals("v1");
+    boolean doV1 = !matchup.equals("bar");
     for (int depth : depths) {
-      runOne("v2 vs HAND_TUNED", v2, null, games, depth, seed, nodeMode, nodeLimit);
-      if (v1 != null) {
+      if (doBar) {
+        runOne("v2 vs HAND_TUNED", v2, null, games, depth, seed, nodeMode, nodeLimit);
+      }
+      if (doV1 && v1 != null) {
         runOne("v2 vs v1-NNUE", v2, v1, games, depth, seed, nodeMode, nodeLimit);
       }
     }

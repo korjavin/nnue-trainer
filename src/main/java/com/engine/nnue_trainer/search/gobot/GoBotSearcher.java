@@ -118,8 +118,12 @@ public final class GoBotSearcher {
     return prev;
   }
 
-  /** As above, for the NNUE v2 leaf ({@code mode} is normally {@link LeafEval#NNUEV2}). */
-  public static LeafConfig configureDefaultLeafEval(LeafEval mode, NNUEv2Evaluator v2) {
+  /**
+   * As above, for the NNUE v2 leaf ({@code mode} is normally {@link LeafEval#NNUEV2}). Distinct
+   * name (not an overload) so existing {@code configureDefaultLeafEval(mode, null)} callers stay
+   * unambiguous.
+   */
+  public static LeafConfig configureDefaultLeafEvalV2(LeafEval mode, NNUEv2Evaluator v2) {
     LeafConfig prev = defaultLeaf;
     defaultLeaf = new LeafConfig(mode, null, v2);
     return prev;

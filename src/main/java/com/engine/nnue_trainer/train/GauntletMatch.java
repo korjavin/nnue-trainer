@@ -165,7 +165,7 @@ public final class GauntletMatch {
     if (side == null) {
       GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, (NNUEModel) null);
     } else if (side instanceof NNUEv2Evaluator) {
-      GoBotSearcher.configureDefaultLeafEval(
+      GoBotSearcher.configureDefaultLeafEvalV2(
           GoBotSearcher.LeafEval.NNUEV2, (NNUEv2Evaluator) side);
     } else {
       GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, (NNUEModel) side);
