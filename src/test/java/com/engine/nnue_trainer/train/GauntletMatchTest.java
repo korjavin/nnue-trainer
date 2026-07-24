@@ -10,8 +10,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Task 1: the offline net-vs-net gate. Identical weights on both sides must land ~even (exactly
  * even over alternating colors, since both sides play the same deterministic game), and the whole
- * match is reproducible under a fixed seed + node/depth budget. A shallow fixed depth keeps it
- * fast.
+ * match is reproducible under a fixed node/depth budget. A shallow fixed depth keeps it fast.
  */
 class GauntletMatchTest {
 
@@ -25,7 +24,6 @@ class GauntletMatchTest {
     config.fixedDepth = 2; // cheap + bypasses the opening book
     config.games = 4;
     config.maxTurns = 8;
-    config.seed = 7;
     return config;
   }
 
@@ -42,7 +40,7 @@ class GauntletMatchTest {
         fastConfig().games, r.wins + r.losses + r.draws, "every game counted exactly once");
     assertEquals(0, r.margin(), "no promotion signal when nets are identical");
 
-    // Same seed + budget → byte-identical result (reproducible gate).
+    // Same budget → byte-identical result (reproducible gate).
     GauntletMatch.Result again = GauntletMatch.play(model, model, fastConfig());
     assertEquals(r.wins, again.wins, "reproducible wins");
     assertEquals(r.losses, again.losses, "reproducible losses");

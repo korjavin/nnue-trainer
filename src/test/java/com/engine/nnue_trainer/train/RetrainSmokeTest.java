@@ -33,7 +33,6 @@ class RetrainSmokeTest {
     c.fixedDepth = 2; // cheap + skips the opening book
     c.games = 2;
     c.maxTurns = 6;
-    c.seed = 3;
     return c;
   }
 

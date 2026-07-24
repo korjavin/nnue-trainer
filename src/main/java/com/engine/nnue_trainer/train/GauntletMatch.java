@@ -11,14 +11,14 @@ import com.engine.nnue_trainer.search.gobot.GoState;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Phase 3 Task 1: the offline net-vs-net gate. Same strong GoBot search on <b>both</b> sides,
  * differing only in the leaf evaluation — side A's weights vs side B's weights (either side may
  * instead be the {@link com.engine.nnue_trainer.search.eval.HandTunedEval} bar, {@code model ==
  * null}). Plays N games alternating colors under a fixed node budget (or fixed depth) so the result
- * is deterministic given the seed, and returns A's {@code {wins, losses, draws}}.
+ * is deterministic (the GoBot search is deterministic given the budget), and returns A's {@code
+ * {wins, losses, draws}}.
  *
  * <p>This is the per-generation promotion gate (Task 2 consumes it): fast and reproducible, unlike
  * the live vs-GoBot harness (~13.5s/move). Mirrors {@link SelfPlayGenerator}'s GoBot game loop but
@@ -62,12 +62,6 @@ public final class GauntletMatch {
 
     /** Fixed search depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int fixedDepth = 0;
-
-    /** Exploration rate for diversity; 0 (default) keeps the gate fully deterministic. */
-    public double epsilon = 0.0;
-
-    public int exploreTurns = 0;
-    public long seed = 1;
   }
 
   private GauntletMatch() {}
@@ -87,13 +81,12 @@ public final class GauntletMatch {
   }
 
   private static Result playGames(NNUEModel modelA, NNUEModel modelB, Config config) {
-    Random random = new Random(config.seed);
     int wins = 0;
     int losses = 0;
     int draws = 0;
     for (int game = 0; game < config.games; game++) {
       boolean aIsP1 = (game % 2 == 0);
-      int winner = playGame(modelA, modelB, aIsP1, config, random);
+      int winner = playGame(modelA, modelB, aIsP1, config);
       if (winner == 0) {
         draws++;
       } else if ((winner == 1) == aIsP1) {
@@ -105,11 +98,9 @@ public final class GauntletMatch {
     return new Result(wins, losses, draws);
   }
 
-  private static int playGame(
-      NNUEModel modelA, NNUEModel modelB, boolean aIsP1, Config config, Random random) {
+  private static int playGame(NNUEModel modelA, NNUEModel modelB, boolean aIsP1, Config config) {
     GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
-    int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
 
     for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
       List<Action> legal = state.legalActions();
@@ -121,12 +112,7 @@ public final class GauntletMatch {
       applyLeaf(moverModel);
       GoResult r = chooseMove(state, config);
 
-      Action chosen;
-      if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
-        chosen = legal.get(random.nextInt(legal.size()));
-      } else {
-        chosen = (r != null && r.action != null) ? r.action : legal.get(0);
-      }
+      Action chosen = (r != null && r.action != null) ? r.action : legal.get(0);
       GoState next = state.apply(chosen);
       if (next == null) {
         chosen = legal.get(0);

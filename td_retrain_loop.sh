@@ -16,12 +16,14 @@
 #   MAX_WALL_SECONDS=3600    # hard budget guard: stop before starting a gen past this wall-clock
 #   PROMOTE_MARGIN=2         # challenger must win the gate match by (wins-losses) >= this
 #   GAUNTLET_GAMES=8         # games per gate match (challenger-vs-champion / vs hand-tuned bar)
-#   GAUNTLET_NODE_LIMIT=60000  GAUNTLET_SEED=1
+#   GAUNTLET_NODE_LIMIT=60000
 #   LIVE_SANITY_EVERY=0      # >0: every K gens also run the slow live vs-GoBot check and log it
 #   LIVE_SANITY_GAMES=20     # games for that live check (needs sibling ../virusgame; see skill)
 #   CHAMPION=src/main/resources/nnue_weights.json   RUN_LOG=champions/run.log
+#   SEED_BASE=1              # self-play seed is SEED_BASE+gen, so each generation is a DISTINCT
+#                           # dataset even while the champion is unchanged (defaults to $SEED or 1)
 #   Self-play knobs pass straight through to td_leaf_pass_gobot.sh: NUM_GAMES, EPSILON,
-#   EXPLORE_TURNS, GOBOT_NODE_LIMIT, TD_LAMBDA, SEED, MAX_TURNS ...
+#   EXPLORE_TURNS, GOBOT_NODE_LIMIT, TD_LAMBDA, MAX_TURNS ...
 # Read the run log with: cat champions/run.log ; history detail in champions/history.log
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -39,6 +41,7 @@ fi
 : "${CHALLENGER:=target/challenger.json}"
 : "${RUN_LOG:=champions/run.log}"
 : "${HISTORY_LOG:=champions/history.log}"
+: "${SEED_BASE:=${SEED:-1}}"  # per-gen self-play seed = SEED_BASE+gen (distinct dataset each gen)
 # PROMOTE_MARGIN / GAUNTLET_* are read by the RetrainGate java child; command-line-prefixed env
 # vars are already exported to children, so nothing to re-export here.
 
@@ -58,7 +61,9 @@ for gen in $(seq 1 "$GENERATIONS"); do
 
   echo ">> === generation $gen/$GENERATIONS (elapsed ${elapsed}s) ==="
   # Train the challenger to $CHALLENGER; OUT_PATH points train.py there so the champion is untouched.
-  OUT_PATH="$CHALLENGER" ./td_leaf_pass_gobot.sh 2>&1 | tee /tmp/td_retrain_gen.log
+  # A per-gen SEED makes each rejected generation a DISTINCT attempt (self-play/train are otherwise
+  # deterministic, so a fixed seed would regenerate the same rejected challenger every generation).
+  SEED="$((SEED_BASE + gen))" OUT_PATH="$CHALLENGER" ./td_leaf_pass_gobot.sh 2>&1 | tee /tmp/td_retrain_gen.log
   val=$(grep -oE 'val MSE [0-9.]+' /tmp/td_retrain_gen.log | tail -1 | awk '{print $3}')
   : "${val:=?}"
 

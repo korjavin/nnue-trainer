@@ -15,6 +15,5 @@ class RetrainGateTest {
     Config fromEnv = RetrainGate.configFromEnv();
     assertEquals(def.games, fromEnv.games);
     assertEquals(def.nodeLimit, fromEnv.nodeLimit);
-    assertEquals(def.seed, fromEnv.seed);
   }
 }
