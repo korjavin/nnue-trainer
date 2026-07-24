@@ -185,8 +185,11 @@ public class GameLoopHandler {
   private static final long DEFAULT_LIVE_NODE_LIMIT = 60000L;
 
   private static boolean gobotSearchFromEnv() {
+    // Default to the STRONGEST config (GoBot search + hand-tuned leaf = beats GoBot 6-0) with no
+    // env needed — production must always run the strongest by default. Opt out with SEARCH=NEGAMAX
+    // (or any non-GOBOT value) to use the legacy negamax NNUE search.
     String v = System.getProperty("SEARCH", System.getenv("SEARCH"));
-    return "GOBOT".equalsIgnoreCase(v);
+    return v == null || v.isBlank() || "GOBOT".equalsIgnoreCase(v);
   }
 
   // EVAL=NNUE (with SEARCH=GOBOT) swaps the GoBot search's leaf eval to the learned NNUE net;
