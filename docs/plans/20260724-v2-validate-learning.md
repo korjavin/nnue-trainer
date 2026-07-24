@@ -123,7 +123,7 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
 - [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 4: validate_v2.py — report generation + main()
-- [ ] Add `write_report(path, v2_result, v1_result, proof_rows)` that writes
+- [x] Add `write_report(path, v2_result, v1_result, proof_rows)` that writes
       `docs/nnue-v2-validation.md` containing: (a) a learning-curves table
       (epoch, train MSE, val MSE) + final metrics + constant-predictor floor +
       directional accuracy + the explicit learning VERDICT; (b) a v1-vs-v2
@@ -139,13 +139,13 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
       statement; (d) the HONEST FRAMING block: 1048 sign-derived WDL labels,
       representation+plumbing+size-generality validated, competitive strength
       DEFERRED to d4a.3.4 corpus + in-engine gauntlet.
-- [ ] Add `main(argv=None)` wiring it end-to-end: run v2 training, v1 baseline,
+- [x] Add `main(argv=None)` wiring it end-to-end: run v2 training, v1 baseline,
       board-size proof, print the board-size demonstration to stdout, and write
       the report. Deterministic. Add `if __name__ == "__main__": main()`.
-- [ ] run `python3 python/v2/validate_v2.py` end-to-end; confirm it prints the
+- [x] run `python3 python/v2/validate_v2.py` end-to-end; confirm it prints the
       board-size demonstration and writes `docs/nnue-v2-validation.md` with real
       numbers.
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 5: Verify acceptance criteria
 - [ ] `python3 python/v2/validate_v2.py` runs clean end-to-end, report written
