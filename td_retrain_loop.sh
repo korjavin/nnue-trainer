@@ -17,6 +17,8 @@
 #   PROMOTE_MARGIN=2         # challenger must win the gate match by (wins-losses) >= this
 #   GAUNTLET_GAMES=8         # games per gate match (challenger-vs-champion / vs hand-tuned bar)
 #   GAUNTLET_NODE_LIMIT=60000
+#   GAUNTLET_SEED=1 GAUNTLET_EPSILON=0.15 GAUNTLET_EXPLORE_TURNS=8  # seeded opening diversity so
+#                           # GAUNTLET_GAMES games are genuinely distinct (search is deterministic)
 #   LIVE_SANITY_EVERY=0      # >0: every K gens also run the slow live vs-GoBot check and log it
 #   LIVE_SANITY_GAMES=20     # games for that live check (needs sibling ../virusgame; see skill)
 #   CHAMPION=src/main/resources/nnue_weights.json   RUN_LOG=champions/run.log

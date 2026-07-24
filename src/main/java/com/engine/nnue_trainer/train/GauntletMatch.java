@@ -11,13 +11,15 @@ import com.engine.nnue_trainer.search.gobot.GoState;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Phase 3 Task 1: the offline net-vs-net gate. Same strong GoBot search on <b>both</b> sides,
  * differing only in the leaf evaluation — side A's weights vs side B's weights (either side may
  * instead be the {@link com.engine.nnue_trainer.search.eval.HandTunedEval} bar, {@code model ==
- * null}). Plays N games alternating colors under a fixed node budget (or fixed depth) so the result
- * is deterministic (the GoBot search is deterministic given the budget), and returns A's {@code
+ * null}). Plays N games alternating colors under a fixed node budget (or fixed depth). The GoBot
+ * search is fully deterministic, so each game is diversified by a seeded epsilon-greedy opening
+ * (see {@link Config#seed}); the whole match is reproducible given the seed and returns A's {@code
  * {wins, losses, draws}}.
  *
  * <p>This is the per-generation promotion gate (Task 2 consumes it): fast and reproducible, unlike
@@ -62,6 +64,17 @@ public final class GauntletMatch {
 
     /** Fixed search depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int fixedDepth = 0;
+
+    // Per-game opening diversity. The search is fully deterministic, so without this every game
+    // from the same start position is byte-identical and N games collapse to just 2 distinct games
+    // (one per color) — GAUNTLET_GAMES and PROMOTE_MARGIN granularity would then be a fiction. A
+    // seeded epsilon-greedy opening (mirrors SelfPlayGenerator) branches each game pair into a
+    // distinct-but-reproducible line. The seed advances per color-pair, so identical weights still
+    // cancel exactly (the two colors replay the same opening), while a real challenger produces
+    // `games` genuinely different games.
+    public long seed = 1L;
+    public double epsilon = 0.15;
+    public int exploreTurns = 8;
   }
 
   private GauntletMatch() {}
@@ -86,7 +99,10 @@ public final class GauntletMatch {
     int draws = 0;
     for (int game = 0; game < config.games; game++) {
       boolean aIsP1 = (game % 2 == 0);
-      int winner = playGame(modelA, modelB, aIsP1, config);
+      // Same opening seed for the two colors of a pair → identical weights cancel exactly, while
+      // distinct pairs (game/2) explore distinct openings.
+      long gameSeed = config.seed + (game / 2);
+      int winner = playGame(modelA, modelB, aIsP1, gameSeed, config);
       if (winner == 0) {
         draws++;
       } else if ((winner == 1) == aIsP1) {
@@ -98,9 +114,12 @@ public final class GauntletMatch {
     return new Result(wins, losses, draws);
   }
 
-  private static int playGame(NNUEModel modelA, NNUEModel modelB, boolean aIsP1, Config config) {
+  private static int playGame(
+      NNUEModel modelA, NNUEModel modelB, boolean aIsP1, long seed, Config config) {
     GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
+    int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
+    Random random = new Random(seed);
 
     for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
       List<Action> legal = state.legalActions();
@@ -112,7 +131,12 @@ public final class GauntletMatch {
       applyLeaf(moverModel);
       GoResult r = chooseMove(state, config);
 
-      Action chosen = (r != null && r.action != null) ? r.action : legal.get(0);
+      Action chosen;
+      if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
+        chosen = legal.get(random.nextInt(legal.size())); // seeded opening diversity
+      } else {
+        chosen = (r != null && r.action != null) ? r.action : legal.get(0);
+      }
       GoState next = state.apply(chosen);
       if (next == null) {
         chosen = legal.get(0);

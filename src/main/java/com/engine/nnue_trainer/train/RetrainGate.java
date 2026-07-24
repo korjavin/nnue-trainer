@@ -20,8 +20,9 @@ import java.nio.file.Path;
  *
  * <p>Run: {@code java -cp <cp> com.engine.nnue_trainer.train.RetrainGate <gen> <challenger.json>
  * <champion.json> <history.log>}. Env knobs: {@code GAUNTLET_GAMES}, {@code GAUNTLET_NODE_LIMIT},
- * {@code PROMOTE_MARGIN}. Prints a single {@code RUN gen=..} summary line (stdout) for the run log;
- * exit 0 = kept, 10 = promoted (so the loop can react without parsing).
+ * {@code GAUNTLET_SEED}, {@code GAUNTLET_EPSILON}, {@code GAUNTLET_EXPLORE_TURNS}, {@code
+ * PROMOTE_MARGIN}. Prints a single {@code RUN gen=..} summary line (stdout) for the run log; exit 0
+ * = kept, 10 = promoted (so the loop can react without parsing).
  */
 public final class RetrainGate {
 
@@ -31,6 +32,9 @@ public final class RetrainGate {
     Config config = new Config();
     config.games = intEnv("GAUNTLET_GAMES", config.games);
     config.nodeLimit = longEnv("GAUNTLET_NODE_LIMIT", config.nodeLimit);
+    config.seed = longEnv("GAUNTLET_SEED", config.seed);
+    config.epsilon = doubleEnv("GAUNTLET_EPSILON", config.epsilon);
+    config.exploreTurns = intEnv("GAUNTLET_EXPLORE_TURNS", config.exploreTurns);
     return config;
   }
 
@@ -42,6 +46,11 @@ public final class RetrainGate {
   private static long longEnv(String key, long def) {
     String v = System.getenv(key);
     return (v == null || v.isBlank()) ? def : Long.parseLong(v.trim());
+  }
+
+  private static double doubleEnv(String key, double def) {
+    String v = System.getenv(key);
+    return (v == null || v.isBlank()) ? def : Double.parseDouble(v.trim());
   }
 
   public static void main(String[] args) throws IOException {
