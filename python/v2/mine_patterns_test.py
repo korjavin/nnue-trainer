@@ -3,12 +3,15 @@
     python3 -m unittest discover -s python/v2 -p "*_test.py"
 """
 import collections
+import os
+import tempfile
 import unittest
 
 from python.v2.mine_patterns import (
     build_dictionary,
     count_signatures,
     decode_v1_record,
+    export_dictionary,
     window_signature,
 )
 from python.v2.pattern_contract import Board, Cell, CellKind, PatternContract
@@ -98,6 +101,18 @@ class EndToEndDeterminismTest(unittest.TestCase):
         c2, _ = count_signatures(self._boards())
         d2, _, _ = build_dictionary(c2, min_count=1)
         self.assertEqual(d1, d2)
+
+    def test_serialized_output_is_byte_identical(self):
+        # The hard requirement is byte-identical JSON, not just equal dicts.
+        with tempfile.TemporaryDirectory() as d:
+            p1 = os.path.join(d, "a.json")
+            p2 = os.path.join(d, "b.json")
+            for out in (p1, p2):
+                c, _ = count_signatures(self._boards())
+                pattern_to_id, _, _ = build_dictionary(c, min_count=1)
+                export_dictionary(pattern_to_id, min_count=1, out_path=out)
+            with open(p1, "rb") as f1, open(p2, "rb") as f2:
+                self.assertEqual(f1.read(), f2.read())
 
 
 if __name__ == "__main__":
