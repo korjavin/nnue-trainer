@@ -117,8 +117,7 @@ public class GoBotExplorationTest {
   public void fromEnvDefaultsDisabled() {
     // No system properties / env set for these keys ⇒ disabled, defaultTemp.
     GoBotExploration ex =
-        GoBotExploration.fromEnv(
-            "UNSET_EXPLORE_XYZ", "UNSET_TEMP_XYZ", "UNSET_SEED_XYZ", 0.6);
+        GoBotExploration.fromEnv("UNSET_EXPLORE_XYZ", "UNSET_TEMP_XYZ", "UNSET_SEED_XYZ", 0.6);
     assertFalse(ex.enabled);
     assertEquals(0.6, ex.temperature, 1e-9);
   }

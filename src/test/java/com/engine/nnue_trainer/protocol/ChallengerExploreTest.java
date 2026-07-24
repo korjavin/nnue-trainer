@@ -17,7 +17,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-/** Fix A: env-gated exploration adapted into the LIVE GoBot challenger ({@link GameLoopHandler}). */
+/**
+ * Fix A: env-gated exploration adapted into the LIVE GoBot challenger ({@link GameLoopHandler}).
+ */
 public class ChallengerExploreTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();

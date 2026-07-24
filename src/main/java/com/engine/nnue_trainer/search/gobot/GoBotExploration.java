@@ -11,12 +11,11 @@ import java.util.Random;
  * near-best sampling lives in exactly one place.
  *
  * <p><b>Hard constraint:</b> with {@link #enabled} false this is byte-identical to plain argmax —
- * {@link #sampleMove} returns {@code r.action} and {@link #sampleOpening} returns {@code null} (keep
- * the canonical book move). Exploration is opt-in only.
+ * {@link #sampleMove} returns {@code r.action} and {@link #sampleOpening} returns {@code null}
+ * (keep the canonical book move). Exploration is opt-in only.
  *
- * <p>When enabled, {@link #sampleMove} draws a "near-best" move by softmax-weighting the
- * best-first candidate set {@code [best] + alternatives} over their scores. Same seed ⇒ same
- * diverse sequence.
+ * <p>When enabled, {@link #sampleMove} draws a "near-best" move by softmax-weighting the best-first
+ * candidate set {@code [best] + alternatives} over their scores. Same seed ⇒ same diverse sequence.
  */
 public final class GoBotExploration {
   public final boolean enabled;

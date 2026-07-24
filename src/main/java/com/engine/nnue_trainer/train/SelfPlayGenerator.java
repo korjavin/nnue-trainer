@@ -9,6 +9,7 @@ import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoBotExploration;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
@@ -45,6 +46,17 @@ public class SelfPlayGenerator {
     public int maxTurns = 100;
     public double epsilon = 0.1;
     public int exploreTurns = 6;
+
+    /**
+     * Softmax temperature for near-best GoBot move sampling (Fix B). 0 keeps the existing
+     * uniform-random {@code epsilon} exploration; &gt;0 samples the search's best-first candidate
+     * set via {@link GoBotExploration#sampleMove} across the {@code exploreTurns} window.
+     */
+    public double exploreTemperature = 0.0;
+
+    /** Drop exact-duplicate positions (by feature hash) on export; default on. */
+    public boolean dedup = true;
+
     public int searchDepth = 2;
     public long timeLimitMs = 0;
     public long seed = 0;
@@ -76,9 +88,14 @@ public class SelfPlayGenerator {
     public List<TrainingRecord> dataset;
     public double distinctGameRatio;
 
-    public GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio) {
+    /** Positions seen before dedup; {@code dataset.size()} is the unique yield when dedup is on. */
+    public int totalPositionsSeen;
+
+    public GenerationResult(
+        List<TrainingRecord> dataset, double distinctGameRatio, int totalPositionsSeen) {
       this.dataset = dataset;
       this.distinctGameRatio = distinctGameRatio;
+      this.totalPositionsSeen = totalPositionsSeen;
     }
   }
 
@@ -121,6 +138,9 @@ public class SelfPlayGenerator {
     // these lets us explore every turn (EXPLORE_TURNS high) at a higher rate for diverse data.
     config.epsilon = envDouble("EPSILON", config.epsilon);
     config.exploreTurns = envInt("EXPLORE_TURNS", config.exploreTurns);
+    // EXPLORE_TEMP>0 switches GoBot self-play to near-best softmax sampling (diverse-but-sensible)
+    // instead of uniform-random epsilon flailing.
+    config.exploreTemperature = envDouble("EXPLORE_TEMP", config.exploreTemperature);
     String mode = System.getenv("LABEL_MODE");
     if (mode != null && !mode.isBlank()) {
       config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
@@ -277,7 +297,7 @@ public class SelfPlayGenerator {
 
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+    return new GenerationResult(dataset, distinctGameRatio, totalPositions);
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */
@@ -316,6 +336,11 @@ public class SelfPlayGenerator {
   private static GenerationResult playGoBotGames(Config config) {
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
+    // Shared near-best sampler (Fix B): reuses the same seeded Random so a seed ⇒ reproducible
+    // diverse games. Enabled only when there's something to explore; temp==0 ⇒ argmax so the
+    // uniform-epsilon fallback below is unchanged by default.
+    GoBotExploration explore =
+        new GoBotExploration(config.exploreTemperature > 0.0, config.exploreTemperature, random);
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
@@ -348,7 +373,11 @@ public class SelfPlayGenerator {
         }
 
         Action chosen;
-        if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
+        if (config.exploreTemperature > 0.0 && ply < exploreWindow) {
+          // Near-best softmax sampling across the explore window (diverse-but-sensible).
+          chosen = explore.sampleMove(r);
+          if (chosen == null) chosen = legal.get(0);
+        } else if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
           chosen = legal.get(random.nextInt(legal.size()));
         } else {
           chosen = (r != null && r.action != null) ? r.action : legal.get(0);
@@ -368,15 +397,18 @@ public class SelfPlayGenerator {
             config.labelMode == LabelMode.TD_LEAF
                 ? (float) ((1.0 - config.tdLambda) * p.searchValue + config.tdLambda * outcome)
                 : outcome;
-        dataset.add(new TrainingRecord(p.features, target));
-        uniquePositionHashes.add(Arrays.hashCode(p.features));
         totalPositions++;
+        boolean isNew = uniquePositionHashes.add(Arrays.hashCode(p.features));
+        if (config.dedup && !isNew) {
+          continue; // exact-duplicate position already emitted — drop it
+        }
+        dataset.add(new TrainingRecord(p.features, target));
       }
     }
 
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+    return new GenerationResult(dataset, distinctGameRatio, totalPositions);
   }
 
   /** GoBot move selection: fixed depth when {@code gobotFixedDepth>0}, else the node budget. */

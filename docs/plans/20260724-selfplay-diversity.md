@@ -113,35 +113,35 @@ only, default OFF for anything that isn't the data-gen challenger.
 - [x] run tests — must pass before next task.
 
 ### Task 3: Fix B — offline SelfPlayGenerator sampling across all turns + dedup
-- [ ] add `Config` fields `exploreTemperature` (default 0.0 = keep existing
+- [x] add `Config` fields `exploreTemperature` (default 0.0 = keep existing
   uniform-random behavior) and reuse `epsilon`/`exploreTurns`; add env
   `EXPLORE_TEMP` in `main`. Keep changes localized (v2-branch merge).
-- [ ] in `playGoBotGames`: construct a `GoBotExploration` from
+- [x] in `playGoBotGames`: construct a `GoBotExploration` from
   `{epsilon>0 || temp>0, exploreTemperature, seed}`. Allow exploration across
   ALL turns when `exploreTurns` covers them (already env-tunable); when
   `exploreTemperature > 0` choose the move via `sampleMove(r)` (near-best
   softmax) instead of uniform-random `legal.get(random.nextInt(...))`. Keep the
   epsilon uniform path as the fallback when temp == 0 so existing behavior/tests
   are unchanged by default.
-- [ ] DEDUP on export: track a `Set<Integer>` of feature-hashes and skip adding
+- [x] DEDUP on export: track a `Set<Integer>` of feature-hashes and skip adding
   a `TrainingRecord` whose position hash was already emitted; report
   kept-vs-total (unique-position yield) alongside the existing
   `distinctGameRatio`. Add a `dedup` Config flag (default true) so the reporting
   path stays observable.
-- [ ] extend `GenerationResult` with `int totalPositionsSeen` (pre-dedup) so the
+- [x] extend `GenerationResult` with `int totalPositionsSeen` (pre-dedup) so the
   unique yield is reportable/testable without changing existing fields' meaning.
-- [ ] write tests: sampling path produces finite in-range targets (like
+- [x] write tests: sampling path produces finite in-range targets (like
   `GoBotSelfPlayTest`); dedup removes exact-duplicate positions and
   `dataset.size() == uniquePositions`; a seeded run is reproducible.
-- [ ] run tests — must pass before next task.
+- [x] run tests — must pass before next task.
 
 ### Task 4: Fix C — diversity re-measure test
-- [ ] add `SelfPlayDiversityTest`: generate a small GoBot batch with exploration
+- [x] add `SelfPlayDiversityTest`: generate a small GoBot batch with exploration
   OFF (baseline) and ON (seeded temperature), assert the ON unique-position
   ratio (and distinct-game count) is materially higher than OFF, and that the
   OFF batch is deterministic/near-duplicate (reproduces the reported low
   baseline). Keep it fast (few games, shallow depth).
-- [ ] run tests — must pass before next task.
+- [x] run tests — must pass before next task.
 
 ### Task 5: Verify acceptance criteria
 - [ ] flag OFF still plays deterministic best-move (live + offline).
