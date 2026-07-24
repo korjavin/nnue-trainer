@@ -156,7 +156,13 @@ public class HandshakeHandler {
 
   /** The scheduled task body. */
   void challengeTick() {
-    attemptChallenge();
+    // A throw here (e.g. WebsocketNotConnectedException from send() while reconnecting) would
+    // make scheduleAtFixedRate silently cancel all future ticks — swallow so the timer survives.
+    try {
+      attemptChallenge();
+    } catch (RuntimeException e) {
+      System.err.println("challengeTick skipped: " + e.getMessage());
+    }
   }
 
   /** Pick a random eligible online player (not self, not in-game) and send a 12x12 challenge. */
