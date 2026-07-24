@@ -124,8 +124,12 @@ def set_seed(seed):
 
 
 def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
-                lr=1e-3, seed=0, val_frac=0.2):
-    """Deterministic float training; returns (model, train_mse, val_mse)."""
+                lr=1e-3, seed=0, val_frac=0.2, on_epoch=None):
+    """Deterministic float training; returns (model, train_mse, val_mse).
+
+    If `on_epoch` is given, it is called `on_epoch(epoch_index, train_mse,
+    val_mse)` after each epoch. When None, no per-epoch MSE is computed.
+    """
     set_seed(seed)
     if batch_size < 1:
         raise ValueError(f"batch_size must be >= 1, got {batch_size}")
@@ -146,7 +150,7 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
 
-    for _ in range(epochs):
+    for epoch in range(epochs):
         model.train()
         order = torch.randperm(len(train_ex), generator=gen).tolist()
         for start in range(0, len(order), batch_size):
@@ -159,6 +163,9 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
             loss = loss_fn(out, batch["wdl"])
             loss.backward()
             opt.step()
+        if on_epoch is not None:
+            on_epoch(epoch, _eval_mse(model, train_ex, batch_size),
+                     _eval_mse(model, val_ex, batch_size))
 
     return (model,
             _eval_mse(model, train_ex, batch_size),

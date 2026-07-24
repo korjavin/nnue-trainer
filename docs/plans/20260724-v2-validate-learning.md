@@ -76,14 +76,14 @@ real-outcome multi-size corpus (bead d4a.3.4) and an in-engine gauntlet.
 ## Implementation Steps
 
 ### Task 1: Add backward-compatible epoch-history hook to train_v2.train_model
-- [ ] In `python/v2/train_v2.py`, add an optional `on_epoch=None` keyword param
+- [x] In `python/v2/train_v2.py`, add an optional `on_epoch=None` keyword param
       to `train_model`. When provided, after each epoch call
       `on_epoch(epoch_index, train_mse, val_mse)` (compute both via the existing
       `_eval_mse` on the train and val splits). When `None`, behavior and return
       value are byte-for-byte unchanged (no extra computation).
-- [ ] Do not change the return signature `(model, train_mse, val_mse)`.
-- [ ] Confirm existing `python/v2/train_v2_test.py` still passes unchanged.
-- [ ] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
+- [x] Do not change the return signature `(model, train_mse, val_mse)`.
+- [x] Confirm existing `python/v2/train_v2_test.py` still passes unchanged.
+- [x] run `python3 -m unittest discover -s python/v2 -p "*_test.py"` — must pass.
 
 ### Task 2: validate_v2.py — v2 learning curves + v1 comparison
 - [ ] Create `python/v2/validate_v2.py`. Add `run_v2_training(...)`: load the
