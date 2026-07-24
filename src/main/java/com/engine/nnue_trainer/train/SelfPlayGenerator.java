@@ -166,6 +166,14 @@ public class SelfPlayGenerator {
             + config.tdLambda);
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
+    System.out.println(
+        "Unique-position yield: "
+            + result.dataset.size()
+            + "/"
+            + result.totalPositionsSeen
+            + " (dedup="
+            + config.dedup
+            + ")");
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
     saveDataset(result.dataset, outputPath);
   }

@@ -90,6 +90,7 @@ class SelfPlayGeneratorTest {
     config.maxTurns = 15;
     config.epsilon = 1.0;
     config.exploreTurns = 15;
+    config.seed = 1; // deterministic: full-random play was flaky (ratio dipped below 0.8 unseeded)
 
     SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
 

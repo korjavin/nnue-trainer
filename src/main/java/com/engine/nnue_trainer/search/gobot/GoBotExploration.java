@@ -28,11 +28,6 @@ public final class GoBotExploration {
     this.random = random != null ? random : new Random();
   }
 
-  /** Disabled sampler: always argmax, canonical opening. */
-  public static GoBotExploration disabled() {
-    return new GoBotExploration(false, 0.0, new Random());
-  }
-
   /**
    * Read exploration config from system properties (falling back to env), mirroring {@code
    * GameLoopHandler.gobotSearchFromEnv}. {@code enableKey} is a boolean gate (default false);
