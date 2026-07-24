@@ -206,21 +206,19 @@ public class NNUEv2Accumulator {
     }
     // Deduped union of window centers overlapping any changed cell (radius 2 == 5x5), so each
     // affected window is processed exactly once even when multiple cells share it.
-    Set<Long> centers = new HashSet<>();
+    Set<Pos> centers = new HashSet<>();
     for (Pos changed : changedCells) {
       for (int wr = changed.row - 2; wr <= changed.row + 2; wr++) {
         for (int wc = changed.col - 2; wc <= changed.col + 2; wc++) {
           if (newBoard.isValidPos(wr, wc)) {
-            centers.add(((long) wr << 32) | (wc & 0xffffffffL));
+            centers.add(new Pos(wr, wc));
           }
         }
       }
     }
-    for (long packed : centers) {
-      int wr = (int) (packed >> 32);
-      int wc = (int) packed;
-      int oldId = idAt(oldBoard, wr, wc, owner, oldBase);
-      int newId = idAt(newBoard, wr, wc, owner, newBase);
+    for (Pos center : centers) {
+      int oldId = idAt(oldBoard, center.row, center.col, owner, oldBase);
+      int newId = idAt(newBoard, center.row, center.col, owner, newBase);
       if (oldId == newId) {
         continue;
       }
