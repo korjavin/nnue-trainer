@@ -127,6 +127,8 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
                 lr=1e-3, seed=0, val_frac=0.2):
     """Deterministic float training; returns (model, train_mse, val_mse)."""
     set_seed(seed)
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
     gen = torch.Generator().manual_seed(seed)
     n = len(examples)
     perm = torch.randperm(n, generator=gen).tolist()
@@ -134,6 +136,11 @@ def train_model(examples, num_patterns, W=1024, epochs=20, batch_size=64,
     val_idx = set(perm[:n_val])
     train_ex = [examples[i] for i in range(n) if i not in val_idx]
     val_ex = [examples[i] for i in range(n) if i in val_idx]
+    # A random model would otherwise be saved as if trained.
+    if not train_ex:
+        raise ValueError(
+            f"empty training split (examples={n}, val_frac={val_frac}); "
+            "need at least one training example")
 
     model = NNUEv2(num_patterns, W=W)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
