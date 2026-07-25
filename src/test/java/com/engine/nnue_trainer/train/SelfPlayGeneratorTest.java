@@ -162,6 +162,38 @@ class SelfPlayGeneratorTest {
   }
 
   @Test
+  void generatedPositionsRespectThePerGameNeutralBudget() {
+    // One PlaceNeutralsAction per player per GAME (GoState.legalActions / GameLoopHandler), and it
+    // converts exactly two own cells → at most 4 NEUTRAL cells can ever exist. The generator used
+    // to re-arm the budget every turn, emitting boards with up to 18 neutrals into the raw corpus.
+    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
+    config.rows = 7;
+    config.cols = 7;
+    config.numGames = 3;
+    config.maxTurns = 40;
+    config.seed = 42;
+    config.epsilon = 1.0; // pure random play: actually exercises the neutral actions
+    config.exploreTurns = 1000;
+    config.rawOutPath = "unused-but-enables-raw-collection.jsonl";
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+
+    int maxNeutrals = 0;
+    for (SelfPlayGenerator.RawPosition p : result.rawPositions) {
+      int neutrals = 0;
+      for (SelfPlayGenerator.RawCell[] row : p.cells) {
+        for (SelfPlayGenerator.RawCell cell : row) {
+          if ("NEUTRAL".equals(cell.kind)) {
+            neutrals++;
+          }
+        }
+      }
+      maxNeutrals = Math.max(maxNeutrals, neutrals);
+    }
+    assertTrue(maxNeutrals <= 4, "at most 2 neutral pairs per game, saw " + maxNeutrals);
+  }
+
+  @Test
   void territoryFilledPositionIsLabeledDecisiveNotDraw() {
     // A full both-bases-alive board (nobody can move) with p1 owning the majority: the generator's
     // canonical winner (fromBoard().outcomeWinner(), same call canonicalWinner makes) must pick p1,

@@ -315,15 +315,22 @@ public class SelfPlayGenerator {
       // also the not-yet-decided sentinel. Overloading it let a tied game keep looping to maxTurns,
       // re-snapshotting the same finished board into the dataset every iteration.
       boolean decided = false;
+      // Neutral placement is one pair per player PER GAME (GoState.legalActions, and the live
+      // GameLoopHandler which tracks the same boolean[2]) — not per turn. Re-arming it every turn
+      // generated boards with far more neutrals than the rules allow.
+      boolean[] neutralUsed = new boolean[2];
 
       for (int turn = 0; turn < config.maxTurns; turn++) {
-        boolean canPlaceNeutral = true;
+        boolean canPlaceNeutral = !neutralUsed[currentPlayer - 1];
         for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
+          // ...and it is a turn-opening action only (GoState.legalActions gates on
+          // movesLeft == ACTIONS_PER_TURN).
+          boolean mayPlaceNeutral = canPlaceNeutral && actionIdx == 0;
           // Collect board snapshot BEFORE move
-          turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
+          turns.add(new TurnData(copyBoard(board), currentPlayer, mayPlaceNeutral));
 
           List<Action> legalActions =
-              MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
+              MoveGenerator.getLegalActions(currentPlayer, board, mayPlaceNeutral);
           if (legalActions.isEmpty()) {
             // Terminal-by-base or a stuck current player: both decided by the real size-general
             // rule (last player able to move wins, territory tiebreak) rather than a base check /
@@ -342,12 +349,12 @@ public class SelfPlayGenerator {
             if (engine.getNnueModel() != null) {
               chosenAction =
                   engine.findBestActionUsingModel(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                          board, currentPlayer, config.searchDepth, mayPlaceNeutral)
                       .bestAction;
             } else {
               chosenAction =
                   SearchEngine.findBestAction(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                          board, currentPlayer, config.searchDepth, mayPlaceNeutral)
                       .bestAction;
             }
             if (chosenAction == null) {
@@ -356,7 +363,7 @@ public class SelfPlayGenerator {
           }
 
           if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
-            canPlaceNeutral = false;
+            neutralUsed[currentPlayer - 1] = true; // spent for the rest of the GAME
             board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
             break; // turn ends immediately on placement
           } else {
@@ -529,7 +536,10 @@ public class SelfPlayGenerator {
         state = next;
       }
 
-      int winner = state.gameOver() ? state.winner() : 0;
+      // Same rule as the negamax path: a game that exits on the ply cap (or a stuck player) is
+      // decided by territory, not defaulted to a draw. outcomeWinner() reduces to winner() when a
+      // single side survives, so terminal games are unchanged.
+      int winner = state.gameOver() ? state.winner() : state.outcomeWinner();
       for (GoPly p : plies) {
         float outcome = winner == 0 ? 0f : (winner == p.sideToMove ? 1f : -1f);
         float target =

@@ -272,8 +272,26 @@ Acceptance evidence (2026-07-25):
     having written nothing, and a genuine territory tie (`canonicalWinner == 0`, the same sentinel
     as "undecided") kept the game loop spinning to `maxTurns`, re-snapshotting the finished board
     into the dataset each iteration.
+  - `SelfPlayGenerator.java` (second review pass) — two more: the GoBot path hard-coded
+    `winner = 0` for any game that hit the ply cap, so 100% of turn-capped self-play was
+    draw-labeled (now `state.outcomeWinner()`, the same territory rule the negamax path uses); and
+    the one-pair-per-player-**per-game** neutral budget was re-armed every turn, generating boards
+    with up to 18 NEUTRAL cells where the rules allow 4. Both pinned by new tests that fail on the
+    pre-fix code (12 neutrals / all-draw).
+  - `GoBotExploration.java` (second review pass) — the softmax scale was hard-wired to
+    `NNUE_SCALE`, which only calibrates the NNUE leaf. The live challenger's default leaf is
+    hand-tuned (an order of magnitude larger scores), where the sampler returned argmax ~96% of the
+    time and `CHALLENGER_EXPLORE` did nothing past the opening. Scale now widens to the observed
+    candidate band; a no-op whenever the band already fits inside `NNUE_SCALE`.
   - `python/v2/export_weights.py` — could not run as a script at all (missing the `sys.path`
-    bootstrap its own documented regen command needs).
+    bootstrap its own documented regen command needs); `torch.load` now passes `weights_only=True`
+    (the file is a plain `state_dict`).
+  - `python/v2/corpus/MANIFEST.md`, `docs/nnue-v2-validation.md` — both documented numbers that no
+    longer reproduce: the corpus and its re-mining tables predate the three `SelfPlayGenerator`
+    fixes above, the "tracked dictionary was left unchanged" claim was falsified six commits later
+    (it is now the `min_count=120` / 11,057-pattern re-mine), and the validation report was
+    generated against the older 5,571-pattern dictionary. Marked stale rather than regenerated —
+    regeneration needs a multi-hour corpus run plus the gitignored `dataset.json`.
 - Refactor behavior-preserving: re-ran `GamesDbPatternMiner /home/iv/games.db
   /tmp/repro_pattern_stats.json` on the real DB — same console report (273 total, 222 used, 51
   skipped, 3406 positions, 28357 distinct patterns) and the output **diffs byte-identical** to the

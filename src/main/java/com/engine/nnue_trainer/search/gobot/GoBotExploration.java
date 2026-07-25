@@ -83,12 +83,18 @@ public final class GoBotExploration {
       actions.add(m.action);
       scores.add(m.score);
     }
-    // Softmax over (score - maxScore) scaled by NNUE_SCALE*temperature so temperature is O(1).
+    // Softmax over (score - maxScore) scaled by temperature so temperature is O(1). NNUE_SCALE
+    // only calibrates the NNUE leaf (scores inside ±1000); the live challenger's default leaf is
+    // HAND_TUNED, whose root scores run an order of magnitude larger — there a fixed 1000 collapses
+    // the distribution onto argmax and the knob does nothing. Widening to the observed candidate
+    // band fixes that and is a no-op whenever the band already fits inside NNUE_SCALE.
     int maxScore = scores.get(0);
+    int minScore = scores.get(0);
     for (int s : scores) {
       if (s > maxScore) maxScore = s;
+      if (s < minScore) minScore = s;
     }
-    double scale = GoBotSearcher.NNUE_SCALE * temperature;
+    double scale = Math.max(GoBotSearcher.NNUE_SCALE, (double) maxScore - minScore) * temperature;
     double[] weights = new double[scores.size()];
     double total = 0.0;
     for (int i = 0; i < scores.size(); i++) {

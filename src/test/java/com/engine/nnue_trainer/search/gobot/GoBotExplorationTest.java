@@ -81,6 +81,23 @@ public class GoBotExplorationTest {
   }
 
   @Test
+  public void handTunedScaleScoresStillExplore() {
+    // Real root scores from a 12x12 midgame with the challenger's DEFAULT hand-tuned leaf: an order
+    // of magnitude above the NNUE band, so a fixed NNUE_SCALE softmax returned argmax ~96% of the
+    // time and CHALLENGER_EXPLORE did nothing past the opening.
+    GoResult r = result(14214, 11978, 11978, 10057, 10057);
+    GoBotExploration ex = new GoBotExploration(true, 0.6, new Random(3));
+    int nonBest = 0;
+    for (int i = 0; i < 200; i++) {
+      if (ex.sampleMove(r) != r.action) {
+        nonBest++;
+      }
+    }
+    assertTrue(
+        nonBest >= 50, "hand-tuned-scale scores must still explore, got " + nonBest + "/200");
+  }
+
+  @Test
   public void emptyOrNullAlternativesSafe() {
     GoBotExploration ex = new GoBotExploration(true, 1.0, new Random(1));
 
