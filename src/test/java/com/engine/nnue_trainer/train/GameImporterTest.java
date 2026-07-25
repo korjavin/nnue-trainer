@@ -26,13 +26,19 @@ public class GameImporterTest {
             + "{\"type\":\"place\",\"row\":0,\"col\":3}]},"
             + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":10,\"col\":10}]},"
             + "{\"player\":1,\"moves\":[{\"type\":\"neutrals\",\"cells\":["
-            + "{\"row\":0,\"col\":1},{\"row\":0,\"col\":2}]}]}"
+            + "{\"row\":0,\"col\":1},{\"row\":0,\"col\":2}]}]},"
+            // A trailing p1 turn so the board AFTER the neutrals turn is itself a p1-perspective
+            // example: an example is the board BEFORE a turn (GamesDbReplay's definition of a
+            // position), the same convention self-play records and the engine queries.
+            + "{\"player\":1,\"moves\":[]}"
             + "]";
 
     List<NNUETrainer.TrainingExample> examples = new GameImporter().replayGame(pgn, 0);
 
-    assertEquals(3, examples.size());
-    NNUETrainer.TrainingExample afterNeutrals = examples.get(2);
+    assertEquals(4, examples.size());
+    // The first example is the untouched start board, not the board after p1's opening turn.
+    assertEquals(1.0f, examples.get(0).features[(0 * 12 + 1) * 6 + 0]);
+    NNUETrainer.TrainingExample afterNeutrals = examples.get(3);
     assertEquals(0.0f, afterNeutrals.target);
     assertEquals(1.0f, afterNeutrals.features[(0 * 12 + 1) * 6 + 5]);
     assertEquals(1.0f, afterNeutrals.features[(0 * 12 + 2) * 6 + 5]);

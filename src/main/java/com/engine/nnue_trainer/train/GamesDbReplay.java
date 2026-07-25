@@ -26,7 +26,7 @@ import java.util.Locale;
  * port of the server's {@code state.go} transition — NOT {@code SearchEngine.applyAction}, which
  * diverges from the real rules in two ways that corrupt a replay: it never fortifies a captured
  * cell, and it erases cells that lose base-connectivity. Both are contradicted by games.db itself:
- * 503 recorded {@code attack} moves (in 173 of the 213 replayable 12x12 games, 9444 moves) target a
+ * 521 recorded {@code attack} moves (in 177 of the 217 replayable 12x12 games, 9749 moves) target a
  * cell the erasing variant has already emptied, while the {@code GoState} rules replay every
  * recorded move consistently. Counts measured 2026-07-25 against {@code /home/iv/games.db}, which
  * is refreshed out-of-band — the two rules themselves are pinned by {@code GamesDbReplayTest}.
@@ -34,7 +34,8 @@ import java.util.Locale;
  * <p>A game yields a skip reason instead of snapshots when a turn has no {@code player} ({@code
  * no_player}), a player outside 1..2 ({@code multiplayer} — the replay only models the 1v1 rules),
  * a recorded action the rules reject ({@code illegal_move}), or replay throws ({@code
- * replay_error}).
+ * replay_error:NullPointerException}, the exception class named so a parser bug cannot hide in one
+ * anonymous bucket).
  */
 public final class GamesDbReplay {
 
@@ -102,7 +103,10 @@ public final class GamesDbReplay {
       }
       return new Replay(snaps, null);
     } catch (Exception e) {
-      return new Replay(null, "replay_error");
+      // Name the exception in the reason: a blanket "replay_error" bucket hid a parser NPE that was
+      // silently dropping games (see parseAction), and the skip counts are what the v3 gate doc
+      // asks the reader to trust.
+      return new Replay(null, "replay_error:" + e.getClass().getSimpleName());
     }
   }
 
@@ -112,12 +116,13 @@ public final class GamesDbReplay {
    * {@link GameImporter}).
    *
    * <p>ONE state is threaded through the whole turn, so {@code movesLeft} actually decrements and
-   * the turn-scoped rules bite: at most {@link GoState#ACTIONS_PER_TURN} actions, and a neutral pair
-   * only as the turn's opening action ({@code GoState.legalAction} gates it on {@code movesLeft}).
-   * Rebuilding the state per move (with {@code movesLeft} reset to 3) replayed both of those as
-   * legal. Moves go through the legality-checked {@link GoState#apply}, not {@code applyGenerated}:
-   * an out-of-rules recorded move must surface to the caller rather than silently fabricate a board
-   * that features are then computed from. Rejects 0 of the 9444 moves in the current corpus.
+   * the turn-scoped rules bite: at most {@link GoState#ACTIONS_PER_TURN} actions, and a neutral
+   * pair only as the turn's opening action ({@code GoState.legalAction} gates it on {@code
+   * movesLeft}). Rebuilding the state per move (with {@code movesLeft} reset to 3) replayed both of
+   * those as legal. Moves go through the legality-checked {@link GoState#apply}, not {@code
+   * applyGenerated}: an out-of-rules recorded move must surface to the caller rather than silently
+   * fabricate a board that features are then computed from. Rejects 0 of the 9749 moves in the
+   * current corpus.
    *
    * @return the state after the turn, or {@code null} if the rules reject it — a recorded action
    *     after the turn is spent (3 actions, or a neutral placement, which ends the turn) or after
@@ -149,20 +154,38 @@ public final class GamesDbReplay {
 
   /** Parse one stored move node into an engine action. */
   private static Action parseAction(JsonNode move) {
-    String type = field(move, "type").asText().toLowerCase(Locale.ROOT);
+    JsonNode typeNode = field(move, "type");
+    if (typeNode == null) {
+      throw new IllegalArgumentException("move has no type");
+    }
+    String type = typeNode.asText().toLowerCase(Locale.ROOT);
     if ("place".equals(type) || "attack".equals(type) || "move".equals(type)) {
-      return new MoveAction(new Pos(field(move, "row").asInt(), field(move, "col").asInt()));
+      return new MoveAction(pos(move));
     }
     if ("neutral".equals(type) || "neutrals".equals(type)) {
       JsonNode cells = field(move, "cells");
       if (cells == null || !cells.isArray() || cells.size() != 2) {
         throw new IllegalArgumentException("neutral action must contain exactly two cells");
       }
-      return new PlaceNeutralsAction(
-          new Pos(field(cells.get(0), "row").asInt(), field(cells.get(0), "col").asInt()),
-          new Pos(field(cells.get(1), "row").asInt(), field(cells.get(1), "col").asInt()));
+      return new PlaceNeutralsAction(pos(cells.get(0)), pos(cells.get(1)));
     }
     throw new IllegalArgumentException("Unsupported move type: " + type);
+  }
+
+  /**
+   * Coordinate pair from a stored node. An absent {@code row}/{@code col} means 0: the recorder
+   * marshals with Go's {@code omitempty}, which DROPS zero-valued ints, so row 0 and column 0 are
+   * simply missing from the JSON ({@code {"type":"place","col":1}} is (0,1)). Reading them as a
+   * null node threw and discarded the whole game as {@code replay_error} — 15 such moves across 5
+   * of the recorded 12x12 games, all of which replay legally once the zero is restored.
+   */
+  private static Pos pos(JsonNode node) {
+    return new Pos(coord(node, "row"), coord(node, "col"));
+  }
+
+  private static int coord(JsonNode node, String name) {
+    JsonNode value = field(node, name);
+    return value == null ? 0 : value.asInt();
   }
 
   /**

@@ -62,6 +62,11 @@ public class SelfPlayGenerator {
      * Drop exact-duplicate positions on export; default on. Honored by every export path: the v1
      * dataset (keyed by feature hash) and the raw JSONL corpus (keyed by the size-agnostic {@code
      * GoState.hash()}).
+     *
+     * <p>First writer wins, so a position reached by several games keeps the first game's label.
+     * That is the point with deterministic engines (near-identical games), but it does discard the
+     * disagreeing outcomes of a repeated opening — set {@code DEDUP=false} to keep every record and
+     * let the loss average them.
      */
     public boolean dedup = true;
 
@@ -184,6 +189,12 @@ public class SelfPlayGenerator {
     // deterministic engines converge to near-identical games (distinct-ratio ~0.02). Exposing
     // these lets us explore every turn (EXPLORE_TURNS high) at a higher rate for diverse data.
     config.epsilon = envDouble("EPSILON", config.epsilon);
+    // Dedup drops records by default (first label wins); DEDUP=false is the escape hatch from a
+    // shell wrapper, since every other knob has one.
+    String dedup = System.getenv("DEDUP");
+    if (dedup != null && !dedup.isBlank()) {
+      config.dedup = Boolean.parseBoolean(dedup.trim());
+    }
     config.exploreTurns = envInt("EXPLORE_TURNS", config.exploreTurns);
     // EXPLORE_TEMP>0 switches GoBot self-play to near-best softmax sampling (diverse-but-sensible)
     // instead of uniform-random epsilon flailing.

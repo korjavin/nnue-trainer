@@ -106,11 +106,12 @@ public final class V3FeatureMiner {
      */
     public void add(Board board, int stm, int eval) {
       // Off-board cells resolve to OUT_OF_BOUNDS (8), which idx() would fold into the NEXT cell's
-      // EMPTY bucket — silent corruption everywhere but (11,11), where it throws. main() filters on
-      // board size; this makes that a precondition rather than a convention.
-      if (board.rows < BOARD || board.cols < BOARD) {
+      // EMPTY bucket — silent corruption everywhere but (11,11), where it throws. Exact, not
+      // ">=": a larger board would otherwise be silently mined as its top-left 12x12. main()
+      // filters on board size; this makes that a precondition rather than a convention.
+      if (board.rows != BOARD || board.cols != BOARD) {
         throw new IllegalArgumentException(
-            "v3 features need a >="
+            "v3 features need a "
                 + BOARD
                 + "x"
                 + BOARD
@@ -249,14 +250,17 @@ public final class V3FeatureMiner {
         }
         if ("illegal_move".equals(termination) || "disconnect".equals(termination)) {
           gamesSkipped++;
-          bump(skipReasons, termination);
+          bump(skipReasons, "termination_" + termination);
           continue;
         }
 
         GamesDbReplay.Replay replay = GamesDbReplay.replay(rows, cols, turns);
         if (replay.skipReason != null) {
+          // Prefixed: the DB's illegal_move TERMINATION and a replay rejection are different
+          // failures, and only the second one means the rules port regressed — the gate doc tells
+          // the reader to watch for exactly that, so the two must not share a bucket.
           gamesSkipped++;
-          bump(skipReasons, replay.skipReason);
+          bump(skipReasons, "replay_" + replay.skipReason);
           continue;
         }
 

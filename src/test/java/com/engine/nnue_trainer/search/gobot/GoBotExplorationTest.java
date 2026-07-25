@@ -34,6 +34,26 @@ public class GoBotExplorationTest {
     return r;
   }
 
+  /**
+   * A scout fail-low score is an upper bound pinned to the alpha in force when that child was
+   * searched, and alpha rises with sibling order — softmaxing those numbers weights move ORDER, not
+   * move quality, so they must not enter the candidate set at all.
+   */
+  @Test
+  public void inexactAlternativesAreNeverSampled() {
+    GoResult r = new GoResult(new MoveAction(new Pos(0, 0)));
+    r.score = 100;
+    r.depth = 3;
+    r.searchComplete = true;
+    Action bound = new MoveAction(new Pos(1, 1));
+    r.alternatives = new ArrayList<>(List.of(new RootMove(bound, 99, false)));
+
+    GoBotExploration ex = new GoBotExploration(true, 5.0, new Random(7));
+    for (int i = 0; i < 200; i++) {
+      assertSame(r.action, ex.sampleMove(r), "bound-scored alternative must never be picked");
+    }
+  }
+
   @Test
   public void disabledReturnsArgmax() {
     GoResult r = result(100, 90, 80);

@@ -1,9 +1,7 @@
 package com.engine.nnue_trainer.train;
 
-import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUETrainer;
-import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -55,14 +53,13 @@ public class GameImporter {
 
       try (ResultSet rows = statement.executeQuery()) {
         while (rows.next()) {
-          long gameId = rows.getLong("id");
           int result = rows.getInt("result");
           String pgnContent = rows.getString("pgn_content");
           if (options.deduplicatePgn() && !seenPgn.add(pgnContent)) {
             skippedDuplicates++;
             continue;
           }
-          List<NNUETrainer.TrainingExample> replayed = replayGame(gameId, pgnContent, result);
+          List<NNUETrainer.TrainingExample> replayed = replayPgn(pgnContent, result);
           if (replayed == null) {
             skippedIllegal++;
             continue;
@@ -76,75 +73,56 @@ public class GameImporter {
     return new ImportResult(examples, importedGames, skippedDuplicates, skippedIllegal);
   }
 
-  /** Replays a game into training examples; empty when the rules reject one of its turns. */
-  public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result)
-      throws IOException {
-    List<NNUETrainer.TrainingExample> examples = replayGame(-1L, pgnContent, result);
+  /** Replays a game into training examples; empty when the game cannot be replayed. */
+  public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result) {
+    List<NNUETrainer.TrainingExample> examples = replayPgn(pgnContent, result);
     return examples == null ? List.of() : examples;
   }
 
-  /** Returns the turn-by-turn examples, or {@code null} if the rules reject a recorded turn. */
-  private List<NNUETrainer.TrainingExample> replayGame(long gameId, String pgnContent, int result)
-      throws IOException {
+  /**
+   * Turn-by-turn examples, or {@code null} when the game is unusable — the rules reject a recorded
+   * turn, or the PGN is malformed. Both are per-game skips: a single bad row must not abort a
+   * retrain cycle and discard every example already accumulated.
+   *
+   * <p>Delegates to {@link GamesDbReplay}, the same legality-checked replay the miners use, so a
+   * turn the rules reject (a fourth action, a mid-turn or repeated neutral pair, a
+   * disconnected/ineligible target) skips the game instead of training on a board the game never
+   * contained, and captures/base-connectivity follow the real transition rather than {@code
+   * SearchEngine.applyAction}.
+   *
+   * <p>An example is the board <b>before</b> a turn, oriented to that turn's player — {@link
+   * GamesDbReplay}'s definition of a position, and the same convention {@code SelfPlayGenerator}
+   * records and the engine queries at inference. Labelling the board <b>after</b> the turn with the
+   * mover's perspective (what this did) orients the identical board the opposite way from every
+   * other producer, so the two corpora {@code PeriodicRetrainer} concatenates disagreed on which
+   * side of a position "self" means.
+   */
+  private List<NNUETrainer.TrainingExample> replayPgn(String pgnContent, int result) {
+    if (pgnContent == null || pgnContent.isBlank()) {
+      return null;
+    }
     JsonNode turns;
     try {
       turns = MAPPER.readTree(pgnContent);
     } catch (IOException e) {
-      throw new IOException("Invalid PGN JSON for game " + gameId, e);
+      return null;
     }
-    if (!turns.isArray()) {
-      throw new IOException("PGN must be an array for game " + gameId);
+    if (turns == null || !turns.isArray()) {
+      return null;
     }
 
-    List<NNUETrainer.TrainingExample> examples = new ArrayList<>();
-    Board board = GamesDbReplay.initialBoard(12, 12);
-    boolean[] neutralUsed = new boolean[2];
+    GamesDbReplay.Replay replay = GamesDbReplay.replay(12, 12, turns);
+    if (replay.skipReason != null) {
+      return null;
+    }
 
-    for (JsonNode turn : turns) {
-      int player = requiredInt(turn, "player", "Player");
-      JsonNode moves = turn.get("moves");
-      if (moves == null) {
-        moves = turn.get("Moves");
-      }
-      if (moves != null) {
-        if (!moves.isArray()) {
-          throw new IOException("moves must be an array for game " + gameId);
-        }
-        // Same legality-checked replay the miners use, so a recorded turn the rules reject (a
-        // fourth action, a mid-turn or repeated neutral pair, a disconnected/ineligible target)
-        // skips the game instead of training on a board the game never contained. It also carries
-        // the board-transition fidelity SearchEngine.applyAction lacks: captures are FORTIFIED and
-        // cells that lose base-connectivity are kept.
-        GoState state;
-        try {
-          state = GamesDbReplay.applyTurn(board, player, moves, neutralUsed);
-        } catch (RuntimeException e) {
-          throw new IOException("Invalid move for game " + gameId, e);
-        }
-        if (state == null) {
-          return null;
-        }
-        board = state.toBoard();
-        for (int p = 1; p <= 2; p++) {
-          neutralUsed[p - 1] = state.neutralUsed(p);
-        }
-      }
-
+    List<NNUETrainer.TrainingExample> examples = new ArrayList<>(replay.snapshots.size());
+    for (GamesDbReplay.Snapshot s : replay.snapshots) {
       examples.add(
           new NNUETrainer.TrainingExample(
-              BoardFeatureMapper.map(board, player), target(result, player)));
+              BoardFeatureMapper.map(s.board, s.stm), target(result, s.stm)));
     }
-
     return examples;
-  }
-
-  private static int requiredInt(JsonNode node, String primary, String fallback)
-      throws IOException {
-    JsonNode value = node.has(primary) ? node.get(primary) : node.get(fallback);
-    if (value == null) {
-      throw new IOException("Missing required field: " + primary);
-    }
-    return value.asInt();
   }
 
   private static float target(int result, int player) {
@@ -156,7 +134,10 @@ public class GameImporter {
 
   public record ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {}
 
-  /** {@code skippedIllegalGames}: games dropped because the rules reject a recorded turn. */
+  /**
+   * {@code skippedIllegalGames}: games dropped because they cannot be replayed — the rules reject a
+   * recorded turn, or the PGN is malformed.
+   */
   public record ImportResult(
       List<NNUETrainer.TrainingExample> examples,
       int importedGames,

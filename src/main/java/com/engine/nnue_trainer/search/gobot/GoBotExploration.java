@@ -80,8 +80,18 @@ public final class GoBotExploration {
     actions.add(r.action);
     scores.add(r.score);
     for (RootMove m : r.alternatives) {
+      // Scout fail-low scores are bounds pinned to the alpha in force when that child was searched,
+      // and alpha rises with sibling order — softmaxing them weights move ORDER, not move quality.
+      // The exact-scored candidates are exactly the children that were best-so-far at their turn,
+      // which is the near-best set this samples over anyway.
+      if (!m.exact) {
+        continue;
+      }
       actions.add(m.action);
       scores.add(m.score);
+    }
+    if (actions.size() == 1) {
+      return r.action;
     }
     // Softmax over (score - maxScore) scaled by temperature so temperature is O(1). NNUE_SCALE
     // only calibrates the NNUE leaf (scores inside ±1000); the live challenger's default leaf is

@@ -162,23 +162,24 @@ Dependencies: Java 17 + Maven (`./mvnw`), Jackson (already used), sqlite-jdbc (a
 - [x] games.db present and yielded 12x12 games — no fabrication needed
 - [x] run tests - must pass before next task
 
-Mined result (real `/home/iv/games.db`, 2026-07-25, after the ⚠️ replay-fidelity fix below): 273
-games total, 213 used, 60 skipped (`disconnect=22, wrong_board_size=13, illegal_move=7,
-multiplayer=7, no_pgn=7, replay_error=4`), 3282 positions, `baseline_mean_eval = -4571.33`, default
-support floor 32, 664 observed features, 408 above floor. Top feature: `(2,1) FORTIFIED_SELF`
-discrim 35578.62 (support 77) — captured/fortified cells near the bases dominate, and the ranking is
-clearly not frequency-driven (support 32–166 across the top 10). Sanity assertions verified: all 144
-cells sum their per-state support to exactly 3282, ranked list ordered by discrimination desc with
-(row, col, state) tie-break, every ranked feature at/above the floor, top discrimination > bottom.
+Mined result (real `/home/iv/games.db`, 2026-07-25, after the ⚠️ replay-fidelity and ⚠️ omitted-zero
+-coordinate fixes below): 273 games total, 217 used, 56 skipped (`termination_disconnect=22,
+wrong_board_size=13, termination_illegal_move=7, replay_multiplayer=7, no_pgn=7`), 3385 positions,
+`baseline_mean_eval = -4603.23`, default support floor 33, 670 observed features, 416 above floor.
+Top feature: `(2,1) FORTIFIED_SELF` discrim 34882.37 (support 78) — captured/fortified cells near
+the bases dominate, and the ranking is clearly not frequency-driven (support 40–181 across the top
+10). Sanity assertions verified: all 144 cells sum their per-state support to exactly 3385, ranked
+list ordered by discrimination desc with (row, col, state) tie-break, every ranked feature at/above
+the floor, top discrimination > bottom.
 
 ⚠️ Code-review fix (2026-07-25) — **the replay was not faithful to the real game rules**, so the
 first mined artifact was wrong and was regenerated. `GamesDbReplay` applied moves through
 `SearchEngine.applyAction`, which (a) never fortifies a captured cell and (b) erases cells that lose
 base-connectivity. Both contradict the server rules ported in `GoState` (`mutate` fortifies a
 captured NORMAL cell; `eliminateStuckPlayers` documents "eliminated players' cells stay on the
-board"), and games.db proves it: 503 recorded `attack` moves in 173 of the 213 replayable 12x12 games
+board"), and games.db proves it: 521 recorded `attack` moves in 177 of the 217 replayable 12x12 games
 target a cell the erasing variant has already emptied, while the `GoState.applyGenerated` rules
-replay all 9444 recorded moves consistently. Consequences of the old path: `FORTIFIED_SELF` /
+replay all 9749 recorded moves consistently. Consequences of the old path: `FORTIFIED_SELF` /
 `FORTIFIED_OPPONENT` were **unobservable by construction** (0 of 444 features, i.e. 288 of the 1152
 candidates could never light up while the page reported them as merely unobserved), and every
 post-capture board — hence `baseline_mean_eval` and every `mean_eval` — was computed on a position
@@ -188,6 +189,23 @@ Both artifacts were re-mined: `nnue_v3_feature_stats.json` (444 → 664 features
 floor, top-10 now FORTIFIED-dominated) and `games_db_pattern_stats.json` (28357 → 48634 distinct
 patterns), and both HTML pages re-spliced. `GamesDbReplayTest` gained
 `testCaptureFortifiesAndDisconnectedCellsSurvive` to pin both rules.
+
+⚠️ Second-pass code-review fix (2026-07-25) — **the move parser dropped every game containing a
+zero coordinate**, so the artifact above was re-mined a second time. The recorder marshals moves
+with Go's `omitempty`, which drops zero-valued ints: row 0 / column 0 are simply absent from the
+stored JSON (`{"type":"place","col":1}` is `(0,1)`). `GamesDbReplay.parseAction` read the missing key
+as a node and threw NPE, and the blanket `catch (Exception)` filed the whole game under
+`replay_error` — 15 such moves across 5 recorded games, 4 of them 12x12, all of which replay legally
+once the zero is restored. So the artifact's `replay_error=4` was 100% this parser bug, not bad data:
+103 positions (~3% of the gate corpus) were silently discarded. Fixed by defaulting an absent
+`row`/`col` to 0 (`GamesDbReplay.pos`), the missing half of the Go-marshaling tolerance `field()`
+already had; `GamesDbReplayTest.testOmittedZeroCoordinatesParseAsZero` pins it. Two related
+observability fixes went in with it: the `replay_error` bucket now names the exception class, and
+the miners prefix their skip reasons (`termination_illegal_move` from the DB column vs
+`replay_illegal_move` from a rules rejection) — the two previously collided on one key, which is
+exactly the bucket the gate doc tells the reader to watch for a replay-fidelity regression in. Both
+artifacts and both HTML pages were re-mined/re-spliced: 213 → 217 games, 3282 → 3385 positions,
+`replay_error` now absent entirely.
 
 ⚠️ Also fixed in review (the two failures previously recorded here as out-of-scope pre-existing):
 `NNUEv2AccumulatorTest.testParityAgainstPythonFixture` and

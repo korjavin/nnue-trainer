@@ -26,6 +26,11 @@ connectivity **stay on the board**. Replaying with `SearchEngine.applyAction` in
 backwards, which silently made `FORTIFIED_SELF`/`FORTIFIED_OPPONENT` unobservable and corrupted every
 post-capture board — if a future re-mine shows zero fortified features, that regression is back.
 
+`meta.skip_reasons` distinguishes where a dropped game was dropped: `termination_*` is what the
+server recorded on the game, `replay_*` is this code rejecting it. A rising `replay_illegal_move`
+means the rules port drifted; a `replay_replay_error:*` bucket means the parser threw (the exception
+class is named — a blanket bucket hid a parser NPE that was discarding 4 of these games).
+
 Gate outcome: approve → d4a.6.1 proceeds; reject → the feature design is revised (e.g. pairwise or
 region features) before any model spend.
 

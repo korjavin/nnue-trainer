@@ -177,12 +177,17 @@ public class PeriodicRetrainer implements AutoCloseable {
           return GoState.outcomeWinner(board, currentPlayer);
         }
 
+        // GoState.applyAction, not SearchEngine.applyAction: the latter writes a captured cell as
+        // NORMAL (the rules FORTIFY it) and erases cells that lose base-connectivity (the rules
+        // keep them). The promotion decision below is settled by GoState.outcomeWinner's territory
+        // count, so scoring boards the legacy transition had already emptied handed the gauntlet
+        // to whichever side that rule happened to delete less of.
         if (action instanceof PlaceNeutralsAction) {
           neutralUsed[currentPlayer] = true;
-          board = SearchEngine.applyAction(board, currentPlayer, action);
+          board = GoState.applyAction(board, currentPlayer, action);
           break;
         }
-        board = SearchEngine.applyAction(board, currentPlayer, action);
+        board = GoState.applyAction(board, currentPlayer, action);
       }
       currentPlayer = 3 - currentPlayer;
     }

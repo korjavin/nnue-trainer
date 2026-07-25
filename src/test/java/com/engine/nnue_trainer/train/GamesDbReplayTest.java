@@ -94,7 +94,7 @@ public class GamesDbReplayTest {
   /**
    * The replay must use the real server rules, not {@code SearchEngine.applyAction}: capturing an
    * opponent NORMAL cell FORTIFIES it, and a cell that loses base-connectivity STAYS on the board.
-   * The erasing variant contradicts games.db — 503 recorded attacks target cells it has emptied.
+   * The erasing variant contradicts games.db — 521 recorded attacks target cells it has emptied.
    */
   @Test
   public void testCaptureFortifiesAndDisconnectedCellsSurvive() {
@@ -151,7 +151,7 @@ public class GamesDbReplayTest {
   public void testSkipReplayError() {
     JsonNode t = turns("[{\"player\":1,\"moves\":[{\"type\":\"teleport\",\"row\":0,\"col\":1}]}]");
     GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
-    assertEquals("replay_error", r.skipReason);
+    assertEquals("replay_error:IllegalArgumentException", r.skipReason);
     assertNull(r.snapshots);
   }
 
@@ -228,6 +228,26 @@ public class GamesDbReplayTest {
         turns(
             "[{\"player\":1,\"moves\":[{\"type\":\"neutral\",\"cells\":"
                 + "[{\"row\":3,\"col\":3}]}]}]");
-    assertEquals("replay_error", GamesDbReplay.replay(8, 8, t).skipReason);
+    assertEquals("replay_error:IllegalArgumentException", GamesDbReplay.replay(8, 8, t).skipReason);
+  }
+
+  /**
+   * The recorder marshals moves with Go's {@code omitempty}, which drops zero-valued ints: row 0
+   * and column 0 are simply absent from the stored JSON. Reading the missing key as a node threw
+   * and the blanket catch discarded the whole game — 15 such moves across 5 recorded 12x12 games.
+   */
+  @Test
+  public void testOmittedZeroCoordinatesParseAsZero() {
+    JsonNode t =
+        turns(
+            "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1}]},"
+                + "{\"player\":1,\"moves\":[]}]");
+
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+
+    assertNull(r.skipReason);
+    assertEquals(1, r.snapshots.get(1).board.getCell(0, 1).owner); // {"col":1} == (0,1)
+    assertEquals(1, r.snapshots.get(1).board.getCell(1, 0).owner); // {"row":1} == (1,0)
   }
 }

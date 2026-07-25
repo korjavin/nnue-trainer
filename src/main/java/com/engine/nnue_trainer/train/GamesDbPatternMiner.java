@@ -112,14 +112,16 @@ public final class GamesDbPatternMiner {
         }
         if ("illegal_move".equals(termination) || "disconnect".equals(termination)) {
           gamesSkipped++;
-          bump(skipReasons, termination);
+          bump(skipReasons, "termination_" + termination);
           continue;
         }
 
         GamesDbReplay.Replay replay = GamesDbReplay.replay(rows, cols, turns);
         if (replay.skipReason != null) {
+          // Prefixed: the DB's illegal_move TERMINATION and a replay rejection are different
+          // failures, and only the second one means the rules port regressed.
           gamesSkipped++;
-          bump(skipReasons, replay.skipReason);
+          bump(skipReasons, "replay_" + replay.skipReason);
           continue;
         }
 
