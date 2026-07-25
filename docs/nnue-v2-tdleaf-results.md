@@ -73,15 +73,42 @@ Fixed depth, 24 games, seed 7. `NNUEV2_WEIGHTS`/`NNUEV2_DICT` → the new blob+d
 | depth | W-L-D (v2) | win% (v2) | old (outcome-WDL) |
 |-------|-----------|-----------|-------------------|
 | 3 | 0-24-0 | **0.0%** | 0-24 → 0% |
-| 4 | _running_ | _TBD_ | 0-12 → 0% |
+| 4 | 0-24-0 | **0.0%** | 0-12 → 0% |
 
-**Depth 3: still 0-24 — NO improvement over the outcome-WDL run.** Brutally
+**Both depths: still 0-24 — NO improvement over the outcome-WDL run.** Brutally
 honest: TD-leaf targeting as implemented here did not lift v2's win% off the
-floor at fixed depth 3. Direction accuracy on decisive positions is high (0.97),
-but that measures the easy end; the gauntlet is decided by move *ordering* among
-near-equal middlegame positions, and the blended+squashed WDL target is too
-compressed there (mean ~0.68, ~59% of targets cluster near 0.5) to give the
-search sharp preferences. See "Next lever" below.
+floor at fixed depth 3 or 4 (24 games each, seed 7). Direction accuracy on
+decisive positions is high (0.97), but that measures the easy end; the gauntlet
+is decided by move *ordering* among near-equal middlegame positions, and the
+blended+squashed WDL target is too compressed there (mean ~0.68, ~59% of targets
+within the analyzer's draw band near 0.5) to give the search sharp preferences.
+
+## Why it didn't work (diagnosis)
+
+The TD-leaf *theory* is sound (distill deep hand-tuned search into a fast leaf so
+v2-leaf-at-d3 ≈ hand-tuned-at-d7 > hand-tuned-at-d3). The *implementation* loses
+too much of that signal before it reaches move ordering:
+
+1. **Target compression/bias.** The hand-tuned depth-4 values are logistic-
+   squashed to WDL and mean ~0.68 with a heavy mid-cluster; the net regresses
+   toward that mean, so its output *variance across sibling moves* is small —
+   exactly the gradient the search needs to prefer one move over another. WDL
+   space throws away the magnitude ordering that the raw centipawn score had.
+2. **12x12 is 11% of the corpus** (1398/12683). The gauntlet is 12x12 but most
+   training positions are small boards. The eval is size-agnostic, but 12x12
+   tactical patterns are underrepresented for the board it's judged on.
+3. **λ=0.3 dilutes** the deep-search signal with 30% noisy final outcome —
+   pulling the target back toward the very outcome-WDL signal that already lost.
+
+## Next lever (recommended, in order)
+
+1. **Regress the raw centipawn score, not WDL** — drop the logistic squash;
+   train the leaf directly on the (normalized) hand-tuned depth-N score so
+   magnitude ordering survives. This is the single most likely fix.
+2. **λ→0** (pure search bootstrap) and **deeper `TDLEAF_DEPTH` (6–8)** — a
+   stronger, undiluted teacher.
+3. **12x12-heavy corpus** — generate the bulk of positions at the gauntlet size.
+4. More capacity per bead d4a.4.3 only after 1–3.
 
 ## Regenerate
 
