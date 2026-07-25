@@ -117,38 +117,38 @@ Dependencies: Java 17 + Maven (`./mvnw`), Jackson (already used), sqlite-jdbc (a
 
 ### Task 2: Mine absolute (row, col, state) feature stats with eval-discrimination
 
-- [ ] create `src/main/java/com/engine/nnue_trainer/train/V3FeatureMiner.java` with a `main` that
+- [x] create `src/main/java/com/engine/nnue_trainer/train/V3FeatureMiner.java` with a `main` that
       reads games.db via sqlite-jdbc exactly as `GamesDbPatternMiner` does, replaying via
       `GamesDbReplay`
-- [ ] filter to **12x12 games only** (v3 fixes the board size); count rejects as a
+- [x] filter to **12x12 games only** (v3 fixes the board size); count rejects as a
       `wrong_board_size` skip reason in meta alongside the existing skip reasons
-- [ ] per position (board before a turn, STM = that turn's player): compute
+- [x] per position (board before a turn, STM = that turn's player): compute
       `HandTunedEval.staticEval(board, stm, 3, neutralUsed)` and accumulate it into
       `baselineEvalSum`/`positions`
-- [ ] per position, for each of the 144 cells, resolve the state via
+- [x] per position, for each of the 144 cells, resolve the state via
       `PatternContract.getSymbol(board.getCell(r, c), stm)` and accumulate into the
       `(row, col, state)` feature: `support++` (positions in which the feature is active) and
       `evalSum += posEval`. Exactly one state is active per cell per position, so total support
       across the 8 states of any cell equals `positions`
-- [ ] compute `baseline_mean_eval = baselineEvalSum / positions`, per feature
+- [x] compute `baseline_mean_eval = baselineEvalSum / positions`, per feature
       `mean_eval = evalSum / support` and `discrimination = |mean_eval - baseline_mean_eval|`
-- [ ] rank by `discrimination` descending (ties broken deterministically by row, col, state) among
+- [x] rank by `discrimination` descending (ties broken deterministically by row, col, state) among
       features meeting the support floor; features below the floor keep their stats but get
       `rank = -1` and are flagged `below_support_floor`
-- [ ] support floor: CLI flag `--min-support N`; **default `max(30, positions / 100)`** (i.e. ~1% of
+- [x] support floor: CLI flag `--min-support N`; **default `max(30, positions / 100)`** (i.e. ~1% of
       replayed positions, never below 30) — recorded in meta as `support_floor` together with
       `support_floor_source` (`default` or `flag`)
-- [ ] emit `nnue_v3_feature_stats.json` via Jackson (pretty-printed, deterministic ordering) with
+- [x] emit `nnue_v3_feature_stats.json` via Jackson (pretty-printed, deterministic ordering) with
       `meta` (games_total, games_used, games_skipped, skip_reasons, board_filter `12x12`, positions,
       baseline_mean_eval, support_floor, moves_left_assumption, feature_count) and `features` (row,
       col, state, state_name, support, mean_eval, discrimination, rank)
-- [ ] print a headline console report (games used/skipped, positions, baseline mean eval, support
+- [x] print a headline console report (games used/skipped, positions, baseline mean eval, support
       floor, how many features cleared it, top 10 by discrimination)
-- [ ] write a test for the accumulation/discrimination math on a tiny synthetic set of positions
+- [x] write a test for the accumulation/discrimination math on a tiny synthetic set of positions
       with known evals (assert mean_eval, discrimination, and the support-floor exclusion)
-- [ ] write a test asserting ranking is by discrimination and NOT by support: a low-support (but
+- [x] write a test asserting ranking is by discrimination and NOT by support: a low-support (but
       above floor) high-discrimination feature must outrank a high-support low-discrimination one
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 3: Run the miner on real games.db and commit the stats artifact
 
