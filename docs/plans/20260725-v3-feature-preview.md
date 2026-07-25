@@ -251,11 +251,17 @@ Acceptance evidence (2026-07-25):
 
 ### Task 6: [Final] Update documentation
 
-- [ ] add a short "v3.0 gate" section to `docs/nnue-v3-design.md` (create the section only if the
+- [x] add a short "v3.0 gate" section to `docs/nnue-v3-design.md` (create the section only if the
       file exists on this branch) pointing at `docs/nnue-v3-feature-preview.html` and
       `nnue_v3_feature_stats.json`, and stating the gate is owner-eyeball approval before d4a.6.1
-- [ ] document how to regenerate: the `V3FeatureMiner` command line, the `--min-support` flag and
-      its default, and how the HTML's inlined `DATA` is refreshed from the JSON
+      — ⚠️ `docs/nnue-v3-design.md` does **not** exist on this branch, so per the plan's own
+      condition no section was added to it; the gate section lives in new `docs/nnue-v3-gate.md`
+      instead (it also carries the regeneration notes below)
+- [x] document how to regenerate: the `V3FeatureMiner` command line, the `--min-support` flag and
+      its default, and how the HTML's inlined `DATA` is refreshed from the JSON — both commands were
+      **executed and verified** before documenting: the miner rerun reproduces the committed
+      `nnue_v3_feature_stats.json` byte-identically, and the `DATA:BEGIN`/`DATA:END` splice
+      reproduces the committed `docs/nnue-v3-feature-preview.html` byte-identically
 
 ## Technical Details
 
