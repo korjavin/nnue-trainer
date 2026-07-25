@@ -89,13 +89,19 @@ public final class GamesDbReplay {
         if (moves != null && moves.isArray()) {
           for (JsonNode mv : moves) {
             Action action = parseAction(mv);
-            board =
+            // Legality-checked apply(), not applyGenerated(): an out-of-rules recorded move must
+            // surface as a skipped game rather than silently fabricate a board that the mined
+            // features are then computed from. Rejects 0 of the 9444 moves in the current corpus.
+            GoState next =
                 GoState.fromBoard(board, player, GoState.ACTIONS_PER_TURN, neutralUsed)
-                    .applyGenerated(action)
-                    .toBoard();
+                    .apply(action);
+            if (next == null) {
+              return new Replay(null, "illegal_move");
+            }
+            board = next.toBoard();
             // AFTER the transition: the state a neutral placement is applied to must still show
-            // the budget unspent, or a switch to the legality-checked apply() would reject every
-            // neutral move. Only the board survives the transition, so the flag is tracked here.
+            // the budget unspent, or the legality check would reject every neutral move. Only the
+            // board survives the transition, so the flag is tracked here.
             if (action instanceof PlaceNeutralsAction) {
               neutralUsed[player - 1] = true;
             }

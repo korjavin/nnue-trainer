@@ -104,7 +104,11 @@ public class GameLoopHandler {
       if (!gameOver && currentPlayer == myPlayerIndex && movesLeft > 0) {
         Board board = parseBoardFromSnapshot(snapshot);
         boolean[] neutralUsed = parseNeutralUsed(snapshot);
-        boolean canPlaceNeutral = !neutralUsed[myPlayerIndex - 1];
+        // One pair per player per game AND a turn-opening action only — the server rule ported in
+        // GoState.legalActions. Without the movesLeft gate the SEARCH=NEGAMAX path could answer a
+        // mid-turn snapshot with a neutrals move, which the server rejects as an illegal move.
+        boolean canPlaceNeutral =
+            movesLeft == GoState.ACTIONS_PER_TURN && !neutralUsed[myPlayerIndex - 1];
         // Feed the hand-tuned eval the root turn's non-board state (no-op for NNUE).
         searchEngine.setHandTunedState(movesLeft, neutralUsed);
         makeMove(snapshot, board, canPlaceNeutral, neutralUsed);

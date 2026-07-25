@@ -67,15 +67,48 @@ class SelfPlayExploreDedupTest {
     assertTrue(
         deduped.dataset.size() < raw.dataset.size(),
         "dedup should drop duplicate positions from identical games");
-    // Every emitted position hash is unique, and equals the reported unique yield.
-    Set<Integer> hashes = new HashSet<>();
+    // Every emitted position is unique BY CONTENT (not by hash — see positionKey), and the count
+    // equals the reported unique yield.
+    Set<String> positions = new HashSet<>();
     for (SelfPlayGenerator.TrainingRecord rec : deduped.dataset) {
-      assertTrue(hashes.add(Arrays.hashCode(rec.features)), "no duplicate positions after dedup");
+      assertTrue(
+          positions.add(Arrays.toString(rec.features)), "no duplicate positions after dedup");
     }
-    assertEquals(hashes.size(), deduped.dataset.size(), "dataset.size() == uniquePositions");
+    assertEquals(positions.size(), deduped.dataset.size(), "dataset.size() == uniquePositions");
     assertTrue(
         deduped.totalPositionsSeen >= deduped.dataset.size(),
         "totalPositionsSeen counts pre-dedup positions");
+  }
+
+  @Test
+  void dedupKeyDistinguishesPositionsThatArraysHashCodeCollides() {
+    // Arrays.hashCode over a 0/1 float vector is degenerate (~512 reachable values), so the dedup
+    // key it used to be dropped distinct positions wholesale. Find a real colliding pair and pin
+    // that the key in use separates them.
+    java.util.Random rng = new java.util.Random(11);
+    java.util.Map<Integer, float[]> byHash = new java.util.HashMap<>();
+    float[] left = null;
+    float[] right = null;
+    for (int i = 0; i < 5000 && left == null; i++) {
+      float[] v = new float[864];
+      for (int k = 0; k < 30; k++) {
+        v[rng.nextInt(864)] = 1f;
+      }
+      float[] prior = byHash.put(Arrays.hashCode(v), v);
+      if (prior != null && !Arrays.equals(prior, v)) {
+        left = prior;
+        right = v;
+      }
+    }
+    assertTrue(left != null && right != null, "the degenerate 32-bit key must collide quickly");
+    assertEquals(Arrays.hashCode(left), Arrays.hashCode(right), "found a 32-bit collision");
+    assertFalse(
+        SelfPlayGenerator.positionKey(left) == SelfPlayGenerator.positionKey(right),
+        "dedup key must separate distinct positions");
+    assertEquals(
+        SelfPlayGenerator.positionKey(left),
+        SelfPlayGenerator.positionKey(left.clone()),
+        "equal positions ⇒ equal key");
   }
 
   @Test

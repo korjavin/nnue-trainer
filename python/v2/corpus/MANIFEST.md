@@ -23,8 +23,13 @@ Board sizes swept: 12x12, 9x9, 7x7, 5x5, 5x7 (`SEED = BASE_SEED + size_index`).
 ## What is committed
 - `corpus.sample.jsonl` — a 300-line slice, 60 lines/board size, for schema/CI
   checks. Each 60-line block is one contiguous game, not a stride, so it covers
-  few distinct boards: 128 of the 300 lines are exact duplicates of another line
-  and no `FORTIFIED` cell appears anywhere in it. The full `corpus.jsonl`
+  few distinct boards: 128 of the 300 lines are exact duplicates of another line.
+  No `FORTIFIED` cell appears in it — and that is structural, not a sampling
+  artefact: the negamax emit path applies moves with `SearchEngine.applyAction`,
+  which always writes `NORMAL` and never fortifies a captured cell, so the whole
+  corpus (and the dictionary mined from it) is fortification-free while real
+  games are not. Re-running the generator as-is will not fix this. The full
+  `corpus.jsonl`
   (~181 MB, 122,382 positions) is **gitignored**; regenerate it with the command
   above.
 
@@ -36,7 +41,10 @@ Everything below (the position counts, the re-mining tables, and the promoted
 2. labeled every turn-capped game a draw — 240 of the 300 sample lines, i.e. all
    four non-12x12 sizes, carry a constant `wdl=0.5`;
 3. re-armed the one-pair-per-player-per-game neutral budget every turn, so
-   positions carry up to 18 NEUTRAL cells where the rules allow 4.
+   positions carry up to 18 NEUTRAL cells where the rules allow 4;
+4. deduplicated positions on `Arrays.hashCode(float[864])`, which for a 0/1
+   vector has only ~512 reachable values — so an export kept at most ~512
+   distinct positions and dropped the rest as false duplicates.
 
 Rerunning the command above today will NOT reproduce these numbers. Regenerate
 the corpus, re-mine, and re-promote the dictionary before drawing conclusions

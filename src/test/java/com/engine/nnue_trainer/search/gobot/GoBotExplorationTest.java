@@ -98,6 +98,35 @@ public class GoBotExplorationTest {
   }
 
   @Test
+  public void neverSamplesAwayAForcedWin() {
+    // Root scores carry terminal distances (±(MATE_SCORE - ply)), not just leaf estimates. Scaling
+    // the softmax by the raw best-worst band turned a mate-in-1 next to losing alternatives into a
+    // ~2e9-wide band, i.e. near-uniform sampling: the win was thrown away ~44% of the time.
+    int mate = (int) GoBotSearcher.MATE_SCORE - 1;
+    GoResult forcedWin = result(mate, -mate, -mate, -mate, -mate);
+    GoBotExploration ex = new GoBotExploration(true, 0.6, new Random(7));
+    for (int i = 0; i < 500; i++) {
+      assertSame(forcedWin.action, ex.sampleMove(forcedWin), "a proven win must always be played");
+    }
+
+    // A single mate-magnitude blunder among ordinary candidates must not widen the band either.
+    GoResult withLosingAlt = result(14214, 11978, -mate);
+    int nonBest = 0;
+    int matePicks = 0;
+    for (int i = 0; i < 500; i++) {
+      Action pick = ex.sampleMove(withLosingAlt);
+      if (pick != withLosingAlt.action) {
+        nonBest++;
+        if (pick.equals(withLosingAlt.alternatives.get(1).action)) {
+          matePicks++;
+        }
+      }
+    }
+    assertEquals(0, matePicks, "a losing-mate alternative must never be sampled");
+    assertTrue(nonBest > 0, "the ordinary alternative must still be explored");
+  }
+
+  @Test
   public void emptyOrNullAlternativesSafe() {
     GoBotExploration ex = new GoBotExploration(true, 1.0, new Random(1));
 

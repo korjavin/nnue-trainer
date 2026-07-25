@@ -62,21 +62,25 @@ public class GamesDbReplayTest {
 
   @Test
   public void testNeutralActionMarksBudgetForFollowingSnapshots() {
+    // A neutral pair must sit on the mover's OWN normal cells, so p1 grows two first.
     JsonNode t =
         turns(
             "["
+                + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":0}]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":7,\"col\":6}]},"
                 + "{\"player\":1,\"moves\":[{\"type\":\"neutral\",\"cells\":"
-                + "[{\"row\":3,\"col\":3},{\"row\":3,\"col\":4}]}]},"
-                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":7,\"col\":6}]}"
+                + "[{\"row\":0,\"col\":1},{\"row\":1,\"col\":0}]}]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":6,\"col\":6}]}"
                 + "]");
 
     GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
 
     assertNull(r.skipReason);
-    assertTrue(!r.snapshots.get(0).neutralUsed[0], "budget not yet spent before the turn");
-    assertTrue(r.snapshots.get(1).neutralUsed[0], "p1 neutral budget spent");
-    assertTrue(!r.snapshots.get(1).neutralUsed[1]);
-    assertEquals(CellKind.NEUTRAL, r.snapshots.get(1).board.getCell(3, 3).kind);
+    assertTrue(!r.snapshots.get(2).neutralUsed[0], "budget not yet spent before the turn");
+    assertTrue(r.snapshots.get(3).neutralUsed[0], "p1 neutral budget spent");
+    assertTrue(!r.snapshots.get(3).neutralUsed[1]);
+    assertEquals(CellKind.NEUTRAL, r.snapshots.get(3).board.getCell(0, 1).kind);
   }
 
   @Test

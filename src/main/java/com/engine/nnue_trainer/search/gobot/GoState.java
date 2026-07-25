@@ -189,7 +189,17 @@ public final class GoState {
     int best = 0;
     int bestOwned = -1;
     boolean tie = false;
+    // Eliminated players keep their cells on the board (see eliminateStuckPlayers), so a
+    // base-destroyed player could otherwise out-territory a live-but-stuck opponent and be handed
+    // the win. Only players still in the game share the tiebreak.
+    boolean anyActive = false;
     for (int player = 1; player <= players; player++) {
+      anyActive |= active(player);
+    }
+    for (int player = 1; player <= players; player++) {
+      if (anyActive && !active(player)) {
+        continue;
+      }
       int owned = ownedCells(player);
       if (owned > bestOwned) {
         bestOwned = owned;
@@ -200,6 +210,15 @@ public final class GoState {
       }
     }
     return tie ? 0 : best;
+  }
+
+  /**
+   * {@link #outcomeWinner()} for a plain board snapshot — the single labeling rule every self-play
+   * loop uses to score a finished, stuck, or turn-capped game. {@code neutralUsed} does not affect
+   * the outcome, so callers need not thread it through.
+   */
+  public static int outcomeWinner(Board board, int currentPlayer) {
+    return fromBoard(board, currentPlayer, ACTIONS_PER_TURN, new boolean[2]).outcomeWinner();
   }
 
   private int ownedCells(int player) {

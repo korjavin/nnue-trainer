@@ -283,6 +283,32 @@ Acceptance evidence (2026-07-25):
     hand-tuned (an order of magnitude larger scores), where the sampler returned argmax ~96% of the
     time and `CHALLENGER_EXPLORE` did nothing past the opening. Scale now widens to the observed
     candidate band; a no-op whenever the band already fits inside `NNUE_SCALE`.
+  - `GoBotExploration.java` (third review pass) — the band widening above was measured only on
+    hand-tuned leaf scores, but root scores also carry terminal distances (`±(MATE_SCORE - ply)`).
+    A mate candidate stretched the band to ~2e9, flattening the softmax to near-uniform: with the
+    challenger's default temperature the sampler threw away a forced win ~44% of the time. Proven
+    results are now played outright and mate-magnitude candidates are excluded from the band.
+  - `GoState.java` (third review pass) — `outcomeWinner`'s territory tiebreak ran over all players
+    including eliminated ones, whose cells stay on the board. A base-destroyed player with more
+    territory than a live-but-stuck opponent was handed the win, contradicting the rule the method
+    documents. Restricted to active players whenever any player is still active.
+  - `SelfPlayGenerator.java` (third review pass) — dedup keyed on `Arrays.hashCode(float[864])`.
+    Every element is `0f`/`1f` and `floatToIntBits(1f) == 127 * 2^23`, so every such hash is
+    congruent mod 2^23 and only ~512 values are reachable **for any 0/1 vector** (measured: 459
+    distinct hashes over 20,000 distinct vectors). Dedup therefore capped an export at ~512
+    positions and dropped the rest as false duplicates; the key is now 64-bit FNV-1a.
+  - `GamesDbReplay.java` (third review pass) — replay now uses the legality-checked `apply()`
+    instead of `applyGenerated()`, so an out-of-rules recorded move skips the game
+    (`illegal_move`) rather than silently fabricating the board the mined features come from. Zero
+    rejections on the current DB: both `nnue_v3_feature_stats.json` and
+    `games_db_pattern_stats.json` regenerate byte-identically.
+  - `GameLoopHandler.java`, `PeriodicRetrainer.java` (third review pass, pre-existing) — the live
+    handler armed the neutral action on every snapshot, not only at the turn opening, so the
+    `SEARCH=NEGAMAX` path could answer mid-turn with a move the server rejects as illegal. The
+    retrainer's gauntlet was the third self-play loop still on the old rules (stuck player = loss
+    by turn parity, turn cap = draw); on 12x12 the board fills and both sides get stuck at once, so
+    the promotion gate was deciding normal endings on turn parity. Both now use the canonical rule,
+    exposed once as `GoState.outcomeWinner(board, stm)`.
   - `python/v2/export_weights.py` — could not run as a script at all (missing the `sys.path`
     bootstrap its own documented regen command needs); `torch.load` now passes `weights_only=True`
     (the file is a plain `state_dict`).

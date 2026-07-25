@@ -17,7 +17,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -300,7 +299,7 @@ public class SelfPlayGenerator {
       engine = new SearchEngine();
     }
 
-    Set<Integer> uniquePositionHashes = new HashSet<>();
+    Set<Long> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
 
@@ -402,7 +401,7 @@ public class SelfPlayGenerator {
           float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
           dataset.add(new TrainingRecord(features, target));
 
-          uniquePositionHashes.add(Arrays.hashCode(features));
+          uniquePositionHashes.add(positionKey(features));
           totalPositions++;
         }
       }
@@ -483,7 +482,7 @@ public class SelfPlayGenerator {
     // uniform-epsilon fallback below is unchanged by default.
     GoBotExploration explore =
         new GoBotExploration(config.exploreTemperature > 0.0, config.exploreTemperature, random);
-    Set<Integer> uniquePositionHashes = new HashSet<>();
+    Set<Long> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
@@ -547,7 +546,7 @@ public class SelfPlayGenerator {
                 ? (float) ((1.0 - config.tdLambda) * p.searchValue + config.tdLambda * outcome)
                 : outcome;
         totalPositions++;
-        boolean isNew = uniquePositionHashes.add(Arrays.hashCode(p.features));
+        boolean isNew = uniquePositionHashes.add(positionKey(p.features));
         if (config.dedup && !isNew) {
           continue; // exact-duplicate position already emitted — drop it
         }
@@ -621,9 +620,22 @@ public class SelfPlayGenerator {
    * lost base makes a player inactive). {@code currentPlayer} does not affect the outcome — the
    * snapshot's whose-turn/movesLeft/neutral state is irrelevant to {@code outcomeWinner}.
    */
+  /**
+   * 64-bit FNV-1a over the feature bits. The previous key, {@code Arrays.hashCode}, is degenerate
+   * on these vectors: every element is 0f or 1f, and {@code floatToIntBits(1f) == 127 * 2^23}, so
+   * every hash is congruent mod 2^23 and only ~512 values are reachable for ANY 0/1 vector. Dedup
+   * therefore capped an export at ~512 positions and silently discarded the rest of the corpus.
+   */
+  static long positionKey(float[] features) {
+    long hash = 0xcbf29ce484222325L;
+    for (float f : features) {
+      hash = (hash ^ Float.floatToIntBits(f)) * 0x100000001b3L;
+    }
+    return hash;
+  }
+
   private static int canonicalWinner(Board board, int currentPlayer) {
-    return GoState.fromBoard(board, currentPlayer, GoState.ACTIONS_PER_TURN, new boolean[2])
-        .outcomeWinner();
+    return GoState.outcomeWinner(board, currentPlayer);
   }
 
   private static Board copyBoard(Board original) {

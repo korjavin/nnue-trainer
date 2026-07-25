@@ -89,10 +89,18 @@ public final class GoBotExploration {
     // the distribution onto argmax and the knob does nothing. Widening to the observed candidate
     // band fixes that and is a no-op whenever the band already fits inside NNUE_SCALE.
     int maxScore = scores.get(0);
-    int minScore = scores.get(0);
     for (int s : scores) {
       if (s > maxScore) maxScore = s;
-      if (s < minScore) minScore = s;
+    }
+    // Terminal scores (±(MATE_SCORE - ply)) are not on the heuristic leaf's axis. A proven result
+    // is never explored away, and mate-magnitude candidates are kept out of the band: one losing
+    // alternative at -1e9 would otherwise widen it to ~2e9 and flatten the softmax to uniform,
+    // i.e. discard a forced win about 44% of the time. They stay in the weights, where the narrow
+    // band drives them to 0.
+    if (isMate(maxScore)) return r.action;
+    int minScore = maxScore;
+    for (int s : scores) {
+      if (!isMate(s) && s < minScore) minScore = s;
     }
     double scale = Math.max(GoBotSearcher.NNUE_SCALE, (double) maxScore - minScore) * temperature;
     double[] weights = new double[scores.size()];
@@ -110,6 +118,11 @@ public final class GoBotExploration {
       if (pick < acc) return actions.get(i);
     }
     return actions.get(actions.size() - 1); // float-rounding fallback
+  }
+
+  /** A search-reported win/loss distance rather than a leaf estimate ({@code terminalScore}). */
+  private static boolean isMate(int score) {
+    return Math.abs((long) score) >= GoBotSearcher.MATE_SCORE - 1_000_000L;
   }
 
   /**
