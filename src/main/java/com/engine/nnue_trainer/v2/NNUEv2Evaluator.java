@@ -15,28 +15,25 @@ import java.util.Objects;
 /**
  * Opt-in NNUE v2 leaf evaluator (bead d4a.1.3).
  *
- * <p>Loads the trained float-weights JSON (see python/v2/export_weights.py:
- * {@code stm_embed}/{@code nstm_embed} = [num_patterns x W], plus dense
- * {@code l1} 2W+14->16, {@code l2} 16->32, {@code l3} 32->1) and the promoted
- * pattern dictionary. For a board it computes:
+ * <p>Loads the trained float-weights JSON (see python/v2/export_weights.py: {@code
+ * stm_embed}/{@code nstm_embed} = [num_patterns x W], plus dense {@code l1} 2W+14->16, {@code l2}
+ * 16->32, {@code l3} 32->1) and the promoted pattern dictionary. For a board it computes:
  *
  * <ul>
- *   <li>{@code stm_acc}(W)  = sum of {@code stm_embed} rows over counted STM patterns
+ *   <li>{@code stm_acc}(W) = sum of {@code stm_embed} rows over counted STM patterns
  *   <li>{@code nstm_acc}(W) = sum of {@code nstm_embed} rows over counted NSTM patterns
  * </ul>
  *
- * then concatenates {@code [stm_acc, nstm_acc, dense(14)]} (2062) and runs
- * {@code l1 -> relu -> l2 -> relu -> l3} to a scalar leaf value in the
- * side-to-move frame.
+ * then concatenates {@code [stm_acc, nstm_acc, dense(14)]} (2062) and runs {@code l1 -> relu -> l2
+ * -> relu -> l3} to a scalar leaf value in the side-to-move frame.
  *
- * <p>The accumulator/pattern math is reused from {@link NNUEv2Accumulator} — NOT
- * reimplemented. Two accumulator instances carry the two embeddings; a single
- * shared count {@link NNUEv2Accumulator.State} (counts are embedding-independent)
- * feeds both, and we take the STM half from the STM-embedding instance and the
- * NSTM half from the NSTM-embedding instance.
+ * <p>The accumulator/pattern math is reused from {@link NNUEv2Accumulator} — NOT reimplemented. Two
+ * accumulator instances carry the two embeddings; a single shared count {@link
+ * NNUEv2Accumulator.State} (counts are embedding-independent) feeds both, and we take the STM half
+ * from the STM-embedding instance and the NSTM half from the NSTM-embedding instance.
  *
- * <p>Board-size agnostic: no 12x12 assumption; patterns + dense features come
- * straight from the board dimensions.
+ * <p>Board-size agnostic: no 12x12 assumption; patterns + dense features come straight from the
+ * board dimensions.
  */
 public class NNUEv2Evaluator {
 
@@ -141,9 +138,9 @@ public class NNUEv2Evaluator {
   }
 
   /**
-   * Streams the weights JSON (the blob is ~344MB of text; a full DOM parse would
-   * blow the heap, so we walk it with the Jackson streaming parser and keep only
-   * the float arrays — final footprint is 2x[num_patterns x W] floats ~= 66MB).
+   * Streams the weights JSON (the blob is ~344MB of text; a full DOM parse would blow the heap, so
+   * we walk it with the Jackson streaming parser and keep only the float arrays — final footprint
+   * is 2x[num_patterns x W] floats ~= 66MB).
    */
   public static NNUEv2Evaluator load(Path weightsJson, Path dictJson) throws IOException {
     PatternDictionary dict = PatternDictionary.load(dictJson);

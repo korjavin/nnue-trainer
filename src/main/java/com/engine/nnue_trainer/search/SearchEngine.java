@@ -73,7 +73,9 @@ public class SearchEngine {
     return useNnueV2Eval;
   }
 
-  /** Inject a v2 evaluator (tests / callers that already hold one), bypassing the lazy file load. */
+  /**
+   * Inject a v2 evaluator (tests / callers that already hold one), bypassing the lazy file load.
+   */
   public void setNnueV2Evaluator(NNUEv2Evaluator evaluator) {
     this.injectedV2Evaluator = evaluator;
   }

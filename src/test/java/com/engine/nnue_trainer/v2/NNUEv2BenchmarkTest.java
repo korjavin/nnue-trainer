@@ -39,8 +39,10 @@ public class NNUEv2BenchmarkTest {
     long usedAfter = rt.totalMemory() - rt.freeMemory();
     long footprintMb = Math.max(0, usedAfter - usedBefore) / (1024 * 1024);
 
-    System.out.println("=== NNUE v2 evaluator benchmark (float prototype; quantization is future work) ===");
-    System.out.printf("load: %d ms, resident float weights ~%d MB (from a %.0f MB JSON blob)%n",
+    System.out.println(
+        "=== NNUE v2 evaluator benchmark (float prototype; quantization is future work) ===");
+    System.out.printf(
+        "load: %d ms, resident float weights ~%d MB (from a %.0f MB JSON blob)%n",
         loadMs, footprintMb, Files.size(WEIGHTS) / 1e6);
 
     evalThroughput(ev, midgame(12, 12), "12x12");
@@ -64,7 +66,8 @@ public class NNUEv2BenchmarkTest {
     }
     long ns = System.nanoTime() - t0;
     double evalsPerSec = iters / (ns / 1e9);
-    System.out.printf("eval/s %-6s: %,10.0f  (%.3f ms/eval)  sink=%.3f%n",
+    System.out.printf(
+        "eval/s %-6s: %,10.0f  (%.3f ms/eval)  sink=%.3f%n",
         label, evalsPerSec, ns / 1e6 / iters, sink);
   }
 
@@ -81,11 +84,18 @@ public class NNUEv2BenchmarkTest {
     SearchResult rv = v2.findBestActionUsingModel(b, 1, depth, false);
     double npsV2 = rv.nodesEvaluated / Math.max(1e-3, rv.timeMs / 1000.0);
 
-    System.out.printf("search NPS %dx%d depth %d — v1-baseline: %,10.0f (%d nodes / %d ms) | "
+    System.out.printf(
+        "search NPS %dx%d depth %d — v1-baseline: %,10.0f (%d nodes / %d ms) | "
             + "v2: %,10.0f (%d nodes / %d ms)%n",
-        rows, cols, depth,
-        npsBase, rb.nodesEvaluated, rb.timeMs,
-        npsV2, rv.nodesEvaluated, rv.timeMs);
+        rows,
+        cols,
+        depth,
+        npsBase,
+        rb.nodesEvaluated,
+        rb.timeMs,
+        npsV2,
+        rv.nodesEvaluated,
+        rv.timeMs);
   }
 
   /** Deterministic pseudo-random mid-game position with both bases and mixed ownership. */

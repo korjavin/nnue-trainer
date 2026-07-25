@@ -11,8 +11,8 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Loads the mined promoted-pattern dictionary (python/v2/nnue_v2_dictionary.json)
- * for signature -> feature-id lookup. Unseen signatures are a miss (-1) per spec.
+ * Loads the mined promoted-pattern dictionary (python/v2/nnue_v2_dictionary.json) for signature ->
+ * feature-id lookup. Unseen signatures are a miss (-1) per spec.
  */
 public class PatternDictionary {
 
@@ -21,8 +21,8 @@ public class PatternDictionary {
   private final int minCount;
   private final int version;
 
-  private PatternDictionary(Map<String, Integer> patternToId, int numPatterns, int minCount,
-      int version) {
+  private PatternDictionary(
+      Map<String, Integer> patternToId, int numPatterns, int minCount, int version) {
     this.patternToId = patternToId;
     this.numPatterns = numPatterns;
     this.minCount = minCount;
@@ -46,11 +46,16 @@ public class PatternDictionary {
     }
 
     JsonNode meta = root.get("metadata");
-    return new PatternDictionary(map, meta.get("num_patterns").asInt(),
-        meta.get("min_count").asInt(), meta.get("version").asInt());
+    return new PatternDictionary(
+        map,
+        meta.get("num_patterns").asInt(),
+        meta.get("min_count").asInt(),
+        meta.get("version").asInt());
   }
 
-  /** @return the feature id for the signature, or -1 on miss (unseen pattern). */
+  /**
+   * @return the feature id for the signature, or -1 on miss (unseen pattern).
+   */
   public int lookup(String signature) {
     return patternToId.getOrDefault(signature, -1);
   }

@@ -23,7 +23,8 @@ public class SearchEngineNnueV2Test {
 
   /** Zero everything except l3 bias == MARKER, so every board evaluates to exactly MARKER. */
   private static NNUEv2Evaluator constantEvaluator() throws Exception {
-    PatternDictionary dict = PatternDictionary.load(Path.of("python", "v2", "nnue_v2_dictionary.json"));
+    PatternDictionary dict =
+        PatternDictionary.load(Path.of("python", "v2", "nnue_v2_dictionary.json"));
     int n = dict.numPatterns();
     int w = 4;
     float[][] stm = new float[n][w];
@@ -55,7 +56,8 @@ public class SearchEngineNnueV2Test {
     // Default: flag OFF. v2 must NOT be consulted -> deterministic piece-count baseline (2 - 1).
     assertFalse(engine.isUseNnueV2Eval(), "v2 eval must default OFF");
     float baseline = engine.evaluate(b, null, 1, 1);
-    assertEquals(2.0f - 1.0f, baseline, 0.0f, "flag OFF must be the unchanged piece-count baseline");
+    assertEquals(
+        2.0f - 1.0f, baseline, 0.0f, "flag OFF must be the unchanged piece-count baseline");
     assertNotEquals(MARKER, baseline, "flag OFF must not route through v2");
 
     // Flag ON: leaf eval routes through the injected v2 evaluator (constant MARKER).

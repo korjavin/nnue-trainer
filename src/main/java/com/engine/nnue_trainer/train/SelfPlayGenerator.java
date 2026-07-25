@@ -341,110 +341,110 @@ public class SelfPlayGenerator {
             : null;
     try {
 
-    for (int game = 1; game <= config.numGames; game++) {
-      // System.out.println("Simulating game " + game + "/" + config.numGames);
-      List<TurnData> turns = new ArrayList<>();
-      Board board = startBoard(config.rows, config.cols);
+      for (int game = 1; game <= config.numGames; game++) {
+        // System.out.println("Simulating game " + game + "/" + config.numGames);
+        List<TurnData> turns = new ArrayList<>();
+        Board board = startBoard(config.rows, config.cols);
 
-      int currentPlayer = 1;
-      int winner = 0;
+        int currentPlayer = 1;
+        int winner = 0;
 
-      for (int turn = 0; turn < config.maxTurns; turn++) {
-        boolean canPlaceNeutral = true;
-        for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
-          // Collect board snapshot BEFORE move
-          turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
+        for (int turn = 0; turn < config.maxTurns; turn++) {
+          boolean canPlaceNeutral = true;
+          for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
+            // Collect board snapshot BEFORE move
+            turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
 
-          List<Action> legalActions =
-              MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
-          if (legalActions.isEmpty()) {
-            // Terminal-by-base or a stuck current player: both decided by the real size-general
-            // rule (last player able to move wins, territory tiebreak) rather than a base check /
-            // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
-            winner = canonicalWinner(board, currentPlayer);
-            break;
-          }
+            List<Action> legalActions =
+                MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
+            if (legalActions.isEmpty()) {
+              // Terminal-by-base or a stuck current player: both decided by the real size-general
+              // rule (last player able to move wins, territory tiebreak) rather than a base check /
+              // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
+              winner = canonicalWinner(board, currentPlayer);
+              break;
+            }
 
-          Action chosenAction = null;
-          if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
-            // Exploration
-            chosenAction = legalActions.get(random.nextInt(legalActions.size()));
-          } else {
-            // Exploitation
-            if (engine.getNnueModel() != null) {
-              chosenAction =
-                  engine.findBestActionUsingModel(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
-                      .bestAction;
+            Action chosenAction = null;
+            if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
+              // Exploration
+              chosenAction = legalActions.get(random.nextInt(legalActions.size()));
             } else {
-              chosenAction =
-                  SearchEngine.findBestAction(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
-                      .bestAction;
+              // Exploitation
+              if (engine.getNnueModel() != null) {
+                chosenAction =
+                    engine.findBestActionUsingModel(
+                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                        .bestAction;
+              } else {
+                chosenAction =
+                    SearchEngine.findBestAction(
+                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                        .bestAction;
+              }
+              if (chosenAction == null) {
+                chosenAction = legalActions.get(0); // fallback
+              }
             }
-            if (chosenAction == null) {
-              chosenAction = legalActions.get(0); // fallback
+
+            if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
+              canPlaceNeutral = false;
+              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+              break; // turn ends immediately on placement
+            } else {
+              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+            }
+
+            if (engine.isTerminal(board)) {
+              winner = canonicalWinner(board, currentPlayer);
+              break;
             }
           }
+          if (winner != 0) break;
+          currentPlayer = 3 - currentPlayer;
+        }
 
-          if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
-            canPlaceNeutral = false;
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
-            break; // turn ends immediately on placement
-          } else {
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+        // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
+        // decided by the real territory rule instead of defaulting to draw.
+        if (winner == 0) {
+          winner = canonicalWinner(board, currentPlayer);
+        }
+
+        // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
+        // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record
+        // exists.
+        if (config.rows == 12 && config.cols == 12) {
+          for (TurnData turnData : turns) {
+            float target =
+                computeTarget(
+                    engine,
+                    turnData.board,
+                    turnData.activePlayer,
+                    turnData.canPlaceNeutral,
+                    winner,
+                    config);
+            float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
+            dataset.add(new TrainingRecord(features, target));
+
+            uniquePositionHashes.add(Arrays.hashCode(features));
+            totalPositions++;
           }
+        }
 
-          if (engine.isTerminal(board)) {
-            winner = canonicalWinner(board, currentPlayer);
-            break;
+        // Raw corpus is board-size-agnostic: sample every Nth collected turn regardless of size.
+        if (rawPositions != null) {
+          int every = Math.max(1, config.rawSampleEvery);
+          for (int i = 0; i < turns.size(); i += every) {
+            rawPositions.add(toRawPosition(turns.get(i), winner, config));
           }
         }
-        if (winner != 0) break;
-        currentPlayer = 3 - currentPlayer;
       }
 
-      // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
-      // decided by the real territory rule instead of defaulting to draw.
-      if (winner == 0) {
-        winner = canonicalWinner(board, currentPlayer);
-      }
-
-      // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
-      // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record
-      // exists.
-      if (config.rows == 12 && config.cols == 12) {
-        for (TurnData turnData : turns) {
-          float target =
-              computeTarget(
-                  engine,
-                  turnData.board,
-                  turnData.activePlayer,
-                  turnData.canPlaceNeutral,
-                  winner,
-                  config);
-          float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-          dataset.add(new TrainingRecord(features, target));
-
-          uniquePositionHashes.add(Arrays.hashCode(features));
-          totalPositions++;
-        }
-      }
-
-      // Raw corpus is board-size-agnostic: sample every Nth collected turn regardless of size.
-      if (rawPositions != null) {
-        int every = Math.max(1, config.rawSampleEvery);
-        for (int i = 0; i < turns.size(); i += every) {
-          rawPositions.add(toRawPosition(turns.get(i), winner, config));
-        }
-      }
-    }
-
-    double distinctGameRatio =
-        totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    GenerationResult result = new GenerationResult(dataset, distinctGameRatio, totalPositions);
-    result.rawPositions = rawPositions;
-    return result;
+      double distinctGameRatio =
+          totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
+      GenerationResult result = new GenerationResult(dataset, distinctGameRatio, totalPositions);
+      result.rawPositions = rawPositions;
+      return result;
 
     } finally {
       if (prevLeaf != null) {

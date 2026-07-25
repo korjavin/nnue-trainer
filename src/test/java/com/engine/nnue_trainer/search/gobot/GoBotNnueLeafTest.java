@@ -137,7 +137,8 @@ public class GoBotNnueLeafTest {
     long forWinner = GoBotSearcher.nnueV2Leaf(b, 1, v2); // winning STM
     long forMirror = GoBotSearcher.nnueV2Leaf(b, 2, v2); // reflected perspective
 
-    assertTrue(forWinner > 500, "winning STM position maps to a strongly-positive leaf: " + forWinner);
+    assertTrue(
+        forWinner > 500, "winning STM position maps to a strongly-positive leaf: " + forWinner);
     assertTrue(forMirror < -500, "its mirror maps to a strongly-negative leaf: " + forMirror);
     assertEquals(forWinner, -forMirror, "zero-sum: winner and mirror are exact negatives");
   }

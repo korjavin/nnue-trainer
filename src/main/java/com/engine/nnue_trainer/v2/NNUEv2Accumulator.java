@@ -14,12 +14,11 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * v2 accumulator over the canonical 3.1 pattern contract. Builds window
- * signatures via {@link PatternContract#extractWindows} + {@link #signature},
- * looks them up in the promoted {@link PatternDictionary} (string keys), counts
- * occurrences per perspective (STM = active player, NSTM = 3 - active player),
- * ignores dictionary misses, and accumulates first-layer columns multiplicatively
- * (count * weight) into the two perspective accumulators (full recompute).
+ * v2 accumulator over the canonical 3.1 pattern contract. Builds window signatures via {@link
+ * PatternContract#extractWindows} + {@link #signature}, looks them up in the promoted {@link
+ * PatternDictionary} (string keys), counts occurrences per perspective (STM = active player, NSTM =
+ * 3 - active player), ignores dictionary misses, and accumulates first-layer columns
+ * multiplicatively (count * weight) into the two perspective accumulators (full recompute).
  */
 public class NNUEv2Accumulator {
   private final PatternDictionary dict;
@@ -34,11 +33,7 @@ public class NNUEv2Accumulator {
   }
 
   public NNUEv2Accumulator(
-      PatternDictionary dict,
-      float[][] hiddenWeights,
-      float[] hiddenBias,
-      int K,
-      int denseSize) {
+      PatternDictionary dict, float[][] hiddenWeights, float[] hiddenBias, int K, int denseSize) {
     Objects.requireNonNull(dict, "dict");
     if (hiddenWeights != null && hiddenWeights.length != dict.numPatterns()) {
       throw new IllegalArgumentException(
@@ -63,15 +58,16 @@ public class NNUEv2Accumulator {
 
   /**
    * Incrementally-maintained per-perspective {@code id -> count} state. These integer maps are the
-   * genuinely incremental structure; the float accumulator / output is DERIVED from them through the
-   * same reduction {@link #computeFull} uses, so full and incremental paths are byte-identical.
+   * genuinely incremental structure; the float accumulator / output is DERIVED from them through
+   * the same reduction {@link #computeFull} uses, so full and incremental paths are byte-identical.
    */
   public static class State {
     private final Map<Integer, Integer> stmCounts;
     private final Map<Integer, Integer> nstmCounts;
     private final int activePlayer;
 
-    public State(Map<Integer, Integer> stmCounts, Map<Integer, Integer> nstmCounts, int activePlayer) {
+    public State(
+        Map<Integer, Integer> stmCounts, Map<Integer, Integer> nstmCounts, int activePlayer) {
       this.stmCounts = stmCounts;
       this.nstmCounts = nstmCounts;
       this.activePlayer = activePlayer;
@@ -90,12 +86,12 @@ public class NNUEv2Accumulator {
     }
   }
 
-  /** Builds a fresh {@link State} by counting patterns for both perspectives (STM = activePlayer). */
+  /**
+   * Builds a fresh {@link State} by counting patterns for both perspectives (STM = activePlayer).
+   */
   public State newState(Board board, int activePlayer) {
     return new State(
-        countPatterns(board, activePlayer),
-        countPatterns(board, 3 - activePlayer),
-        activePlayer);
+        countPatterns(board, activePlayer), countPatterns(board, 3 - activePlayer), activePlayer);
   }
 
   /**
@@ -123,7 +119,10 @@ public class NNUEv2Accumulator {
     return a;
   }
 
-  /** Assembles the {@code [STM, NSTM, dense]} output from a {@link State} via {@link #accumFromCounts}. */
+  /**
+   * Assembles the {@code [STM, NSTM, dense]} output from a {@link State} via {@link
+   * #accumFromCounts}.
+   */
   public float[] output(State state, float[] denseFeatures) {
     return assemble(
         accumFromCounts(state.stmCounts), accumFromCounts(state.nstmCounts), denseFeatures);
@@ -143,8 +142,8 @@ public class NNUEv2Accumulator {
 
   /**
    * Canonical signature string for a window, byte-identical to
-   * python/v2/mine_patterns.py::window_signature:
-   * {@code ",".join(symbols) + "|" + distance_bucket}.
+   * python/v2/mine_patterns.py::window_signature: {@code ",".join(symbols) + "|" +
+   * distance_bucket}.
    */
   public static String signature(PatternContract.Window w) {
     StringBuilder sb = new StringBuilder();
@@ -159,9 +158,9 @@ public class NNUEv2Accumulator {
   }
 
   /**
-   * Count dictionary-id occurrences over all windows for one perspective. Misses
-   * (lookup == -1) are ignored. The same signature recurring across window centers
-   * increments its count, so the result holds COUNTED occurrences, not booleans.
+   * Count dictionary-id occurrences over all windows for one perspective. Misses (lookup == -1) are
+   * ignored. The same signature recurring across window centers increments its count, so the result
+   * holds COUNTED occurrences, not booleans.
    */
   public Map<Integer, Integer> countPatterns(Board board, int perspectiveOwner) {
     Map<Integer, Integer> counts = new HashMap<>();
@@ -178,12 +177,12 @@ public class NNUEv2Accumulator {
 
   /**
    * Incrementally updates {@code state} from {@code oldBoard} to {@code newBoard} given the changed
-   * cells, keeping both count maps EXACTLY equal to a full recompute on {@code newBoard}. Counts are
-   * weight-independent, so this runs regardless of null weights (the derived output stays correct).
-   * Updates both STM (owner = activePlayer) and NSTM (owner = 3 - activePlayer) perspectives.
+   * cells, keeping both count maps EXACTLY equal to a full recompute on {@code newBoard}. Counts
+   * are weight-independent, so this runs regardless of null weights (the derived output stays
+   * correct). Updates both STM (owner = activePlayer) and NSTM (owner = 3 - activePlayer)
+   * perspectives.
    */
-  public void applyMove(
-      State state, Board oldBoard, Board newBoard, Collection<Pos> changedCells) {
+  public void applyMove(State state, Board oldBoard, Board newBoard, Collection<Pos> changedCells) {
     int stm = state.activePlayer;
     applyPerspective(state.stmCounts, oldBoard, newBoard, stm, changedCells);
     applyPerspective(state.nstmCounts, oldBoard, newBoard, 3 - stm, changedCells);
@@ -198,7 +197,8 @@ public class NNUEv2Accumulator {
     Pos oldBase = PatternContract.findEnemyBase(oldBoard, owner);
     Pos newBase = PatternContract.findEnemyBase(newBoard, owner);
     if (!Objects.equals(oldBase, newBase)) {
-      // The enemy base moved, which shifts every window's distance bucket: no local invariant holds,
+      // The enemy base moved, which shifts every window's distance bucket: no local invariant
+      // holds,
       // so recompute this perspective in full.
       counts.clear();
       counts.putAll(countPatterns(newBoard, owner));
@@ -231,7 +231,9 @@ public class NNUEv2Accumulator {
     }
   }
 
-  /** Decrements {@code id}'s count, dropping the entry at zero (full recompute never stores zeros). */
+  /**
+   * Decrements {@code id}'s count, dropping the entry at zero (full recompute never stores zeros).
+   */
   private static void dec(Map<Integer, Integer> counts, int id) {
     Integer v = counts.get(id);
     if (v == null) {

@@ -11,7 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-/** Forward-pass sanity for the opt-in v2 evaluator (synthetic weights always; real weights gated). */
+/**
+ * Forward-pass sanity for the opt-in v2 evaluator (synthetic weights always; real weights gated).
+ */
 public class NNUEv2EvaluatorTest {
 
   private static final Path DICT = Path.of("python", "v2", "nnue_v2_dictionary.json");
@@ -72,7 +74,8 @@ public class NNUEv2EvaluatorTest {
 
   @Test
   public void realWeightsWinningBeatsLosing() throws Exception {
-    assumeTrue(Files.exists(WEIGHTS), "344MB weights blob absent (regen: export_weights.py) — skip");
+    assumeTrue(
+        Files.exists(WEIGHTS), "344MB weights blob absent (regen: export_weights.py) — skip");
     NNUEv2Evaluator ev = NNUEv2Evaluator.load(WEIGHTS, DICT);
 
     // Player 1 (STM) crushing: many player-1 pieces, opponent reduced to a lone base.

@@ -40,7 +40,8 @@ public final class GauntletV2Run {
       v1 = NNUEModel.load(V1_WEIGHTS);
       System.out.printf("v1 NNUE loaded from %s%n", V1_WEIGHTS);
     } else {
-      System.out.printf("v1 NNUE weights not found at %s — skipping v2-vs-v1 matchup%n", V1_WEIGHTS);
+      System.out.printf(
+          "v1 NNUE weights not found at %s — skipping v2-vs-v1 matchup%n", V1_WEIGHTS);
     }
 
     System.out.println();
