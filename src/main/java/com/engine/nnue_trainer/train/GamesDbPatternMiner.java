@@ -1,13 +1,5 @@
 package com.engine.nnue_trainer.train;
 
-import com.engine.nnue_trainer.board.Action;
-import com.engine.nnue_trainer.board.Board;
-import com.engine.nnue_trainer.board.Cell;
-import com.engine.nnue_trainer.board.CellKind;
-import com.engine.nnue_trainer.board.MoveAction;
-import com.engine.nnue_trainer.board.PlaceNeutralsAction;
-import com.engine.nnue_trainer.board.Pos;
-import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.NNUEv2Accumulator;
 import com.engine.nnue_trainer.v2.PatternContract;
@@ -26,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -34,24 +25,23 @@ import java.util.TreeMap;
 /**
  * Mines 5x5 patterns from the REAL games in games.db and scores each with the hand-tuned bot eval.
  *
- * <p>Pipeline (bd nnue-trainer-d4a.5.1): replay each game through the real engine ({@link
- * SearchEngine#applyAction}, so virus-conversion/connectivity rules apply — not naive placement);
- * at the board state before every turn, scan all active 5x5 windows via {@link PatternContract} +
+ * <p>Pipeline (bd nnue-trainer-d4a.5.1): replay each game through the real engine via {@link
+ * GamesDbReplay} (so virus-conversion/connectivity rules apply — not naive placement); at the board
+ * state before every turn, scan all active 5x5 windows via {@link PatternContract} +
  * {@link NNUEv2Accumulator#signature} from the side-to-move's perspective, count per signature, and
  * attribute the position's {@link HandTunedEval} to every distinct pattern present. Emits {@code
  * games_db_pattern_stats.json} for the viz bead (d4a.5.2).
  *
- * <p>Conventions: a "position" is the board <b>before</b> a turn; STM = that turn's player. Eval is
- * STM-relative (positive = good for the side to move), {@code movesLeft = 3} (fresh turn —
- * ponytail: fixed assumption; real per-ply movesLeft not reconstructed). Games are SKIPPED (not
- * replayed) when pgn is null/unparseable, termination is {@code illegal_move}/{@code disconnect},
- * the game has more than 2 players (applyAction only resolves connectivity for players 1-2), or
- * replay throws.
+ * <p>Conventions (see {@link GamesDbReplay}): a "position" is the board <b>before</b> a turn; STM =
+ * that turn's player. Eval is STM-relative (positive = good for the side to move), {@code movesLeft
+ * = }{@link GamesDbReplay#MOVES_LEFT}. Games are SKIPPED (not replayed) when pgn is
+ * null/unparseable, termination is {@code illegal_move}/{@code disconnect}, the game has more than 2
+ * players, or replay throws.
  */
 public final class GamesDbPatternMiner {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final int MOVES_LEFT = 3; // fresh turn start
+  private static final int MOVES_LEFT = GamesDbReplay.MOVES_LEFT; // fresh turn start
   private static final int PATTERN_CAP =
       500; // patterns[] top-N by count (meta counts ALL distinct)
   private static final int TOP_EVAL_N = 50; // flagged top-N by |mean eval|
@@ -80,28 +70,6 @@ public final class GamesDbPatternMiner {
     int[] symbols; // 25 codes (identical for a given signature)
     int distanceBucket;
     int id; // assigned after global ranking
-  }
-
-  private static final class Snapshot {
-    final Board board;
-    final int stm;
-    final boolean[] neutralUsed;
-
-    Snapshot(Board board, int stm, boolean[] neutralUsed) {
-      this.board = board;
-      this.stm = stm;
-      this.neutralUsed = neutralUsed;
-    }
-  }
-
-  private static final class Replay {
-    final List<Snapshot> snapshots;
-    final String skipReason; // null == ok
-
-    Replay(List<Snapshot> snapshots, String skipReason) {
-      this.snapshots = snapshots;
-      this.skipReason = skipReason;
-    }
   }
 
   public static void main(String[] args) throws Exception {
@@ -150,7 +118,7 @@ public final class GamesDbPatternMiner {
           continue;
         }
 
-        Replay replay = replay(rows, cols, turns);
+        GamesDbReplay.Replay replay = GamesDbReplay.replay(rows, cols, turns);
         if (replay.skipReason != null) {
           gamesSkipped++;
           bump(skipReasons, replay.skipReason);
@@ -159,7 +127,7 @@ public final class GamesDbPatternMiner {
 
         gamesUsed++;
         bump(boardSizes, rows + "x" + cols);
-        for (Snapshot s : replay.snapshots) {
+        for (GamesDbReplay.Snapshot s : replay.snapshots) {
           positions++;
           List<PatternContract.Window> windows = PatternContract.extractWindows(s.board, s.stm);
           int posEval = HandTunedEval.staticEval(s.board, s.stm, MOVES_LEFT, s.neutralUsed);
@@ -213,66 +181,6 @@ public final class GamesDbPatternMiner {
     System.out.println("freq >= 5     : " + promo5);
     System.out.println("freq >= 20    : " + promo20);
     System.out.println("output        : " + out.toAbsolutePath());
-  }
-
-  /** Replay a single game; returns snapshots (before each turn) or a skip reason. */
-  private static Replay replay(int rows, int cols, JsonNode turns) {
-    try {
-      Board board = initialBoard(rows, cols);
-      boolean[] neutralUsed = new boolean[2];
-      List<Snapshot> snaps = new ArrayList<>();
-
-      for (JsonNode turn : turns) {
-        JsonNode playerNode = turn.get("player");
-        if (playerNode == null) {
-          return new Replay(null, "no_player");
-        }
-        int player = playerNode.asInt();
-        if (player < 1 || player > 2) {
-          return new Replay(null, "multiplayer");
-        }
-
-        snaps.add(new Snapshot(board, player, neutralUsed.clone()));
-
-        JsonNode moves = turn.get("moves");
-        if (moves != null && moves.isArray()) {
-          for (JsonNode mv : moves) {
-            Action action = parseAction(mv);
-            if (action instanceof PlaceNeutralsAction) {
-              neutralUsed[player - 1] = true;
-            }
-            board = SearchEngine.applyAction(board, player, action);
-          }
-        }
-      }
-      return new Replay(snaps, null);
-    } catch (Exception e) {
-      return new Replay(null, "replay_error");
-    }
-  }
-
-  private static Board initialBoard(int rows, int cols) {
-    Board board = new Board(rows, cols);
-    board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
-    return board;
-  }
-
-  private static Action parseAction(JsonNode move) {
-    String type = move.get("type").asText().toLowerCase(Locale.ROOT);
-    if ("place".equals(type) || "attack".equals(type) || "move".equals(type)) {
-      return new MoveAction(new Pos(move.get("row").asInt(), move.get("col").asInt()));
-    }
-    if ("neutral".equals(type) || "neutrals".equals(type)) {
-      JsonNode cells = move.get("cells");
-      if (cells == null || !cells.isArray() || cells.size() != 2) {
-        throw new IllegalArgumentException("neutral action must contain exactly two cells");
-      }
-      return new PlaceNeutralsAction(
-          new Pos(cells.get(0).get("row").asInt(), cells.get(0).get("col").asInt()),
-          new Pos(cells.get(1).get("row").asInt(), cells.get(1).get("col").asInt()));
-    }
-    throw new IllegalArgumentException("Unsupported move type: " + type);
   }
 
   private static void bump(Map<String, Integer> m, String k) {

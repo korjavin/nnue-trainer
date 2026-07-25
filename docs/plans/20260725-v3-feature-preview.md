@@ -100,20 +100,20 @@ Dependencies: Java 17 + Maven (`./mvnw`), Jackson (already used), sqlite-jdbc (a
 
 ### Task 1: Extract the games.db replay path into a reusable helper
 
-- [ ] create `src/main/java/com/engine/nnue_trainer/train/GamesDbReplay.java` holding the replay
+- [x] create `src/main/java/com/engine/nnue_trainer/train/GamesDbReplay.java` holding the replay
       logic currently private to `GamesDbPatternMiner`: the public `Snapshot` holder (board, stm,
       neutralUsed), a `Replay` result (snapshots + nullable skipReason), `replay(int rows, int
       cols, JsonNode turns)`, `initialBoard(int rows, int cols)`, and `parseAction(JsonNode move)`
-- [ ] move (do not copy) that code out of `GamesDbPatternMiner` and have it delegate to
+- [x] move (do not copy) that code out of `GamesDbPatternMiner` and have it delegate to
       `GamesDbReplay`, leaving its CLI behavior, skip reasons, JSON output and console report
       completely unchanged
-- [ ] keep the `MOVES_LEFT = 3` fresh-turn assumption documented on the helper so both miners share
+- [x] keep the `MOVES_LEFT = 3` fresh-turn assumption documented on the helper so both miners share
       one definition of "position"
-- [ ] write a test asserting the helper replays a small hand-written 2-player PGN into the expected
+- [x] write a test asserting the helper replays a small hand-written 2-player PGN into the expected
       number of snapshots, with the expected STM per snapshot and a non-initial board at the end
-- [ ] write tests for the skip paths: unparseable/missing `player`, a 3-player game (`multiplayer`),
+- [x] write tests for the skip paths: unparseable/missing `player`, a 3-player game (`multiplayer`),
       and an action that throws (`replay_error`)
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 2: Mine absolute (row, col, state) feature stats with eval-discrimination
 
