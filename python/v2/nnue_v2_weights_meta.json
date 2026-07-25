@@ -12,11 +12,11 @@
     "mode": "sum",
     "note": "counted pattern ids -> sum of rows == STM/NSTM accumulator",
     "nstm_embed": [
-      8135,
+      8305,
       1024
     ],
     "stm_embed": [
-      8135,
+      8305,
       1024
     ]
   },
@@ -35,6 +35,6 @@
       "out": 1
     }
   },
-  "num_patterns": 8135,
+  "num_patterns": 8305,
   "regen": "python3 python/v2/export_weights.py --model python/v2/nnue_v2_model.pt --dict python/v2/nnue_v2_dictionary.json"
 }
