@@ -9,9 +9,12 @@ import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoBotExploration;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -43,8 +46,21 @@ public class SelfPlayGenerator {
   public static class Config {
     public int numGames = 50;
     public int maxTurns = 100;
+    public int rows = 12;
+    public int cols = 12;
     public double epsilon = 0.1;
     public int exploreTurns = 6;
+
+    /**
+     * Softmax temperature for near-best GoBot move sampling (Fix B). 0 keeps the existing
+     * uniform-random {@code epsilon} exploration; &gt;0 samples the search's best-first candidate
+     * set via {@link GoBotExploration#sampleMove} across the {@code exploreTurns} window.
+     */
+    public double exploreTemperature = 0.0;
+
+    /** Drop exact-duplicate positions (by feature hash) on export; default on. */
+    public boolean dedup = true;
+
     public int searchDepth = 2;
     public long timeLimitMs = 0;
     public long seed = 0;
@@ -60,6 +76,66 @@ public class SelfPlayGenerator {
 
     /** GoBot mode fixed depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int gobotFixedDepth = 0;
+
+    /** When non-null, the negamax path also emits raw-board snapshots (JSONL) to this path. */
+    public String rawOutPath = null;
+
+    /** Sample every Nth collected turn for the raw corpus (1 = every position). */
+    public int rawSampleEvery = 1;
+
+    /**
+     * TD-leaf search-target depth for the raw corpus (env {@code TDLEAF_DEPTH}). When &gt;0 each
+     * emitted raw position also records {@code search_wdl}: a fixed-depth GoBot search value (with
+     * the HAND_TUNED leaf) squashed into STM WDL space. 0 (default) keeps the old raw-emit behavior
+     * unchanged — no search is run, no {@code search_wdl} field is written. Recommended: 4.
+     */
+    public int tdLeafDepth = 0;
+
+    /**
+     * Logistic scale for the score→WDL squash: {@code search_wdl = 1/(1+exp(-score/scale))}.
+     * Calibrated to the actual hand-tuned band on 12x12 self-play (abs score median ~7k, p90 ~24k,
+     * see bead d4a.4.2): the default 6000 keeps most positions gradated in ~[0.2,0.8] instead of
+     * saturating to 0/1 (a scale of 1000 pins ~98% of positions past 0.95, collapsing the target
+     * back to a sign bit). Only the ordering is load-bearing, but a spread target trains better.
+     */
+    public double tdLeafWdlScale = 6000.0;
+  }
+
+  /** One cell in a raw-board snapshot. owner = -1 for EMPTY/NEUTRAL (no owner). */
+  public static class RawCell {
+    public String kind;
+    public int owner;
+
+    public RawCell(String kind, int owner) {
+      this.kind = kind;
+      this.owner = owner;
+    }
+  }
+
+  /** A raw-board position for the v2 corpus (see CANONICAL v2 RAW-POSITION SCHEMA in the plan). */
+  public static class RawPosition {
+    public int rows;
+    public int cols;
+    public RawCell[][] cells;
+    public int stm;
+    public double wdl;
+
+    /**
+     * STM-relative fixed-depth search value in WDL space [0,1] (the TD-leaf target signal). Null
+     * (and omitted from JSON) unless {@code TDLEAF_DEPTH>0}, so the default corpus schema is
+     * unchanged.
+     */
+    @JsonProperty("search_wdl")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Double searchWdl;
+
+    public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
+      this.rows = rows;
+      this.cols = cols;
+      this.cells = cells;
+      this.stm = stm;
+      this.wdl = wdl;
+    }
   }
 
   public static class TrainingRecord {
@@ -76,9 +152,17 @@ public class SelfPlayGenerator {
     public List<TrainingRecord> dataset;
     public double distinctGameRatio;
 
-    public GenerationResult(List<TrainingRecord> dataset, double distinctGameRatio) {
+    /** Raw-board snapshots (null unless {@code config.rawOutPath} was set). */
+    public List<RawPosition> rawPositions;
+
+    /** Positions seen before dedup; {@code dataset.size()} is the unique yield when dedup is on. */
+    public int totalPositionsSeen;
+
+    public GenerationResult(
+        List<TrainingRecord> dataset, double distinctGameRatio, int totalPositionsSeen) {
       this.dataset = dataset;
       this.distinctGameRatio = distinctGameRatio;
+      this.totalPositionsSeen = totalPositionsSeen;
     }
   }
 
@@ -113,6 +197,8 @@ public class SelfPlayGenerator {
     // wrapper can drive the whole TD-leaf pass without editing code.
     config.numGames = envInt("NUM_GAMES", config.numGames);
     config.maxTurns = envInt("MAX_TURNS", config.maxTurns);
+    config.rows = envInt("ROWS", config.rows);
+    config.cols = envInt("COLS", config.cols);
     config.searchDepth = envInt("SEARCH_DEPTH", config.searchDepth);
     config.seed = envLong("SEED", config.seed);
     config.tdLambda = envDouble("TD_LAMBDA", config.tdLambda);
@@ -121,6 +207,9 @@ public class SelfPlayGenerator {
     // these lets us explore every turn (EXPLORE_TURNS high) at a higher rate for diverse data.
     config.epsilon = envDouble("EPSILON", config.epsilon);
     config.exploreTurns = envInt("EXPLORE_TURNS", config.exploreTurns);
+    // EXPLORE_TEMP>0 switches GoBot self-play to near-best softmax sampling (diverse-but-sensible)
+    // instead of uniform-random epsilon flailing.
+    config.exploreTemperature = envDouble("EXPLORE_TEMP", config.exploreTemperature);
     String mode = System.getenv("LABEL_MODE");
     if (mode != null && !mode.isBlank()) {
       config.labelMode = LabelMode.valueOf(mode.trim().toUpperCase());
@@ -135,6 +224,20 @@ public class SelfPlayGenerator {
     config.gobotFixedDepth = envInt("GOBOT_FIXED_DEPTH", config.gobotFixedDepth);
     outputPath = System.getenv().getOrDefault("OUT", outputPath);
 
+    // Raw-corpus emit (Task 2): RAW_OUT enables the JSONL snapshot path; EMIT=raw additionally
+    // skips the v1 one-hot dataset write (default keeps writing v1 as before).
+    String rawOut = System.getenv("RAW_OUT");
+    if (rawOut != null && !rawOut.isBlank()) {
+      config.rawOutPath = rawOut.trim();
+    }
+    config.rawSampleEvery = envInt("RAW_SAMPLE_EVERY", config.rawSampleEvery);
+    // TD-leaf raw target (bead d4a.4.2): TDLEAF_DEPTH>0 records a deep hand-tuned search value per
+    // emitted raw position as search_wdl (blended toward the outcome later in extract_examples).
+    config.tdLeafDepth = envInt("TDLEAF_DEPTH", config.tdLeafDepth);
+    config.tdLeafWdlScale = envDouble("TDLEAF_WDL_SCALE", config.tdLeafWdlScale);
+    String emit = System.getenv("EMIT");
+    boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
+
     System.out.println(
         "Starting self-play: games="
             + config.numGames
@@ -143,11 +246,35 @@ public class SelfPlayGenerator {
             + " label="
             + config.labelMode
             + " lambda="
-            + config.tdLambda);
+            + config.tdLambda
+            + " tdLeafDepth="
+            + config.tdLeafDepth);
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
+    System.out.println(
+        "Unique-position yield: "
+            + result.dataset.size()
+            + "/"
+            + result.totalPositionsSeen
+            + " (dedup="
+            + config.dedup
+            + ")");
     System.out.println("Distinct game ratio: " + result.distinctGameRatio);
-    saveDataset(result.dataset, outputPath);
+    if (result.rawPositions != null) {
+      saveRawCorpus(result.rawPositions, config.rawOutPath);
+    }
+    if (!rawOnly) {
+      if (result.dataset.isEmpty()) {
+        // Off-12x12 the v1 one-hot mapper produces no records; refuse to clobber the output
+        // (a committed resource by default) with an empty dataset. Use EMIT=raw for non-12x12.
+        System.err.println(
+            "WARNING: v1 dataset is empty (board is not 12x12) — skipping write of "
+                + outputPath
+                + ". Set EMIT=raw with RAW_OUT for non-12x12 corpus generation.");
+      } else {
+        saveDataset(result.dataset, outputPath);
+      }
+    }
   }
 
   private static int envInt(String key, int fallback) {
@@ -170,6 +297,21 @@ public class SelfPlayGenerator {
       throw new IllegalArgumentException("tdLambda must be in [0,1], got " + config.tdLambda);
     }
     if (config.searchMode == SearchMode.GOBOT) {
+      // GoBot's NNUE leaf goes through BoardFeatureMapper (12x12-only) and it has no raw-emit path,
+      // so reject both up front rather than crashing deep in the search (non-12x12) or exiting
+      // "successfully" having written nothing (EMIT=raw). Use the negamax path for those.
+      if (config.rows != 12 || config.cols != 12) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play is 12x12-only (NNUE-leaf feature mapper); got "
+                + config.rows
+                + "x"
+                + config.cols
+                + ". Use the negamax path for other sizes.");
+      }
+      if (config.rawOutPath != null) {
+        throw new IllegalArgumentException(
+            "GOBOT self-play has no raw-corpus emit path; RAW_OUT/EMIT=raw need the negamax path.");
+      }
       return generateViaGoBot(config);
     }
     List<TrainingRecord> dataset = new ArrayList<>();
@@ -188,96 +330,171 @@ public class SelfPlayGenerator {
 
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
+    List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
 
-    for (int game = 1; game <= config.numGames; game++) {
-      // System.out.println("Simulating game " + game + "/" + config.numGames);
-      List<TurnData> turns = new ArrayList<>();
-      Board board = new Board(12, 12);
+    // TD-leaf raw target uses a fixed-depth GoBot search with the HAND_TUNED leaf. Pin that as the
+    // process-wide default while generating (restored in finally) so the recorded search_wdl is
+    // always hand-tuned, regardless of any ambient leaf config a prior caller left set.
+    GoBotSearcher.LeafConfig prevLeaf =
+        (rawPositions != null && config.tdLeafDepth > 0)
+            ? GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null)
+            : null;
+    try {
 
-      // Initialize bases
-      board.setCell(0, 0, new Cell(1, CellKind.BASE));
-      board.setCell(11, 11, new Cell(2, CellKind.BASE));
+      for (int game = 1; game <= config.numGames; game++) {
+        // System.out.println("Simulating game " + game + "/" + config.numGames);
+        List<TurnData> turns = new ArrayList<>();
+        Board board = startBoard(config.rows, config.cols);
 
-      int currentPlayer = 1;
-      int winner = 0;
+        int currentPlayer = 1;
+        int winner = 0;
 
-      for (int turn = 0; turn < config.maxTurns; turn++) {
-        boolean canPlaceNeutral = true;
-        for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
-          // Collect board snapshot BEFORE move
-          turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
+        for (int turn = 0; turn < config.maxTurns; turn++) {
+          boolean canPlaceNeutral = true;
+          for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
+            // Collect board snapshot BEFORE move
+            turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
 
-          List<Action> legalActions =
-              MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
-          if (legalActions.isEmpty()) {
+            List<Action> legalActions =
+                MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
+            if (legalActions.isEmpty()) {
+              // Terminal-by-base or a stuck current player: both decided by the real size-general
+              // rule (last player able to move wins, territory tiebreak) rather than a base check /
+              // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
+              winner = canonicalWinner(board, currentPlayer);
+              break;
+            }
+
+            Action chosenAction = null;
+            if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
+              // Exploration
+              chosenAction = legalActions.get(random.nextInt(legalActions.size()));
+            } else {
+              // Exploitation
+              if (engine.getNnueModel() != null) {
+                chosenAction =
+                    engine.findBestActionUsingModel(
+                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                        .bestAction;
+              } else {
+                chosenAction =
+                    SearchEngine.findBestAction(
+                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                        .bestAction;
+              }
+              if (chosenAction == null) {
+                chosenAction = legalActions.get(0); // fallback
+              }
+            }
+
+            if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
+              canPlaceNeutral = false;
+              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+              break; // turn ends immediately on placement
+            } else {
+              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+            }
+
             if (engine.isTerminal(board)) {
-              winner = determineWinner(board);
-            } else {
-              winner = 3 - currentPlayer;
-            }
-            break;
-          }
-
-          Action chosenAction = null;
-          if (turn <= config.exploreTurns && random.nextDouble() < config.epsilon) {
-            // Exploration
-            chosenAction = legalActions.get(random.nextInt(legalActions.size()));
-          } else {
-            // Exploitation
-            if (engine.getNnueModel() != null) {
-              chosenAction =
-                  engine.findBestActionUsingModel(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
-                      .bestAction;
-            } else {
-              chosenAction =
-                  SearchEngine.findBestAction(
-                          board, currentPlayer, config.searchDepth, canPlaceNeutral)
-                      .bestAction;
-            }
-            if (chosenAction == null) {
-              chosenAction = legalActions.get(0); // fallback
+              winner = canonicalWinner(board, currentPlayer);
+              break;
             }
           }
+          if (winner != 0) break;
+          currentPlayer = 3 - currentPlayer;
+        }
 
-          if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
-            canPlaceNeutral = false;
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
-            break; // turn ends immediately on placement
-          } else {
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
-          }
+        // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
+        // decided by the real territory rule instead of defaulting to draw.
+        if (winner == 0) {
+          winner = canonicalWinner(board, currentPlayer);
+        }
 
-          if (engine.isTerminal(board)) {
-            winner = determineWinner(board);
-            break;
+        // Process collected turns to dataset. The v1 864-dim one-hot mapper is 12x12-only; on other
+        // board sizes the games still play (turns feed the Task 2 raw corpus) but no v1 record
+        // exists.
+        if (config.rows == 12 && config.cols == 12) {
+          for (TurnData turnData : turns) {
+            float target =
+                computeTarget(
+                    engine,
+                    turnData.board,
+                    turnData.activePlayer,
+                    turnData.canPlaceNeutral,
+                    winner,
+                    config);
+            float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
+            dataset.add(new TrainingRecord(features, target));
+
+            uniquePositionHashes.add(Arrays.hashCode(features));
+            totalPositions++;
           }
         }
-        if (winner != 0) break;
-        currentPlayer = 3 - currentPlayer;
+
+        // Raw corpus is board-size-agnostic: sample every Nth collected turn regardless of size.
+        if (rawPositions != null) {
+          int every = Math.max(1, config.rawSampleEvery);
+          for (int i = 0; i < turns.size(); i += every) {
+            rawPositions.add(toRawPosition(turns.get(i), winner, config));
+          }
+        }
       }
 
-      // Process collected turns to dataset
-      for (TurnData turnData : turns) {
-        float target =
-            computeTarget(
-                engine,
-                turnData.board,
-                turnData.activePlayer,
-                turnData.canPlaceNeutral,
-                winner,
-                config);
-        float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-        dataset.add(new TrainingRecord(features, target));
+      double distinctGameRatio =
+          totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
+      GenerationResult result = new GenerationResult(dataset, distinctGameRatio, totalPositions);
+      result.rawPositions = rawPositions;
+      return result;
 
-        uniquePositionHashes.add(Arrays.hashCode(features));
-        totalPositions++;
+    } finally {
+      if (prevLeaf != null) {
+        GoBotSearcher.restoreDefaultLeafEval(prevLeaf);
       }
     }
+  }
 
-    double distinctGameRatio =
-        totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+  /** Build a raw snapshot from a recorded turn; wdl is STM-relative (winner==0 → draw 0.5). */
+  private static RawPosition toRawPosition(TurnData turn, int winner, Config config) {
+    Board b = turn.board;
+    RawCell[][] cells = new RawCell[b.rows][b.cols];
+    for (int r = 0; r < b.rows; r++) {
+      for (int c = 0; c < b.cols; c++) {
+        Cell cell = b.getCell(r, c);
+        CellKind kind = cell != null ? cell.kind : CellKind.EMPTY;
+        int owner =
+            (kind == CellKind.EMPTY || kind == CellKind.NEUTRAL)
+                ? -1
+                : (cell != null ? cell.owner : -1);
+        cells[r][c] = new RawCell(kind.name(), owner);
+      }
+    }
+    double wdl = winner == 0 ? 0.5 : (winner == turn.activePlayer ? 1.0 : 0.0);
+    RawPosition raw = new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
+    raw.searchWdl = searchWdl(b, turn.activePlayer, config);
+    return raw;
+  }
+
+  /**
+   * The TD-leaf search target for one position: a fixed-depth GoBot search (HAND_TUNED leaf, pinned
+   * by {@link #generate}) from the mover's perspective, its backed-up centipawn score squashed into
+   * STM WDL space via a logistic. Returns null when {@code tdLeafDepth<=0} so the field is omitted.
+   * The GoState is built exactly like {@code canonicalWinner} (a fresh full turn, no neutral used).
+   */
+  private static Double searchWdl(Board board, int stm, Config config) {
+    if (config.tdLeafDepth <= 0) {
+      return null;
+    }
+    GoResult r =
+        GoBotSearcher.chooseDepth(
+            GoState.fromBoard(board, stm, GoState.ACTIONS_PER_TURN, new boolean[2]),
+            config.tdLeafDepth);
+    // A stuck/terminal position may yield no search result; treat as an even 0.5 rather than
+    // fabricating a decisive target.
+    if (r == null) {
+      return 0.5;
+    }
+    double scale = config.tdLeafWdlScale > 0 ? config.tdLeafWdlScale : 1000.0;
+    return 1.0 / (1.0 + Math.exp(-((double) r.score) / scale));
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */
@@ -316,6 +533,11 @@ public class SelfPlayGenerator {
   private static GenerationResult playGoBotGames(Config config) {
     List<TrainingRecord> dataset = new ArrayList<>();
     Random random = config.seed != 0 ? new Random(config.seed) : new Random();
+    // Shared near-best sampler (Fix B): reuses the same seeded Random so a seed ⇒ reproducible
+    // diverse games. Enabled only when there's something to explore; temp==0 ⇒ argmax so the
+    // uniform-epsilon fallback below is unchanged by default.
+    GoBotExploration explore =
+        new GoBotExploration(config.exploreTemperature > 0.0, config.exploreTemperature, random);
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
@@ -323,7 +545,9 @@ public class SelfPlayGenerator {
 
     for (int game = 1; game <= config.numGames; game++) {
       List<GoPly> plies = new ArrayList<>();
-      GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
+      GoState state =
+          GoState.fromBoard(
+              startBoard(config.rows, config.cols), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
 
       for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
         List<Action> legal = state.legalActions();
@@ -348,7 +572,13 @@ public class SelfPlayGenerator {
         }
 
         Action chosen;
-        if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
+        if (config.exploreTemperature > 0.0 && ply < exploreWindow) {
+          // Near-best softmax sampling across the explore window (diverse-but-sensible). A book
+          // move has no alternatives, so mirror the live challenger and randomize the opening
+          // instead — else sampleMove(r) just returns the canonical book action and diversity dies.
+          chosen = fromBook ? explore.sampleOpening(legal) : explore.sampleMove(r);
+          if (chosen == null) chosen = legal.get(0);
+        } else if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
           chosen = legal.get(random.nextInt(legal.size()));
         } else {
           chosen = (r != null && r.action != null) ? r.action : legal.get(0);
@@ -368,15 +598,18 @@ public class SelfPlayGenerator {
             config.labelMode == LabelMode.TD_LEAF
                 ? (float) ((1.0 - config.tdLambda) * p.searchValue + config.tdLambda * outcome)
                 : outcome;
-        dataset.add(new TrainingRecord(p.features, target));
-        uniquePositionHashes.add(Arrays.hashCode(p.features));
         totalPositions++;
+        boolean isNew = uniquePositionHashes.add(Arrays.hashCode(p.features));
+        if (config.dedup && !isNew) {
+          continue; // exact-duplicate position already emitted — drop it
+        }
+        dataset.add(new TrainingRecord(p.features, target));
       }
     }
 
     double distinctGameRatio =
         totalPositions > 0 ? (double) uniquePositionHashes.size() / totalPositions : 0.0;
-    return new GenerationResult(dataset, distinctGameRatio);
+    return new GenerationResult(dataset, distinctGameRatio, totalPositions);
   }
 
   /** GoBot move selection: fixed depth when {@code gobotFixedDepth>0}, else the node budget. */
@@ -387,10 +620,11 @@ public class SelfPlayGenerator {
     return GoBotSearcher.chooseNodeBudget(state, config.gobotNodeLimit);
   }
 
-  private static Board freshBoard() {
-    Board board = new Board(12, 12);
+  /** A starting board of the given size with both bases at opposite corners. No size literal. */
+  private static Board startBoard(int rows, int cols) {
+    Board board = new Board(rows, cols);
     board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+    board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
     return board;
   }
 
@@ -433,23 +667,15 @@ public class SelfPlayGenerator {
     return (float) ((1.0 - lambda) * searchValue + lambda * outcome);
   }
 
-  private static int determineWinner(Board board) {
-    boolean player1BaseAlive = false;
-    boolean player2BaseAlive = false;
-
-    for (int r = 0; r < board.rows; r++) {
-      for (int c = 0; c < board.cols; c++) {
-        Cell cell = board.getCell(r, c);
-        if (cell != null && cell.kind == CellKind.BASE) {
-          if (cell.owner == 1) player1BaseAlive = true;
-          if (cell.owner == 2) player2BaseAlive = true;
-        }
-      }
-    }
-
-    if (player1BaseAlive && !player2BaseAlive) return 1;
-    if (!player1BaseAlive && player2BaseAlive) return 2;
-    return 0; // Draw or both destroyed (shouldn't happen in standard play but just in case)
+  /**
+   * The canonical, size-general game outcome for a raw board, via {@link GoState#outcomeWinner()}
+   * (last player able to move wins; territory tiebreak; base-destruction already covered since a
+   * lost base makes a player inactive). {@code currentPlayer} does not affect the outcome — the
+   * snapshot's whose-turn/movesLeft/neutral state is irrelevant to {@code outcomeWinner}.
+   */
+  private static int canonicalWinner(Board board, int currentPlayer) {
+    return GoState.fromBoard(board, currentPlayer, GoState.ACTIONS_PER_TURN, new boolean[2])
+        .outcomeWinner();
   }
 
   private static Board copyBoard(Board original) {
@@ -477,5 +703,25 @@ public class SelfPlayGenerator {
     ObjectMapper mapper = new ObjectMapper();
     mapper.writerWithDefaultPrettyPrinter().writeValue(file, dataset);
     System.out.println("Dataset saved to " + filepath);
+  }
+
+  /** Write the raw corpus as compact JSONL (one position per line), no pretty printer. */
+  private static void saveRawCorpus(List<RawPosition> positions, String filepath)
+      throws IOException {
+    File file = new File(filepath);
+    File parent = file.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    try (java.io.BufferedWriter w =
+        java.nio.file.Files.newBufferedWriter(
+            file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+      for (RawPosition p : positions) {
+        w.write(mapper.writeValueAsString(p));
+        w.newLine();
+      }
+    }
+    System.out.println("Raw corpus saved to " + filepath + " (" + positions.size() + " positions)");
   }
 }

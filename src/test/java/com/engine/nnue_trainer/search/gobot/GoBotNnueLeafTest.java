@@ -8,6 +8,9 @@ import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.nnue.NNUEModel;
+import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
+import com.engine.nnue_trainer.v2.PatternDictionary;
+import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -82,6 +85,62 @@ public class GoBotNnueLeafTest {
     assertEquals(r1.action, r2.action, "deterministic action");
     assertEquals(r1.score, r2.score, "deterministic score");
     assertTrue(r1.score < GoBotSearcher.MATE_SCORE && r1.score > -GoBotSearcher.MATE_SCORE);
+  }
+
+  /**
+   * Zero-sum stub evaluator: WDL from {@code stm}'s frame, driven by NORMAL-stone count. Winner's
+   * perspective &gt; 0.5, loser's &lt; 0.5 (reflection), so it exercises nnueV2Leaf's orientation
+   * without the 344MB net. Guards that the WDL-&gt;score sign survives the NNUEV2_SCALE env change.
+   */
+  private static NNUEv2Evaluator stoneCountV2() throws Exception {
+    PatternDictionary dict =
+        PatternDictionary.load(Path.of("python", "v2", "nnue_v2_dictionary.json"));
+    int n = dict.numPatterns();
+    // Minimal valid weights (w=1): forward math is unused — evaluate() is overridden below.
+    float[][] embed = new float[n][1];
+    float[][] l1 = new float[16][2 * 1 + 14];
+    float[][] l2 = new float[32][16];
+    float[][] l3 = new float[1][32];
+    return new NNUEv2Evaluator(
+        dict, embed, embed, l1, new float[16], l2, new float[32], l3, new float[1]) {
+      @Override
+      public float evaluate(Board b, int stm) {
+        int mine = 0;
+        int theirs = 0;
+        for (int r = 0; r < 12; r++) {
+          for (int c = 0; c < 12; c++) {
+            Cell cell = b.getCell(r, c);
+            if (cell == null || cell.kind != CellKind.NORMAL) {
+              continue;
+            }
+            if (cell.owner == stm) {
+              mine++;
+            } else if (cell.owner != 0) {
+              theirs++;
+            }
+          }
+        }
+        return 0.5f + 0.4f * Math.signum(mine - theirs); // 0.9 winner / 0.1 loser
+      }
+    };
+  }
+
+  @Test
+  public void v2LeafSignSurvivesScaleEnv() throws Exception {
+    // Player 1 clearly winning (three NORMAL stones to player 2's zero).
+    Board b = baseBoard();
+    b.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+    b.setCell(1, 2, new Cell(1, CellKind.NORMAL));
+    b.setCell(1, 3, new Cell(1, CellKind.NORMAL));
+    NNUEv2Evaluator v2 = stoneCountV2();
+
+    long forWinner = GoBotSearcher.nnueV2Leaf(b, 1, v2); // winning STM
+    long forMirror = GoBotSearcher.nnueV2Leaf(b, 2, v2); // reflected perspective
+
+    assertTrue(
+        forWinner > 500, "winning STM position maps to a strongly-positive leaf: " + forWinner);
+    assertTrue(forMirror < -500, "its mirror maps to a strongly-negative leaf: " + forMirror);
+    assertEquals(forWinner, -forMirror, "zero-sum: winner and mirror are exact negatives");
   }
 
   @Test

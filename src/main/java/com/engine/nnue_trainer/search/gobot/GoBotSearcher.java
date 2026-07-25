@@ -9,6 +9,7 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
+import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -43,7 +44,8 @@ public final class GoBotSearcher {
   /** Selectable leaf evaluation for the GoBot search (Phase 2): hand-tuned or learned NNUE. */
   public enum LeafEval {
     HAND_TUNED,
-    NNUE
+    NNUE,
+    NNUEV2
   }
 
   /**
@@ -56,15 +58,43 @@ public final class GoBotSearcher {
   static final long NNUE_CLAMP = MATE_SCORE - 1L; // strictly below mate
 
   /**
-   * Immutable (mode, model) pair so newSearcher reads a consistent snapshot in one volatile read.
+   * NNUE v2 output is a WDL-ish scalar in the side-to-move frame (~[0,1], 0.5 = even, higher =
+   * better-for-mover). Map {@code (wdl - 0.5) * SCALE} so evals span a hand-tuned-comparable band
+   * (a few thousand) while staying inside {@code ±MATE_SCORE}. Value is a calibration knob — only
+   * the ordering matters for fixed-depth play.
+   */
+  static final long NNUEV2_SCALE = scaleFromEnv();
+
+  /** WDL-&gt;score scale: env {@code NNUEV2_SCALE} (diagnostic sweep knob), default 4000. */
+  private static long scaleFromEnv() {
+    String s = System.getenv("NNUEV2_SCALE");
+    if (s != null && !s.isBlank()) {
+      try {
+        return Long.parseLong(s.trim());
+      } catch (NumberFormatException ignored) {
+        // fall through to default
+      }
+    }
+    return 4000L;
+  }
+
+  /**
+   * Immutable (mode, model) snapshot so newSearcher reads a consistent view in one volatile read.
+   * At most one of {@code model}/{@code v2} is non-null (matching {@code mode}).
    */
   public static final class LeafConfig {
     final LeafEval mode;
     final NNUEModel model;
+    final NNUEv2Evaluator v2;
 
     LeafConfig(LeafEval mode, NNUEModel model) {
+      this(mode, model, null);
+    }
+
+    LeafConfig(LeafEval mode, NNUEModel model, NNUEv2Evaluator v2) {
       this.mode = mode;
       this.model = model;
+      this.v2 = v2;
     }
   }
 
@@ -78,6 +108,7 @@ public final class GoBotSearcher {
   final Map<Long, TableEntry> table;
   LeafEval leafMode = LeafEval.HAND_TUNED;
   NNUEModel nnueModel;
+  NNUEv2Evaluator nnueV2;
   long nodes;
   long evaluations;
   long nodeLimit; // 0 == unlimited
@@ -97,6 +128,17 @@ public final class GoBotSearcher {
   public static LeafConfig configureDefaultLeafEval(LeafEval mode, NNUEModel model) {
     LeafConfig prev = defaultLeaf;
     defaultLeaf = new LeafConfig(mode, model);
+    return prev;
+  }
+
+  /**
+   * As above, for the NNUE v2 leaf ({@code mode} is normally {@link LeafEval#NNUEV2}). Distinct
+   * name (not an overload) so existing {@code configureDefaultLeafEval(mode, null)} callers stay
+   * unambiguous.
+   */
+  public static LeafConfig configureDefaultLeafEvalV2(LeafEval mode, NNUEv2Evaluator v2) {
+    LeafConfig prev = defaultLeaf;
+    defaultLeaf = new LeafConfig(mode, null, v2);
     return prev;
   }
 
@@ -124,6 +166,7 @@ public final class GoBotSearcher {
     LeafConfig cfg = defaultLeaf;
     s.leafMode = cfg.mode;
     s.nnueModel = cfg.model;
+    s.nnueV2 = cfg.v2;
     return s;
   }
 
@@ -543,6 +586,13 @@ public final class GoBotSearcher {
   // --- scoring helpers (port of terminalScore / evaluate / activeCount) ---
 
   private long leafEval(GoState state) {
+    if (leafMode == LeafEval.NNUEV2) {
+      // v2 net is side-to-move relative (same rationale as v1 below): query from the leaf's own
+      // mover, then flip to root's perspective by zero-sum negation.
+      int mover = state.currentPlayer();
+      long v = nnueV2Leaf(state.toBoard(), mover, nnueV2);
+      return mover == root ? v : -v;
+    }
     if (leafMode == LeafEval.NNUE) {
       // The net is side-to-move relative (trained on features mapped to the mover with an
       // STM-relative target). Query it from the leaf's own mover — in-distribution — then flip to
@@ -561,14 +611,19 @@ public final class GoBotSearcher {
     Board board = state.toBoard();
     long[] all = new long[4];
     // ponytail: NNUE feature map is 2-player (opponent = 3 - player); for players 3/4 it maps only
-    // own stones. The clean 2-player test bench (Java vs GoBot) never hits maxN, so this is fine.
+    // own stones. The clean 2-player gauntlet/test bench never hits maxN, so this is fine.
     NNUEModel model = leafMode == LeafEval.NNUE ? nnueModel : null;
+    NNUEv2Evaluator v2 = leafMode == LeafEval.NNUEV2 ? nnueV2 : null;
     for (int p = 1; p <= 4; p++) {
-      all[p - 1] =
-          model != null
-              ? nnueLeaf(board, p, model)
-              : HandTunedEval.staticEval(
-                  board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
+      if (v2 != null) {
+        all[p - 1] = nnueV2Leaf(board, p, v2);
+      } else if (model != null) {
+        all[p - 1] = nnueLeaf(board, p, model);
+      } else {
+        all[p - 1] =
+            HandTunedEval.staticEval(
+                board, p, state.currentPlayer(), state.movesLeft(), state.neutralUsed);
+      }
     }
     return all;
   }
@@ -581,6 +636,16 @@ public final class GoBotSearcher {
   static long nnueLeaf(Board board, int player, NNUEModel model) {
     double value = model.forward(BoardFeatureMapper.map(board, player));
     long scaled = Math.round(value * NNUE_SCALE);
+    return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
+  }
+
+  /**
+   * NNUE v2 leaf value oriented to {@code player} (higher = better for {@code player}): {@code
+   * round((wdl - 0.5) * NNUEV2_SCALE)} clamped strictly inside {@code ±MATE_SCORE}.
+   */
+  static long nnueV2Leaf(Board board, int player, NNUEv2Evaluator v2) {
+    double wdl = v2.evaluate(board, player);
+    long scaled = Math.round((wdl - 0.5) * NNUEV2_SCALE);
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
   }
 

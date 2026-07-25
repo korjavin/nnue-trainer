@@ -13,6 +13,8 @@ import com.engine.nnue_trainer.nnue.Accumulator;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
+import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,6 +49,71 @@ public class SearchEngine {
 
   public boolean isUseHandTunedEval() {
     return useHandTunedEval;
+  }
+
+  // Opt-in NNUE v2 pattern evaluator (EVAL=NNUEV2). Board-size agnostic; default OFF so v1 /
+  // hand-tuned behavior is byte-identical when the flag is unset. The 344MB float weights load
+  // lazily & once, shared across engines; a load failure warns once and falls back to piece-count.
+  private boolean useNnueV2Eval = nnueV2FromEnv();
+  private NNUEv2Evaluator injectedV2Evaluator; // test hook; overrides the shared lazy load
+  private int nnueV2TurnNumber = 0; // ponytail: search has no per-node turn counter; dense[12]=0
+  private static volatile NNUEv2Evaluator sharedV2Evaluator;
+  private static volatile boolean v2LoadFailed;
+
+  private static boolean nnueV2FromEnv() {
+    String v = System.getProperty("EVAL", System.getenv("EVAL"));
+    return "NNUEV2".equalsIgnoreCase(v);
+  }
+
+  public void setUseNnueV2Eval(boolean value) {
+    this.useNnueV2Eval = value;
+  }
+
+  public boolean isUseNnueV2Eval() {
+    return useNnueV2Eval;
+  }
+
+  /**
+   * Inject a v2 evaluator (tests / callers that already hold one), bypassing the lazy file load.
+   */
+  public void setNnueV2Evaluator(NNUEv2Evaluator evaluator) {
+    this.injectedV2Evaluator = evaluator;
+  }
+
+  public void setNnueV2TurnNumber(int turnNumber) {
+    this.nnueV2TurnNumber = turnNumber;
+  }
+
+  private NNUEv2Evaluator nnueV2Evaluator() {
+    if (injectedV2Evaluator != null) {
+      return injectedV2Evaluator;
+    }
+    if (sharedV2Evaluator != null || v2LoadFailed) {
+      return sharedV2Evaluator;
+    }
+    synchronized (SearchEngine.class) {
+      if (sharedV2Evaluator != null || v2LoadFailed) {
+        return sharedV2Evaluator;
+      }
+      try {
+        Path weights =
+            Path.of(sysval("NNUEV2_WEIGHTS", NNUEv2Evaluator.DEFAULT_WEIGHTS.toString()));
+        Path dict = Path.of(sysval("NNUEV2_DICT", NNUEv2Evaluator.DEFAULT_DICT.toString()));
+        sharedV2Evaluator = NNUEv2Evaluator.load(weights, dict);
+      } catch (Exception e) {
+        v2LoadFailed = true;
+        System.err.println(
+            "EVAL=NNUEV2 requested but weights failed to load ("
+                + e
+                + "); falling back to the default eval.");
+      }
+      return sharedV2Evaluator;
+    }
+  }
+
+  private static String sysval(String key, String fallback) {
+    String v = System.getProperty(key, System.getenv(key));
+    return v != null ? v : fallback;
   }
 
   /** Root turn's non-board eval state, fed to the hand-tuned eval at leaves. */
@@ -433,6 +500,15 @@ public class SearchEngine {
       }
       return HandTunedEval.staticEval(
           board, originalPlayer, sideToMove, handTunedMovesLeft, handTunedNeutralUsed);
+    }
+
+    if (useNnueV2Eval) {
+      NNUEv2Evaluator v2 = nnueV2Evaluator();
+      if (v2 != null) {
+        // Score in the fixed perspective frame (positive == good for perspective), any board size.
+        return v2.evaluate(board, originalPlayer, nnueV2TurnNumber);
+      }
+      // Load failed -> fall through to the piece-count baseline below.
     }
 
     if (nnueModel != null && board.rows == 12 && board.cols == 12) {

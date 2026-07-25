@@ -161,6 +161,57 @@ public final class GoState {
     return player >= 1 && player <= players && neutralUsed[player - 1];
   }
 
+  /**
+   * Size-general terminal outcome, used to label self-play positions (including turn-capped and
+   * board-fill endings) with the real game rule rather than base-survival only. Because {@link
+   * #fromBoard} builds a snapshot with {@code winner=0, over=false}, {@link #winner()} is always 0
+   * for a snapshot — this recomputes the outcome from the grid.
+   *
+   * <p>Real rule: the last player still able to move wins. A destroyed base makes a player inactive
+   * (so its opponent, still able to move, wins here — base-destruction stays decisive). When
+   * neither side can move (simultaneous board-fill) or both still can (a turn cap), the tiebreak is
+   * territory: more owned cells wins; a genuine equal-territory tie returns 0 (maps to wdl 0.5).
+   *
+   * @return the winning player (1..players), or 0 for a genuine equal-territory tie
+   */
+  public int outcomeWinner() {
+    int survivors = 0;
+    int survivor = 0;
+    for (int player = 1; player <= players; player++) {
+      if (active(player) && hasMove(player)) {
+        survivors++;
+        survivor = player;
+      }
+    }
+    if (survivors == 1) {
+      return survivor;
+    }
+    int best = 0;
+    int bestOwned = -1;
+    boolean tie = false;
+    for (int player = 1; player <= players; player++) {
+      int owned = ownedCells(player);
+      if (owned > bestOwned) {
+        bestOwned = owned;
+        best = player;
+        tie = false;
+      } else if (owned == bestOwned) {
+        tie = true;
+      }
+    }
+    return tie ? 0 : best;
+  }
+
+  private int ownedCells(int player) {
+    int count = 0;
+    for (Cell cell : cells) {
+      if (cell.owner == player) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   public Cell at(int row, int col) {
     return cells[row * cols + col];
   }
