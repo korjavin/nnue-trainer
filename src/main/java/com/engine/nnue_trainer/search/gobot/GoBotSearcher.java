@@ -58,14 +58,17 @@ public final class GoBotSearcher {
   static final long NNUE_CLAMP = MATE_SCORE - 1L; // strictly below mate
 
   /**
-   * NNUE v2 output is a WDL-ish scalar in the side-to-move frame (~[0,1], 0.5 = even, higher =
-   * better-for-mover). Map {@code (wdl - 0.5) * SCALE} so evals span a hand-tuned-comparable band
-   * (a few thousand) while staying inside {@code ±MATE_SCORE}. Value is a calibration knob — only
-   * the ordering matters for fixed-depth play.
+   * bead d4a.4.5: the v2 net now REGRESSES the normalized raw deep-search score directly (it was
+   * trained on {@code raw_score / S}). So the net output IS the search score, up to that same
+   * normalization S — de-normalize by multiplying: {@code score = net * NNUEV2_SCALE}. No logistic
+   * remap, no {@code -0.5} centering: magnitude ordering across sibling moves is preserved (the
+   * whole point — the old {@code (wdl-0.5)*SCALE} squashed a flat, mean-regressed net). NNUEV2_SCALE
+   * MUST equal the Python {@code extract_examples --score-scale} S (default 6000) for the recovered
+   * score to sit in the hand-tuned centipawn band.
    */
   static final long NNUEV2_SCALE = scaleFromEnv();
 
-  /** WDL-&gt;score scale: env {@code NNUEV2_SCALE} (diagnostic sweep knob), default 4000. */
+  /** Raw-score de-normalization S: env {@code NNUEV2_SCALE}, default 6000 (== Python --score-scale). */
   private static long scaleFromEnv() {
     String s = System.getenv("NNUEV2_SCALE");
     if (s != null && !s.isBlank()) {
@@ -75,7 +78,7 @@ public final class GoBotSearcher {
         // fall through to default
       }
     }
-    return 4000L;
+    return 6000L;
   }
 
   /**
@@ -640,12 +643,13 @@ public final class GoBotSearcher {
   }
 
   /**
-   * NNUE v2 leaf value oriented to {@code player} (higher = better for {@code player}): {@code
-   * round((wdl - 0.5) * NNUEV2_SCALE)} clamped strictly inside {@code ±MATE_SCORE}.
+   * NNUE v2 leaf value oriented to {@code player} (higher = better for {@code player}): the net
+   * regresses the normalized raw deep-search score, so the leaf score is just {@code round(net *
+   * NNUEV2_SCALE)} (de-normalization), clamped strictly inside {@code ±MATE_SCORE}. bead d4a.4.5.
    */
   static long nnueV2Leaf(Board board, int player, NNUEv2Evaluator v2) {
-    double wdl = v2.evaluate(board, player);
-    long scaled = Math.round((wdl - 0.5) * NNUEV2_SCALE);
+    double score = v2.evaluate(board, player);
+    long scaled = Math.round(score * NNUEV2_SCALE);
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
   }
 

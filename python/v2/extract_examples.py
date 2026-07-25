@@ -120,7 +120,28 @@ def blended_target(obj, tdlambda):
     return (1.0 - tdlambda) * search + tdlambda * outcome
 
 
-def extract_example_corpus(obj, pattern_to_id, tdlambda=None):
+def corpus_target(obj, tdlambda, score_scale, score_clamp):
+    """The regression label for a corpus line.
+
+    bead d4a.4.5: when `score_scale` is given AND the line carries a raw
+    `search_score` (deep hand-tuned search, STM-relative, NOT squashed), the
+    target is the NORMALIZED raw score `clamp(search_score / score_scale,
+    ±score_clamp)` — a pure deep-search teacher whose MAGNITUDE ordering across
+    sibling moves survives (unlike the logistic `search_wdl`, which the net
+    regresses to its clustered mean, giving a flat eval). Java's NNUEV2_SCALE
+    must equal `score_scale` so the leaf de-normalizes back to centipawns.
+
+    Falls back to the legacy TD-leaf WDL blend (`blended_target`) when
+    `score_scale` is None or the line has no `search_score`.
+    """
+    if score_scale is not None and obj.get("search_score") is not None:
+        z = float(obj["search_score"]) / score_scale
+        return max(-score_clamp, min(score_clamp, z))
+    return blended_target(obj, tdlambda)
+
+
+def extract_example_corpus(obj, pattern_to_id, tdlambda=None,
+                           score_scale=None, score_clamp=8.0):
     """One training example from a v2 raw-board corpus line.
 
     Schema: {"rows","cols","cells":[[{"kind","owner"},...],...],"stm","wdl",
@@ -141,17 +162,19 @@ def extract_example_corpus(obj, pattern_to_id, tdlambda=None):
         ),
         "rows": board.rows,
         "cols": board.cols,
-        "wdl": blended_target(obj, tdlambda),
+        "wdl": corpus_target(obj, tdlambda, score_scale, score_clamp),
     }
 
 
-def iter_examples_corpus(corpus_path, pattern_to_id, tdlambda=None):
+def iter_examples_corpus(corpus_path, pattern_to_id, tdlambda=None,
+                         score_scale=None, score_clamp=8.0):
     """Yield one example per raw-corpus JSONL line, in file order."""
     with open(corpus_path) as f:
         for line in f:
             line = line.strip()
             if line:
-                yield extract_example_corpus(json.loads(line), pattern_to_id, tdlambda)
+                yield extract_example_corpus(json.loads(line), pattern_to_id,
+                                             tdlambda, score_scale, score_clamp)
 
 
 def main(argv=None):
@@ -174,12 +197,24 @@ def main(argv=None):
         help="TD-leaf blend for corpus lines carrying search_wdl: target = "
              "(1-lambda)*search_wdl + lambda*outcome. Omit for pure-outcome labels.",
     )
+    parser.add_argument(
+        "--score-scale", type=float, default=None,
+        help="bead d4a.4.5 raw-score regression: normalize the raw deep-search "
+             "search_score by this S (target = clamp(search_score/S, +/-clamp)). "
+             "MUST equal Java NNUEV2_SCALE. Overrides --tdlambda when a line has search_score.",
+    )
+    parser.add_argument(
+        "--score-clamp", type=float, default=8.0,
+        help="Clamp for the normalized raw-score target (keeps near-mate scores "
+             "from dominating MSE). Default 8 (= +/-8*S centipawns).",
+    )
     args = parser.parse_args(argv)
 
     pattern_to_id = load_dictionary(args.dict)
 
     source = args.corpus if args.corpus else args.dataset
-    examples = (iter_examples_corpus(args.corpus, pattern_to_id, args.tdlambda) if args.corpus
+    examples = (iter_examples_corpus(args.corpus, pattern_to_id, args.tdlambda,
+                                     args.score_scale, args.score_clamp) if args.corpus
                 else iter_examples(args.dataset, pattern_to_id))
 
     count = 0

@@ -129,6 +129,16 @@ public class SelfPlayGenerator {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public Double searchWdl;
 
+    /**
+     * RAW STM-relative fixed-depth deep-search score (centipawn-like, NOT squashed) — the
+     * regression target for bead d4a.4.5. Null (omitted) unless {@code TDLEAF_DEPTH>0}. Regressing
+     * this directly (normalized) preserves magnitude ordering across sibling moves, which the
+     * logistic {@code search_wdl} squash destroys (net regresses to the clustered mean -> flat eval).
+     */
+    @JsonProperty("search_score")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Double searchScore;
+
     public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
       this.rows = rows;
       this.cols = cols;
@@ -470,31 +480,24 @@ public class SelfPlayGenerator {
     }
     double wdl = winner == 0 ? 0.5 : (winner == turn.activePlayer ? 1.0 : 0.0);
     RawPosition raw = new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
-    raw.searchWdl = searchWdl(b, turn.activePlayer, config);
+    // One fixed-depth deep search per position feeds BOTH targets: the raw score (d4a.4.5
+    // regression target) and the logistic-squashed WDL (legacy d4a.4.2 target). Run once.
+    if (config.tdLeafDepth > 0) {
+      GoResult r =
+          GoBotSearcher.chooseDepth(
+              GoState.fromBoard(b, turn.activePlayer, GoState.ACTIONS_PER_TURN, new boolean[2]),
+              config.tdLeafDepth);
+      if (r == null) {
+        // A stuck/terminal position yields no search result: an even, non-decisive target.
+        raw.searchScore = 0.0;
+        raw.searchWdl = 0.5;
+      } else {
+        raw.searchScore = (double) r.score;
+        double scale = config.tdLeafWdlScale > 0 ? config.tdLeafWdlScale : 1000.0;
+        raw.searchWdl = 1.0 / (1.0 + Math.exp(-((double) r.score) / scale));
+      }
+    }
     return raw;
-  }
-
-  /**
-   * The TD-leaf search target for one position: a fixed-depth GoBot search (HAND_TUNED leaf, pinned
-   * by {@link #generate}) from the mover's perspective, its backed-up centipawn score squashed into
-   * STM WDL space via a logistic. Returns null when {@code tdLeafDepth<=0} so the field is omitted.
-   * The GoState is built exactly like {@code canonicalWinner} (a fresh full turn, no neutral used).
-   */
-  private static Double searchWdl(Board board, int stm, Config config) {
-    if (config.tdLeafDepth <= 0) {
-      return null;
-    }
-    GoResult r =
-        GoBotSearcher.chooseDepth(
-            GoState.fromBoard(board, stm, GoState.ACTIONS_PER_TURN, new boolean[2]),
-            config.tdLeafDepth);
-    // A stuck/terminal position may yield no search result; treat as an even 0.5 rather than
-    // fabricating a decisive target.
-    if (r == null) {
-      return 0.5;
-    }
-    double scale = config.tdLeafWdlScale > 0 ? config.tdLeafWdlScale : 1000.0;
-    return 1.0 / (1.0 + Math.exp(-((double) r.score) / scale));
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */

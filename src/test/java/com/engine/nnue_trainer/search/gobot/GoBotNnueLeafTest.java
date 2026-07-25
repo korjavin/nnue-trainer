@@ -88,9 +88,10 @@ public class GoBotNnueLeafTest {
   }
 
   /**
-   * Zero-sum stub evaluator: WDL from {@code stm}'s frame, driven by NORMAL-stone count. Winner's
-   * perspective &gt; 0.5, loser's &lt; 0.5 (reflection), so it exercises nnueV2Leaf's orientation
-   * without the 344MB net. Guards that the WDL-&gt;score sign survives the NNUEV2_SCALE env change.
+   * Zero-sum stub evaluator: a SIGNED normalized score from {@code stm}'s frame, driven by
+   * NORMAL-stone count (bead d4a.4.5 — the net now regresses the raw score, so positive == good for
+   * stm, negative == bad, 0 == even). Winner's perspective &gt; 0, loser's &lt; 0 (reflection), so it
+   * exercises nnueV2Leaf's orientation + de-normalization without the 344MB net.
    */
   private static NNUEv2Evaluator stoneCountV2() throws Exception {
     PatternDictionary dict =
@@ -120,7 +121,7 @@ public class GoBotNnueLeafTest {
             }
           }
         }
-        return 0.5f + 0.4f * Math.signum(mine - theirs); // 0.9 winner / 0.1 loser
+        return 0.9f * Math.signum(mine - theirs); // signed score: +0.9 winner / -0.9 loser
       }
     };
   }
