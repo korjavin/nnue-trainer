@@ -4035,6 +4035,254 @@
     "top_n" : 50
   },
   "top_by_eval" : [ {
+    "id" : 3419,
+    "signature" : "0,0,0,0,0,0,0,0,0,0,0,4,0,0,1,6,0,0,5,0,0,6,1,0,0|7",
+    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3452,
+    "signature" : "0,0,0,0,0,0,4,0,0,1,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0|7",
+    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3474,
+    "signature" : "0,0,0,0,0,5,0,0,0,0,5,0,4,0,0,6,6,0,0,5,0,0,6,1,0|6",
+    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ] ],
+    "distance_bucket" : 6,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3575,
+    "signature" : "0,4,0,0,1,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0,0|7",
+    "cells" : [ [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3616,
+    "signature" : "0,5,6,6,0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|7",
+    "cells" : [ [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3631,
+    "signature" : "3,5,0,0,0,6,6,5,0,0,5,6,5,0,4,0,5,6,6,0,0,0,0,0,6|4",
+    "cells" : [ [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 4,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3666,
+    "signature" : "5,0,0,0,0,5,0,4,0,0,6,6,0,0,5,0,0,6,1,0,0,0,0,6,0|7",
+    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3667,
+    "signature" : "5,0,0,0,0,6,5,0,0,0,6,5,0,4,0,5,6,6,0,0,0,0,0,6,1|5",
+    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3674,
+    "signature" : "5,0,4,0,0,6,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0|7",
+    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3688,
+    "signature" : "5,6,5,0,4,0,5,6,6,0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0|6",
+    "cells" : [ [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 6,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3689,
+    "signature" : "5,6,6,0,0,0,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0,0,0,0,0|7",
+    "cells" : [ [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3698,
+    "signature" : "6,5,0,0,0,6,5,0,4,0,5,6,6,0,0,0,0,0,6,1,0,0,0,0,6|6",
+    "cells" : [ [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 6,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3702,
+    "signature" : "6,5,0,4,0,5,6,6,0,0,0,0,0,6,1,0,0,0,0,6,0,0,0,0,4|7",
+    "cells" : [ [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ] ],
+    "distance_bucket" : 7,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3709,
+    "signature" : "6,6,5,0,0,5,6,5,0,4,0,5,6,6,0,0,0,0,0,6,0,0,0,0,0|5",
+    "cells" : [ [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3793,
+    "signature" : "8,0,5,6,6,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0|6",
+    "cells" : [ [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 6,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3798,
+    "signature" : "8,3,5,0,0,8,6,6,5,0,8,5,6,5,0,8,0,5,6,6,8,0,0,0,0|3",
+    "cells" : [ [ "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 3,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3802,
+    "signature" : "8,5,6,5,0,8,0,5,6,6,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0|5",
+    "cells" : [ [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3803,
+    "signature" : "8,6,6,5,0,8,5,6,5,0,8,0,5,6,6,8,0,0,0,0,8,0,0,0,0|4",
+    "cells" : [ [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 4,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3816,
+    "signature" : "8,8,0,5,6,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0|5",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3818,
+    "signature" : "8,8,3,5,0,8,8,6,6,5,8,8,5,6,5,8,8,0,5,6,8,8,0,0,0|2",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 2,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3821,
+    "signature" : "8,8,5,6,5,8,8,0,5,6,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0|4",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 4,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3822,
+    "signature" : "8,8,6,6,5,8,8,5,6,5,8,8,0,5,6,8,8,0,0,0,8,8,0,0,0|3",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 3,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3829,
+    "signature" : "8,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,4,0,0,1,6,0,0,5,0|6",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ] ],
+    "distance_bucket" : 6,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3848,
+    "signature" : "8,8,8,8,8,0,0,0,0,0,5,0,0,0,0,5,0,4,0,0,6,6,0,0,5|5",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3856,
+    "signature" : "8,8,8,8,8,3,5,0,0,0,6,6,5,0,0,5,6,5,0,4,0,5,6,6,0|3",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ] ],
+    "distance_bucket" : 3,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3857,
+    "signature" : "8,8,8,8,8,5,0,0,0,0,6,5,0,0,0,6,5,0,4,0,5,6,6,0,0|4",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 4,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3860,
+    "signature" : "8,8,8,8,8,8,3,5,0,0,8,6,6,5,0,8,5,6,5,0,8,0,5,6,6|2",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 2,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3863,
+    "signature" : "8,8,8,8,8,8,8,3,5,0,8,8,6,6,5,8,8,5,6,5,8,8,0,5,6|1",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 1,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3866,
+    "signature" : "8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,4,0,0,1|5",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ] ],
+    "distance_bucket" : 5,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3875,
+    "signature" : "8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,5,0,0,0,0,5,0,4,0,0|4",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 4,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
+    "id" : 3887,
+    "signature" : "8,8,8,8,8,8,8,8,8,8,3,5,0,0,0,6,6,5,0,0,5,6,5,0,4|2",
+    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ] ],
+    "distance_bucket" : 2,
+    "count" : 7,
+    "mean_handtuned_eval" : 35967.0,
+    "eval_n" : 7
+  }, {
     "id" : 3888,
     "signature" : "8,8,8,8,8,8,8,8,8,8,5,0,0,0,0,6,5,0,0,0,6,5,0,4,0|3",
     "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ] ],
@@ -4051,254 +4299,6 @@
     "mean_handtuned_eval" : 35967.0,
     "eval_n" : 7
   }, {
-    "id" : 3848,
-    "signature" : "8,8,8,8,8,0,0,0,0,0,5,0,0,0,0,5,0,4,0,0,6,6,0,0,5|5",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3803,
-    "signature" : "8,6,6,5,0,8,5,6,5,0,8,0,5,6,6,8,0,0,0,0,8,0,0,0,0|4",
-    "cells" : [ [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 4,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3875,
-    "signature" : "8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,5,0,0,0,0,5,0,4,0,0|4",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 4,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3802,
-    "signature" : "8,5,6,5,0,8,0,5,6,6,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0|5",
-    "cells" : [ [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3575,
-    "signature" : "0,4,0,0,1,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0,0|7",
-    "cells" : [ [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3688,
-    "signature" : "5,6,5,0,4,0,5,6,6,0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0|6",
-    "cells" : [ [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 6,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3818,
-    "signature" : "8,8,3,5,0,8,8,6,6,5,8,8,5,6,5,8,8,0,5,6,8,8,0,0,0|2",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 2,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3702,
-    "signature" : "6,5,0,4,0,5,6,6,0,0,0,0,0,6,1,0,0,0,0,6,0,0,0,0,4|7",
-    "cells" : [ [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3631,
-    "signature" : "3,5,0,0,0,6,6,5,0,0,5,6,5,0,4,0,5,6,6,0,0,0,0,0,6|4",
-    "cells" : [ [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 4,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3822,
-    "signature" : "8,8,6,6,5,8,8,5,6,5,8,8,0,5,6,8,8,0,0,0,8,8,0,0,0|3",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 3,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3887,
-    "signature" : "8,8,8,8,8,8,8,8,8,8,3,5,0,0,0,6,6,5,0,0,5,6,5,0,4|2",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ] ],
-    "distance_bucket" : 2,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3698,
-    "signature" : "6,5,0,0,0,6,5,0,4,0,5,6,6,0,0,0,0,0,6,1,0,0,0,0,6|6",
-    "cells" : [ [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 6,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3793,
-    "signature" : "8,0,5,6,6,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0,8,0,0,0,0|6",
-    "cells" : [ [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 6,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3829,
-    "signature" : "8,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,4,0,0,1,6,0,0,5,0|6",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ] ],
-    "distance_bucket" : 6,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3709,
-    "signature" : "6,6,5,0,0,5,6,5,0,4,0,5,6,6,0,0,0,0,0,6,0,0,0,0,0|5",
-    "cells" : [ [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3821,
-    "signature" : "8,8,5,6,5,8,8,0,5,6,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0|4",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 4,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3856,
-    "signature" : "8,8,8,8,8,3,5,0,0,0,6,6,5,0,0,5,6,5,0,4,0,5,6,6,0|3",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ] ],
-    "distance_bucket" : 3,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3616,
-    "signature" : "0,5,6,6,0,0,0,0,0,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|7",
-    "cells" : [ [ "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3666,
-    "signature" : "5,0,0,0,0,5,0,4,0,0,6,6,0,0,5,0,0,6,1,0,0,0,0,6,0|7",
-    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3689,
-    "signature" : "5,6,6,0,0,0,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0,0,0,0,0|7",
-    "cells" : [ [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3474,
-    "signature" : "0,0,0,0,0,5,0,0,0,0,5,0,4,0,0,6,6,0,0,5,0,0,6,1,0|6",
-    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ] ],
-    "distance_bucket" : 6,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3860,
-    "signature" : "8,8,8,8,8,8,3,5,0,0,8,6,6,5,0,8,5,6,5,0,8,0,5,6,6|2",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 2,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3798,
-    "signature" : "8,3,5,0,0,8,6,6,5,0,8,5,6,5,0,8,0,5,6,6,8,0,0,0,0|3",
-    "cells" : [ [ "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 3,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3866,
-    "signature" : "8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,4,0,0,1|5",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3674,
-    "signature" : "5,0,4,0,0,6,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0|7",
-    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3863,
-    "signature" : "8,8,8,8,8,8,8,3,5,0,8,8,6,6,5,8,8,5,6,5,8,8,0,5,6|1",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 1,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3419,
-    "signature" : "0,0,0,0,0,0,0,0,0,0,0,4,0,0,1,6,0,0,5,0,0,6,1,0,0|7",
-    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3667,
-    "signature" : "5,0,0,0,0,6,5,0,0,0,6,5,0,4,0,5,6,6,0,0,0,0,0,6,1|5",
-    "cells" : [ [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_SELF", "NEUTRAL" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3857,
-    "signature" : "8,8,8,8,8,5,0,0,0,0,6,5,0,0,0,6,5,0,4,0,5,6,6,0,0|4",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "NORMAL_SELF", "EMPTY" ], [ "NORMAL_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 4,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3452,
-    "signature" : "0,0,0,0,0,0,4,0,0,1,6,0,0,5,0,0,6,1,0,0,0,0,6,0,0|7",
-    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL" ], [ "FORTIFIED_SELF", "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
-    "id" : 3816,
-    "signature" : "8,8,0,5,6,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0,8,8,0,0,0|5",
-    "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "NORMAL_OPPONENT", "FORTIFIED_SELF" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 5,
-    "count" : 7,
-    "mean_handtuned_eval" : 35967.0,
-    "eval_n" : 7
-  }, {
     "id" : 3252,
     "signature" : "4,0,0,1,0,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0,0,4,0,0,0|7",
     "cells" : [ [ "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "NORMAL_SELF", "EMPTY", "EMPTY", "EMPTY" ] ],
@@ -4310,6 +4310,14 @@
     "id" : 2754,
     "signature" : "0,0,0,0,0,0,0,0,0,0,4,0,0,1,0,0,0,5,0,0,6,1,0,0,0|7",
     "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY", "EMPTY" ] ],
+    "distance_bucket" : 7,
+    "count" : 9,
+    "mean_handtuned_eval" : 35532.11111111111,
+    "eval_n" : 9
+  }, {
+    "id" : 2789,
+    "signature" : "0,0,0,0,0,4,0,0,1,0,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0|7",
+    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY", "EMPTY" ] ],
     "distance_bucket" : 7,
     "count" : 9,
     "mean_handtuned_eval" : 35532.11111111111,
@@ -4331,14 +4339,6 @@
     "mean_handtuned_eval" : 35532.11111111111,
     "eval_n" : 9
   }, {
-    "id" : 2789,
-    "signature" : "0,0,0,0,0,4,0,0,1,0,0,0,5,0,0,6,1,0,0,0,0,6,0,0,0|7",
-    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "EMPTY", "EMPTY" ], [ "NORMAL_SELF", "EMPTY", "EMPTY", "NEUTRAL", "EMPTY" ], [ "EMPTY", "EMPTY", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "NEUTRAL", "EMPTY", "EMPTY", "EMPTY" ], [ "EMPTY", "FORTIFIED_SELF", "EMPTY", "EMPTY", "EMPTY" ] ],
-    "distance_bucket" : 7,
-    "count" : 9,
-    "mean_handtuned_eval" : 35532.11111111111,
-    "eval_n" : 9
-  }, {
     "id" : 3074,
     "signature" : "8,8,8,8,8,8,8,8,8,8,8,8,3,5,0,8,8,6,6,5,8,8,5,6,5|0",
     "cells" : [ [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "BASE_OPPONENT", "NORMAL_OPPONENT", "EMPTY" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "NORMAL_OPPONENT", "FORTIFIED_SELF", "NORMAL_OPPONENT" ] ],
@@ -4347,18 +4347,10 @@
     "mean_handtuned_eval" : 35532.11111111111,
     "eval_n" : 9
   }, {
-    "id" : 5369,
-    "signature" : "7,6,6,6,6,6,6,6,6,6,5,5,5,5,5,8,8,8,8,8,8,8,8,8,8|3",
-    "cells" : [ [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ] ],
-    "distance_bucket" : 3,
-    "count" : 5,
-    "mean_handtuned_eval" : 35206.0,
-    "eval_n" : 5
-  }, {
-    "id" : 5368,
-    "signature" : "7,6,6,5,0,6,6,6,0,5,7,6,6,6,6,6,6,6,6,6,5,5,5,5,5|5",
-    "cells" : [ [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ] ],
-    "distance_bucket" : 5,
+    "id" : 5210,
+    "signature" : "4,0,0,0,4,6,4,4,4,7,0,6,7,4,7,0,0,7,7,7,0,0,0,7,6|7",
+    "cells" : [ [ "NORMAL_SELF", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ], [ "FORTIFIED_SELF", "NORMAL_SELF", "NORMAL_SELF", "NORMAL_SELF", "FORTIFIED_OPPONENT" ], [ "EMPTY", "FORTIFIED_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "FORTIFIED_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 7,
     "count" : 5,
     "mean_handtuned_eval" : 35206.0,
     "eval_n" : 5
@@ -4371,10 +4363,18 @@
     "mean_handtuned_eval" : 35206.0,
     "eval_n" : 5
   }, {
-    "id" : 5210,
-    "signature" : "4,0,0,0,4,6,4,4,4,7,0,6,7,4,7,0,0,7,7,7,0,0,0,7,6|7",
-    "cells" : [ [ "NORMAL_SELF", "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF" ], [ "FORTIFIED_SELF", "NORMAL_SELF", "NORMAL_SELF", "NORMAL_SELF", "FORTIFIED_OPPONENT" ], [ "EMPTY", "FORTIFIED_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "FORTIFIED_OPPONENT" ], [ "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT" ], [ "EMPTY", "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 7,
+    "id" : 5368,
+    "signature" : "7,6,6,5,0,6,6,6,0,5,7,6,6,6,6,6,6,6,6,6,5,5,5,5,5|5",
+    "cells" : [ [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ] ],
+    "distance_bucket" : 5,
+    "count" : 5,
+    "mean_handtuned_eval" : 35206.0,
+    "eval_n" : 5
+  }, {
+    "id" : 5369,
+    "signature" : "7,6,6,6,6,6,6,6,6,6,5,5,5,5,5,8,8,8,8,8,8,8,8,8,8|3",
+    "cells" : [ [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ] ],
+    "distance_bucket" : 3,
     "count" : 5,
     "mean_handtuned_eval" : 35206.0,
     "eval_n" : 5
@@ -4387,10 +4387,18 @@
     "mean_handtuned_eval" : 35206.0,
     "eval_n" : 5
   }, {
-    "id" : 4412,
-    "signature" : "6,6,5,0,0,6,6,0,5,5,6,6,6,6,0,6,6,6,6,6,5,5,5,5,3|4",
-    "cells" : [ [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "BASE_OPPONENT" ] ],
-    "distance_bucket" : 4,
+    "id" : 4070,
+    "signature" : "0,0,0,4,4,4,4,4,7,4,6,7,4,7,7,0,7,7,7,6,0,0,7,6,6|7",
+    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF", "NORMAL_SELF" ], [ "NORMAL_SELF", "NORMAL_SELF", "NORMAL_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT" ], [ "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
+    "distance_bucket" : 7,
+    "count" : 6,
+    "mean_handtuned_eval" : 34645.0,
+    "eval_n" : 6
+  }, {
+    "id" : 4330,
+    "signature" : "4,7,4,0,0,4,7,7,4,0,7,7,6,0,0,7,6,6,5,0,6,6,6,0,5|7",
+    "cells" : [ [ "NORMAL_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "NORMAL_SELF", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "NORMAL_SELF", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT" ] ],
+    "distance_bucket" : 7,
     "count" : 6,
     "mean_handtuned_eval" : 34645.0,
     "eval_n" : 6
@@ -4398,22 +4406,6 @@
     "id" : 4333,
     "signature" : "4,7,7,4,0,7,7,6,0,0,7,6,6,5,0,6,6,6,0,5,7,6,6,6,6|7",
     "cells" : [ [ "NORMAL_SELF", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "NORMAL_SELF", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 7,
-    "count" : 6,
-    "mean_handtuned_eval" : 34645.0,
-    "eval_n" : 6
-  }, {
-    "id" : 4440,
-    "signature" : "7,6,0,0,0,6,6,5,0,0,6,6,0,5,5,6,6,6,6,0,6,6,6,6,6|5",
-    "cells" : [ [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "EMPTY", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
-    "distance_bucket" : 5,
-    "count" : 6,
-    "mean_handtuned_eval" : 34645.0,
-    "eval_n" : 6
-  }, {
-    "id" : 4070,
-    "signature" : "0,0,0,4,4,4,4,4,7,4,6,7,4,7,7,0,7,7,7,6,0,0,7,6,6|7",
-    "cells" : [ [ "EMPTY", "EMPTY", "EMPTY", "NORMAL_SELF", "NORMAL_SELF" ], [ "NORMAL_SELF", "NORMAL_SELF", "NORMAL_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF" ], [ "FORTIFIED_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT" ], [ "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_SELF" ], [ "EMPTY", "EMPTY", "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF" ] ],
     "distance_bucket" : 7,
     "count" : 6,
     "mean_handtuned_eval" : 34645.0,
@@ -4427,10 +4419,18 @@
     "mean_handtuned_eval" : 34645.0,
     "eval_n" : 6
   }, {
-    "id" : 4330,
-    "signature" : "4,7,4,0,0,4,7,7,4,0,7,7,6,0,0,7,6,6,5,0,6,6,6,0,5|7",
-    "cells" : [ [ "NORMAL_SELF", "FORTIFIED_OPPONENT", "NORMAL_SELF", "EMPTY", "EMPTY" ], [ "NORMAL_SELF", "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "NORMAL_SELF", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "EMPTY", "EMPTY" ], [ "FORTIFIED_OPPONENT", "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT" ] ],
-    "distance_bucket" : 7,
+    "id" : 4412,
+    "signature" : "6,6,5,0,0,6,6,0,5,5,6,6,6,6,0,6,6,6,6,6,5,5,5,5,3|4",
+    "cells" : [ [ "FORTIFIED_SELF", "FORTIFIED_SELF", "NORMAL_OPPONENT", "EMPTY", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY", "NORMAL_OPPONENT", "NORMAL_OPPONENT" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "BASE_OPPONENT" ] ],
+    "distance_bucket" : 4,
+    "count" : 6,
+    "mean_handtuned_eval" : 34645.0,
+    "eval_n" : 6
+  }, {
+    "id" : 4413,
+    "signature" : "6,6,6,6,0,6,6,6,6,6,5,5,5,5,3,8,8,8,8,8,8,8,8,8,8|2",
+    "cells" : [ [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "EMPTY" ], [ "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF", "FORTIFIED_SELF" ], [ "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "NORMAL_OPPONENT", "BASE_OPPONENT" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ], [ "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS", "OUT_OF_BOUNDS" ] ],
+    "distance_bucket" : 2,
     "count" : 6,
     "mean_handtuned_eval" : 34645.0,
     "eval_n" : 6

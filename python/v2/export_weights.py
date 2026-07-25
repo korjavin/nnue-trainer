@@ -17,8 +17,14 @@ NNUEv2/read_num_patterns from train_v2; no new deps.
 import argparse
 import json
 import os
+import sys
 
 import torch
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# allow `python3 python/v2/export_weights.py` (script dir, not repo root, on sys.path)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from python.v2.train_v2 import NNUEv2, read_num_patterns, _DEFAULT_DICT
 

@@ -48,14 +48,9 @@ public class V3FeaturePreviewHtmlTest {
     JsonNode inlined = om.readTree(h.substring(from + OPEN.length(), to));
     JsonNode stats = om.readTree(STATS.toFile());
 
-    assertEquals(
-        stats.path("meta").path("positions").asInt(),
-        inlined.path("meta").path("positions").asInt());
-    assertEquals(
-        stats.path("meta").path("feature_count").asInt(),
-        inlined.path("meta").path("feature_count").asInt());
-    assertEquals(stats.path("features").size(), inlined.path("features").size());
+    // Whole-tree, not headline numbers: the splice is a manual sed, so a stale or truncated middle
+    // of the DATA block is exactly the failure mode worth catching.
+    assertEquals(stats, inlined, "inlined DATA is not the committed " + STATS);
     assertEquals(stats.path("meta").path("feature_count").asInt(), inlined.path("features").size());
-    assertEquals(stats.path("features").get(0), inlined.path("features").get(0));
   }
 }

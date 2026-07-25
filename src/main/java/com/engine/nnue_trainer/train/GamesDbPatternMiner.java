@@ -5,7 +5,6 @@ import com.engine.nnue_trainer.v2.NNUEv2Accumulator;
 import com.engine.nnue_trainer.v2.PatternContract;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Files;
@@ -259,7 +258,11 @@ public final class GamesDbPatternMiner {
         byEval.add(a);
       }
     }
-    byEval.sort(Comparator.comparingDouble(a -> -Math.abs(mean(a))));
+    // Tie-break by id (already count-desc-then-signature): |mean| ties are common — 33 of the top
+    // 50 share one value on the current corpus — so without this the cut is decided by HashMap
+    // iteration order and the committed artifact churns for no reason.
+    byEval.sort(
+        Comparator.<Acc>comparingDouble(a -> -Math.abs(mean(a))).thenComparingInt(a -> a.id));
     ObjectNode topEvalMeta = root.putObject("top_by_eval_meta");
     topEvalMeta.put("min_eval_n", TOP_EVAL_MIN_N);
     topEvalMeta.put("top_n", TOP_EVAL_N);
@@ -294,8 +297,7 @@ public final class GamesDbPatternMiner {
       prevEdge = edges[e];
     }
 
-    MAPPER.enable(SerializationFeature.INDENT_OUTPUT);
-    Files.writeString(out, MAPPER.writeValueAsString(root) + "\n");
+    Files.writeString(out, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root) + "\n");
   }
 
   private static ObjectNode patternNode(String signature, Acc a) {

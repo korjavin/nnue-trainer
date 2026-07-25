@@ -25,9 +25,11 @@ import java.util.Locale;
  * GoState#applyGenerated}, the faithful port of the server's {@code state.go} transition — NOT
  * {@code SearchEngine.applyAction}, which diverges from the real rules in two ways that corrupt a
  * replay: it never fortifies a captured cell, and it erases cells that lose base-connectivity. Both
- * are contradicted by games.db itself: 503 recorded {@code attack} moves (in 173 of 224 replayable
- * 12x12 games) target a cell the erasing variant has already emptied, while the {@code
- * applyGenerated} rules replay every recorded move consistently.
+ * are contradicted by games.db itself: 503 recorded {@code attack} moves (in 173 of the 213
+ * replayable 12x12 games, 9444 moves) target a cell the erasing variant has already emptied, while
+ * the {@code applyGenerated} rules replay every recorded move consistently. Counts measured
+ * 2026-07-25 against {@code /home/iv/games.db}, which is refreshed out-of-band — the two rules
+ * themselves are pinned by {@code GamesDbReplayTest}.
  *
  * <p>A game yields a skip reason instead of snapshots when a turn has no {@code player} ({@code
  * no_player}), a player outside 1..2 ({@code multiplayer} — the replay only models the 1v1 rules),
@@ -87,13 +89,16 @@ public final class GamesDbReplay {
         if (moves != null && moves.isArray()) {
           for (JsonNode mv : moves) {
             Action action = parseAction(mv);
-            if (action instanceof PlaceNeutralsAction) {
-              neutralUsed[player - 1] = true;
-            }
             board =
                 GoState.fromBoard(board, player, GoState.ACTIONS_PER_TURN, neutralUsed)
                     .applyGenerated(action)
                     .toBoard();
+            // AFTER the transition: the state a neutral placement is applied to must still show
+            // the budget unspent, or a switch to the legality-checked apply() would reject every
+            // neutral move. Only the board survives the transition, so the flag is tracked here.
+            if (action instanceof PlaceNeutralsAction) {
+              neutralUsed[player - 1] = true;
+            }
           }
         }
       }

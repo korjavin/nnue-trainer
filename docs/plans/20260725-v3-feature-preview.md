@@ -176,9 +176,9 @@ first mined artifact was wrong and was regenerated. `GamesDbReplay` applied move
 `SearchEngine.applyAction`, which (a) never fortifies a captured cell and (b) erases cells that lose
 base-connectivity. Both contradict the server rules ported in `GoState` (`mutate` fortifies a
 captured NORMAL cell; `eliminateStuckPlayers` documents "eliminated players' cells stay on the
-board"), and games.db proves it: 503 recorded `attack` moves in 173 of 224 replayable 12x12 games
+board"), and games.db proves it: 503 recorded `attack` moves in 173 of the 213 replayable 12x12 games
 target a cell the erasing variant has already emptied, while the `GoState.applyGenerated` rules
-replay all 9408 recorded moves consistently. Consequences of the old path: `FORTIFIED_SELF` /
+replay all 9444 recorded moves consistently. Consequences of the old path: `FORTIFIED_SELF` /
 `FORTIFIED_OPPONENT` were **unobservable by construction** (0 of 444 features, i.e. 288 of the 1152
 candidates could never light up while the page reported them as merely unobserved), and every
 post-capture board — hence `baseline_mean_eval` and every `mean_eval` — was computed on a position
@@ -218,7 +218,7 @@ committed dictionary so a future re-mine cannot rot it. `./mvnw test` is now ful
       perspective, and that this is a pre-model preview with no trained weights in it
 - [x] verify the page opens standalone with no network requests and renders in both light and dark
       color schemes (no-network verified by grep + test; DOM verified by executing the page under
-      jsdom — 6 tiles, 8 boards x 144 cells, 444 table rows, sorting works. ⚠️ no browser is
+      jsdom — 6 tiles, 8 boards x 144 cells, 664 table rows, sorting works. ⚠️ no browser is
       installed on this host, so the light/dark **visual** render was not screenshotted; the theme
       mechanism is the same `prefers-color-scheme` + `[data-theme]` CSS-variable block already
       shipped in `docs/games-db-features.html`)
@@ -253,9 +253,27 @@ Acceptance evidence (2026-07-25):
   support/evalSum; `Stats.ranked` applies the floor then sorts by discrimination desc with
   (row,col,state) tie-break. HTML heatmaps + sortable ranked table covered by
   `V3FeaturePreviewHtmlTest` (2 tests, pass).
-- No model/regression/training/gauntlet code: `git diff --stat 2138e9a..HEAD` adds only
+- No model/regression/training/gauntlet code: `git diff --stat 2138e9a..HEAD` adds
   `GamesDbReplay.java`, `V3FeatureMiner.java`, their 3 test classes, the HTML, the JSON and this
-  plan; the only existing-code change is `GamesDbPatternMiner.java` delegating to the helper.
+  plan. ⚠️ Deviation from the "only permitted change" constraint above — the review pass touched
+  more existing files than that line allowed, all of it forced by the replay-fidelity fix or by
+  shipping red:
+  - `GamesDbPatternMiner.java` — delegates to the helper (the planned extraction), plus a
+    tie-break on `top_by_eval` so the committed artifact stops depending on HashMap order.
+  - `GoState.java` — one word: `applyGenerated` widened to `public` so the replay can call it.
+  - `NNUEv2Accumulator.java`, `PatternDictionary.java` — `spotless:apply` reformatting only, no
+    behavior change (verified by diff).
+  - `NNUEv2AccumulatorTest.java`, `PatternDictionaryTest.java`, `train_v2_test.py`,
+    `accumulator_parity_fixture.json` — these were **failing** against the re-mined dictionary
+    (the plan had recorded them as pre-existing, but they do not exist on `master`; this branch
+    stack introduced them). Fixture regenerated, hardcoded ids replaced by reads of the committed
+    dictionary so a future re-mine cannot rot them again.
+  - `SelfPlayGenerator.java` — two defects found in review: `EMIT=raw` without `RAW_OUT` exited 0
+    having written nothing, and a genuine territory tie (`canonicalWinner == 0`, the same sentinel
+    as "undecided") kept the game loop spinning to `maxTurns`, re-snapshotting the finished board
+    into the dataset each iteration.
+  - `python/v2/export_weights.py` — could not run as a script at all (missing the `sys.path`
+    bootstrap its own documented regen command needs).
 - Refactor behavior-preserving: re-ran `GamesDbPatternMiner /home/iv/games.db
   /tmp/repro_pattern_stats.json` on the real DB — same console report (273 total, 222 used, 51
   skipped, 3406 positions, 28357 distinct patterns) and the output **diffs byte-identical** to the

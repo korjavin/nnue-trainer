@@ -5,7 +5,6 @@ import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.PatternContract;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Files;
@@ -106,6 +105,20 @@ public final class V3FeatureMiner {
      * eval.
      */
     public void add(Board board, int stm, int eval) {
+      // Off-board cells resolve to OUT_OF_BOUNDS (8), which idx() would fold into the NEXT cell's
+      // EMPTY bucket — silent corruption everywhere but (11,11), where it throws. main() filters on
+      // board size; this makes that a precondition rather than a convention.
+      if (board.rows < BOARD || board.cols < BOARD) {
+        throw new IllegalArgumentException(
+            "v3 features need a >="
+                + BOARD
+                + "x"
+                + BOARD
+                + " board, got "
+                + board.rows
+                + "x"
+                + board.cols);
+      }
       positions++;
       baselineEvalSum += eval;
       for (int r = 0; r < BOARD; r++) {
@@ -177,7 +190,13 @@ public final class V3FeatureMiner {
           System.err.println("--min-support needs a value");
           System.exit(1);
         }
-        minSupportFlag = Integer.parseInt(args[++i]);
+        String raw = args[++i];
+        try {
+          minSupportFlag = Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+          System.err.println("--min-support needs an integer, got: " + raw);
+          System.exit(1);
+        }
       } else {
         positional.add(args[i]);
       }
@@ -346,7 +365,6 @@ public final class V3FeatureMiner {
       }
     }
 
-    MAPPER.enable(SerializationFeature.INDENT_OUTPUT);
-    Files.writeString(out, MAPPER.writeValueAsString(root) + "\n");
+    Files.writeString(out, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root) + "\n");
   }
 }

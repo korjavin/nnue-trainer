@@ -205,6 +205,12 @@ public class SelfPlayGenerator {
     config.rawSampleEvery = envInt("RAW_SAMPLE_EVERY", config.rawSampleEvery);
     String emit = System.getenv("EMIT");
     boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
+    if (rawOnly && config.rawOutPath == null) {
+      // EMIT=raw suppresses the v1 write, so without RAW_OUT a multi-hour run would exit 0 having
+      // written nothing at all. Fail before the run, like the GOBOT validator in generate().
+      System.err.println("EMIT=raw needs RAW_OUT set (it suppresses the v1 dataset write).");
+      System.exit(1);
+    }
 
     System.out.println(
         "Starting self-play: games="
@@ -305,6 +311,10 @@ public class SelfPlayGenerator {
 
       int currentPlayer = 1;
       int winner = 0;
+      // Separate from `winner`: canonicalWinner returns 0 for a genuine territory tie, which is
+      // also the not-yet-decided sentinel. Overloading it let a tied game keep looping to maxTurns,
+      // re-snapshotting the same finished board into the dataset every iteration.
+      boolean decided = false;
 
       for (int turn = 0; turn < config.maxTurns; turn++) {
         boolean canPlaceNeutral = true;
@@ -319,6 +329,7 @@ public class SelfPlayGenerator {
             // rule (last player able to move wins, territory tiebreak) rather than a base check /
             // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
             winner = canonicalWinner(board, currentPlayer);
+            decided = true;
             break;
           }
 
@@ -354,16 +365,17 @@ public class SelfPlayGenerator {
 
           if (engine.isTerminal(board)) {
             winner = canonicalWinner(board, currentPlayer);
+            decided = true;
             break;
           }
         }
-        if (winner != 0) break;
+        if (decided) break;
         currentPlayer = 3 - currentPlayer;
       }
 
       // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
       // decided by the real territory rule instead of defaulting to draw.
-      if (winner == 0) {
+      if (!decided) {
         winner = canonicalWinner(board, currentPlayer);
       }
 
