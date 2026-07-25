@@ -209,16 +209,45 @@ forbids touching v1/v2 model/eval code): `NNUEv2AccumulatorTest.testParityAgains
 
 ### Task 5: Verify acceptance criteria
 
-- [ ] verify the bead's steps are all covered: replay reuse, 12x12 static eval per position,
+- [x] verify the bead's steps are all covered: replay reuse, 12x12 static eval per position,
       absolute (r,c,state) extraction, support + mean_eval + discrimination accumulation,
       discrimination ranking with support floor, HTML board heatmap + ranked list
-- [ ] verify NO model, regression, training or gauntlet code was added (this is the gate, not 6.1)
-- [ ] verify `GamesDbPatternMiner` is behaviorally unchanged by the Task 1 refactor (its CLI still
+- [x] verify NO model, regression, training or gauntlet code was added (this is the gate, not 6.1)
+- [x] verify `GamesDbPatternMiner` is behaviorally unchanged by the Task 1 refactor (its CLI still
       runs and produces the same `games_db_pattern_stats.json` shape)
-- [ ] verify edge cases: zero 12x12 games, support floor larger than any feature's support, a
+- [x] verify edge cases: zero 12x12 games, support floor larger than any feature's support, a
       feature active in every position (discrimination ~0)
-- [ ] run the full test suite (`./mvnw test`) — must pass
-- [ ] run the project's formatter/linter (spotless/checkstyle as configured) — all issues fixed
+- [x] run the full test suite (`./mvnw test`) — 161 tests, only the 2 documented PRE-EXISTING v2
+      fixture-drift failures remain (`NNUEv2AccumulatorTest.testParityAgainstPythonFixture`,
+      `PatternDictionaryTest.testKnownSignatureMapsToId`); this branch touches zero v2/nnue files
+      (`git diff --name-only 2138e9a..HEAD -- .../v2 .../nnue` is empty), so they are not ours and
+      the plan forbids fixing them here
+- [x] run the project's formatter/linter (spotless/checkstyle as configured) — all issues fixed
+
+Acceptance evidence (2026-07-25):
+
+- Bead steps traced in code: `V3FeatureMiner.main` replays via `GamesDbReplay` (shared helper),
+  filters `rows/cols != 12` to `wrong_board_size`, scores each pre-turn board with
+  `HandTunedEval.staticEval(board, stm, GamesDbReplay.MOVES_LEFT, neutralUsed)`, and
+  `Stats.add` walks all 144 cells through `PatternContract.getSymbol` into `(row,col,state)`
+  support/evalSum; `Stats.ranked` applies the floor then sorts by discrimination desc with
+  (row,col,state) tie-break. HTML heatmaps + sortable ranked table covered by
+  `V3FeaturePreviewHtmlTest` (2 tests, pass).
+- No model/regression/training/gauntlet code: `git diff --stat 2138e9a..HEAD` adds only
+  `GamesDbReplay.java`, `V3FeatureMiner.java`, their 3 test classes, the HTML, the JSON and this
+  plan; the only existing-code change is `GamesDbPatternMiner.java` delegating to the helper.
+- Refactor behavior-preserving: re-ran `GamesDbPatternMiner /home/iv/games.db
+  /tmp/repro_pattern_stats.json` on the real DB — same console report (273 total, 222 used, 51
+  skipped, 3406 positions, 28357 distinct patterns) and the output **diffs byte-identical** to the
+  committed `games_db_pattern_stats.json`.
+- Edge cases covered by `V3FeatureMinerTest` (4 tests, pass): zero positions →
+  `testEmptyStatsAndDefaultFloor` (empty ranking, floor clamps to 30); floor above every support →
+  ➕ new `testFloorAboveEverySupportLeavesNothingRanked` (144 EMPTY features, all `rank = -1`);
+  always-active feature → the `(0,0) EMPTY` assertion in
+  `testMeanEvalDiscriminationAndSupportFloor` (support == positions, discrimination 0).
+- Formatter: `./mvnw spotless:apply` (google-java-format 1.35.0) — reformatted the two `train/`
+  files it owns. ⚠️ It also wanted to reformat four pre-existing unformatted `v2/` files; those were
+  reverted as out of scope (the plan forbids touching v2), so `spotless:check` still reports them.
 
 ### Task 6: [Final] Update documentation
 

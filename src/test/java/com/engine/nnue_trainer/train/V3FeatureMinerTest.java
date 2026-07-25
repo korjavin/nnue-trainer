@@ -104,6 +104,20 @@ public class V3FeatureMinerTest {
   }
 
   @Test
+  public void testFloorAboveEverySupportLeavesNothingRanked() {
+    V3FeatureMiner.Stats stats = new V3FeatureMiner.Stats();
+    stats.add(board12(), 1, 42);
+    stats.add(board12(), 1, 42);
+
+    List<V3FeatureMiner.Feature> fs = stats.ranked(3);
+    assertEquals(V3FeatureMiner.BOARD * V3FeatureMiner.BOARD, fs.size(), "144 EMPTY features");
+    for (V3FeatureMiner.Feature f : fs) {
+      assertEquals(-1, f.rank, "nothing clears a floor above max support");
+      assertEquals(2, f.support);
+    }
+  }
+
+  @Test
   public void testEmptyStatsAndDefaultFloor() {
     V3FeatureMiner.Stats empty = new V3FeatureMiner.Stats();
     assertEquals(0, empty.positions());

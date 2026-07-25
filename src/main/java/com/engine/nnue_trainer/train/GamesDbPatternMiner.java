@@ -27,16 +27,16 @@ import java.util.TreeMap;
  *
  * <p>Pipeline (bd nnue-trainer-d4a.5.1): replay each game through the real engine via {@link
  * GamesDbReplay} (so virus-conversion/connectivity rules apply — not naive placement); at the board
- * state before every turn, scan all active 5x5 windows via {@link PatternContract} +
- * {@link NNUEv2Accumulator#signature} from the side-to-move's perspective, count per signature, and
+ * state before every turn, scan all active 5x5 windows via {@link PatternContract} + {@link
+ * NNUEv2Accumulator#signature} from the side-to-move's perspective, count per signature, and
  * attribute the position's {@link HandTunedEval} to every distinct pattern present. Emits {@code
  * games_db_pattern_stats.json} for the viz bead (d4a.5.2).
  *
  * <p>Conventions (see {@link GamesDbReplay}): a "position" is the board <b>before</b> a turn; STM =
  * that turn's player. Eval is STM-relative (positive = good for the side to move), {@code movesLeft
  * = }{@link GamesDbReplay#MOVES_LEFT}. Games are SKIPPED (not replayed) when pgn is
- * null/unparseable, termination is {@code illegal_move}/{@code disconnect}, the game has more than 2
- * players, or replay throws.
+ * null/unparseable, termination is {@code illegal_move}/{@code disconnect}, the game has more than
+ * 2 players, or replay throws.
  */
 public final class GamesDbPatternMiner {
 

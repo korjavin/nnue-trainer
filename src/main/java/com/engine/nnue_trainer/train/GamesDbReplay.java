@@ -19,10 +19,10 @@ import java.util.Locale;
  * nnue-trainer-d4a.5.1) so the 5x5 miner and the v3 absolute-feature miner share ONE definition of
  * "position".
  *
- * <p>A "position" is the board <b>before</b> a turn; STM = that turn's player. Consumers evaluate it
- * with {@link #MOVES_LEFT} = 3 (fresh turn start — a fixed assumption; the real per-ply movesLeft is
- * not reconstructed from the PGN). Moves are applied through {@link SearchEngine#applyAction} so
- * virus-conversion/connectivity rules apply.
+ * <p>A "position" is the board <b>before</b> a turn; STM = that turn's player. Consumers evaluate
+ * it with {@link #MOVES_LEFT} = 3 (fresh turn start — a fixed assumption; the real per-ply
+ * movesLeft is not reconstructed from the PGN). Moves are applied through {@link
+ * SearchEngine#applyAction} so virus-conversion/connectivity rules apply.
  *
  * <p>A game yields a skip reason instead of snapshots when a turn has no {@code player} ({@code
  * no_player}), a player outside 1..2 ({@code multiplayer} — applyAction only resolves connectivity
