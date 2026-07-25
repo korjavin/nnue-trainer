@@ -101,14 +101,33 @@ def iter_examples(dataset_path, pattern_to_id):
         yield extract_example(rec, pattern_to_id)
 
 
-def extract_example_corpus(obj, pattern_to_id):
+def blended_target(obj, tdlambda):
+    """The training label for a corpus line: TD-leaf blend of deep-search value
+    toward the final outcome.
+
+    `wdl` is the REAL STM-perspective outcome (0/0.5/1). `search_wdl` (present
+    only when the corpus was generated with TDLEAF_DEPTH>0) is the deep hand-tuned
+    search value already squashed into STM WDL space. When both are available and
+    `tdlambda` is given, the target is `(1-lambda)*search_wdl + lambda*outcome`
+    (lambda weights the noisy outcome; ~0.3 is a strong search bootstrap). With no
+    `search_wdl` or no `tdlambda`, the outcome is passed straight through, so the
+    default behavior is unchanged.
+    """
+    outcome = float(obj["wdl"])
+    if tdlambda is None or "search_wdl" not in obj or obj["search_wdl"] is None:
+        return outcome
+    search = float(obj["search_wdl"])
+    return (1.0 - tdlambda) * search + tdlambda * outcome
+
+
+def extract_example_corpus(obj, pattern_to_id, tdlambda=None):
     """One training example from a v2 raw-board corpus line.
 
-    Schema: {"rows","cols","cells":[[{"kind","owner"},...],...],"stm","wdl"}.
-    The perspective is the line's own `stm` (1 or 2), NOT a fixed owner 1 — so
-    the model sees genuine STM/NSTM splits across both players. `wdl` is the REAL
-    STM-perspective outcome (0.0/0.5/1.0, draws included) and is passed straight
-    through. Board size comes from rows/cols; nothing is hardcoded to 12x12.
+    Schema: {"rows","cols","cells":[[{"kind","owner"},...],...],"stm","wdl",
+    optional "search_wdl"}. The perspective is the line's own `stm` (1 or 2), NOT
+    a fixed owner 1 — so the model sees genuine STM/NSTM splits across both
+    players. The `wdl` field carries the (possibly TD-leaf-blended) STM-perspective
+    target. Board size comes from rows/cols; nothing is hardcoded to 12x12.
     """
     board = _board_from_corpus_line(obj)
     stm = obj["stm"]
@@ -122,17 +141,17 @@ def extract_example_corpus(obj, pattern_to_id):
         ),
         "rows": board.rows,
         "cols": board.cols,
-        "wdl": float(obj["wdl"]),
+        "wdl": blended_target(obj, tdlambda),
     }
 
 
-def iter_examples_corpus(corpus_path, pattern_to_id):
+def iter_examples_corpus(corpus_path, pattern_to_id, tdlambda=None):
     """Yield one example per raw-corpus JSONL line, in file order."""
     with open(corpus_path) as f:
         for line in f:
             line = line.strip()
             if line:
-                yield extract_example_corpus(json.loads(line), pattern_to_id)
+                yield extract_example_corpus(json.loads(line), pattern_to_id, tdlambda)
 
 
 def main(argv=None):
@@ -150,12 +169,17 @@ def main(argv=None):
         "--out",
         default=os.path.join(_REPO_ROOT, "python", "v2", "nnue_v2_examples.jsonl"),
     )
+    parser.add_argument(
+        "--tdlambda", type=float, default=None,
+        help="TD-leaf blend for corpus lines carrying search_wdl: target = "
+             "(1-lambda)*search_wdl + lambda*outcome. Omit for pure-outcome labels.",
+    )
     args = parser.parse_args(argv)
 
     pattern_to_id = load_dictionary(args.dict)
 
     source = args.corpus if args.corpus else args.dataset
-    examples = (iter_examples_corpus(args.corpus, pattern_to_id) if args.corpus
+    examples = (iter_examples_corpus(args.corpus, pattern_to_id, args.tdlambda) if args.corpus
                 else iter_examples(args.dataset, pattern_to_id))
 
     count = 0

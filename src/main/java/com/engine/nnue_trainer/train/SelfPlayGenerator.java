@@ -13,6 +13,8 @@ import com.engine.nnue_trainer.search.gobot.GoBotExploration;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -80,6 +82,23 @@ public class SelfPlayGenerator {
 
     /** Sample every Nth collected turn for the raw corpus (1 = every position). */
     public int rawSampleEvery = 1;
+
+    /**
+     * TD-leaf search-target depth for the raw corpus (env {@code TDLEAF_DEPTH}). When &gt;0 each
+     * emitted raw position also records {@code search_wdl}: a fixed-depth GoBot search value (with
+     * the HAND_TUNED leaf) squashed into STM WDL space. 0 (default) keeps the old raw-emit behavior
+     * unchanged — no search is run, no {@code search_wdl} field is written. Recommended: 4.
+     */
+    public int tdLeafDepth = 0;
+
+    /**
+     * Logistic scale for the score→WDL squash: {@code search_wdl = 1/(1+exp(-score/scale))}.
+     * Calibrated to the actual hand-tuned band on 12x12 self-play (abs score median ~7k, p90 ~24k,
+     * see bead d4a.4.2): the default 6000 keeps most positions gradated in ~[0.2,0.8] instead of
+     * saturating to 0/1 (a scale of 1000 pins ~98% of positions past 0.95, collapsing the target
+     * back to a sign bit). Only the ordering is load-bearing, but a spread target trains better.
+     */
+    public double tdLeafWdlScale = 6000.0;
   }
 
   /** One cell in a raw-board snapshot. owner = -1 for EMPTY/NEUTRAL (no owner). */
@@ -100,6 +119,15 @@ public class SelfPlayGenerator {
     public RawCell[][] cells;
     public int stm;
     public double wdl;
+
+    /**
+     * STM-relative fixed-depth search value in WDL space [0,1] (the TD-leaf target signal). Null
+     * (and omitted from JSON) unless {@code TDLEAF_DEPTH>0}, so the default corpus schema is
+     * unchanged.
+     */
+    @JsonProperty("search_wdl")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Double searchWdl;
 
     public RawPosition(int rows, int cols, RawCell[][] cells, int stm, double wdl) {
       this.rows = rows;
@@ -203,6 +231,10 @@ public class SelfPlayGenerator {
       config.rawOutPath = rawOut.trim();
     }
     config.rawSampleEvery = envInt("RAW_SAMPLE_EVERY", config.rawSampleEvery);
+    // TD-leaf raw target (bead d4a.4.2): TDLEAF_DEPTH>0 records a deep hand-tuned search value per
+    // emitted raw position as search_wdl (blended toward the outcome later in extract_examples).
+    config.tdLeafDepth = envInt("TDLEAF_DEPTH", config.tdLeafDepth);
+    config.tdLeafWdlScale = envDouble("TDLEAF_WDL_SCALE", config.tdLeafWdlScale);
     String emit = System.getenv("EMIT");
     boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
 
@@ -214,7 +246,9 @@ public class SelfPlayGenerator {
             + " label="
             + config.labelMode
             + " lambda="
-            + config.tdLambda);
+            + config.tdLambda
+            + " tdLeafDepth="
+            + config.tdLeafDepth);
     GenerationResult result = generate(config, null);
     System.out.println("Generation complete. Total records: " + result.dataset.size());
     System.out.println(
@@ -297,6 +331,15 @@ public class SelfPlayGenerator {
     Set<Integer> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
+
+    // TD-leaf raw target uses a fixed-depth GoBot search with the HAND_TUNED leaf. Pin that as the
+    // process-wide default while generating (restored in finally) so the recorded search_wdl is
+    // always hand-tuned, regardless of any ambient leaf config a prior caller left set.
+    GoBotSearcher.LeafConfig prevLeaf =
+        (rawPositions != null && config.tdLeafDepth > 0)
+            ? GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null)
+            : null;
+    try {
 
     for (int game = 1; game <= config.numGames; game++) {
       // System.out.println("Simulating game " + game + "/" + config.numGames);
@@ -392,7 +435,7 @@ public class SelfPlayGenerator {
       if (rawPositions != null) {
         int every = Math.max(1, config.rawSampleEvery);
         for (int i = 0; i < turns.size(); i += every) {
-          rawPositions.add(toRawPosition(turns.get(i), winner));
+          rawPositions.add(toRawPosition(turns.get(i), winner, config));
         }
       }
     }
@@ -402,10 +445,16 @@ public class SelfPlayGenerator {
     GenerationResult result = new GenerationResult(dataset, distinctGameRatio, totalPositions);
     result.rawPositions = rawPositions;
     return result;
+
+    } finally {
+      if (prevLeaf != null) {
+        GoBotSearcher.restoreDefaultLeafEval(prevLeaf);
+      }
+    }
   }
 
   /** Build a raw snapshot from a recorded turn; wdl is STM-relative (winner==0 → draw 0.5). */
-  private static RawPosition toRawPosition(TurnData turn, int winner) {
+  private static RawPosition toRawPosition(TurnData turn, int winner, Config config) {
     Board b = turn.board;
     RawCell[][] cells = new RawCell[b.rows][b.cols];
     for (int r = 0; r < b.rows; r++) {
@@ -420,7 +469,32 @@ public class SelfPlayGenerator {
       }
     }
     double wdl = winner == 0 ? 0.5 : (winner == turn.activePlayer ? 1.0 : 0.0);
-    return new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
+    RawPosition raw = new RawPosition(b.rows, b.cols, cells, turn.activePlayer, wdl);
+    raw.searchWdl = searchWdl(b, turn.activePlayer, config);
+    return raw;
+  }
+
+  /**
+   * The TD-leaf search target for one position: a fixed-depth GoBot search (HAND_TUNED leaf, pinned
+   * by {@link #generate}) from the mover's perspective, its backed-up centipawn score squashed into
+   * STM WDL space via a logistic. Returns null when {@code tdLeafDepth<=0} so the field is omitted.
+   * The GoState is built exactly like {@code canonicalWinner} (a fresh full turn, no neutral used).
+   */
+  private static Double searchWdl(Board board, int stm, Config config) {
+    if (config.tdLeafDepth <= 0) {
+      return null;
+    }
+    GoResult r =
+        GoBotSearcher.chooseDepth(
+            GoState.fromBoard(board, stm, GoState.ACTIONS_PER_TURN, new boolean[2]),
+            config.tdLeafDepth);
+    // A stuck/terminal position may yield no search result; treat as an even 0.5 rather than
+    // fabricating a decisive target.
+    if (r == null) {
+      return 0.5;
+    }
+    double scale = config.tdLeafWdlScale > 0 ? config.tdLeafWdlScale : 1000.0;
+    return 1.0 / (1.0 + Math.exp(-((double) r.score) / scale));
   }
 
   /** One recorded ply: the position (side-to-move oriented) plus the search's backed-up value. */

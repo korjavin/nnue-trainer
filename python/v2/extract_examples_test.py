@@ -141,6 +141,19 @@ class ExtractExampleCorpusTest(unittest.TestCase):
             extract_example_corpus(obj, p2id), extract_example_corpus(obj, p2id)
         )
 
+    def test_tdleaf_blend_and_backcompat(self):
+        # search_wdl present + tdlambda given -> (1-l)*search + l*outcome.
+        obj = self._asym(stm=1, wdl=0.0)
+        obj["search_wdl"] = 0.8
+        p2id = _dict_for(_board_from_corpus_line(obj))
+        blended = extract_example_corpus(obj, p2id, tdlambda=0.3)["wdl"]
+        self.assertAlmostEqual(blended, 0.7 * 0.8 + 0.3 * 0.0)
+        # no tdlambda -> pure outcome even when search_wdl is present (back-compat).
+        self.assertEqual(extract_example_corpus(obj, p2id)["wdl"], 0.0)
+        # tdlambda given but no search_wdl -> pure outcome (old corpus lines unchanged).
+        plain = self._asym(stm=1, wdl=1.0)
+        self.assertEqual(extract_example_corpus(plain, p2id, tdlambda=0.3)["wdl"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
