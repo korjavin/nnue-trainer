@@ -207,6 +207,7 @@ public class PeriodicRetrainer implements AutoCloseable {
     metadata.examples = importResult.examples().size() + spResult.dataset.size();
     metadata.importedGames = importResult.importedGames() + spConfig.numGames;
     metadata.skippedDuplicateGames = importResult.skippedDuplicates();
+    metadata.skippedIllegalGames = importResult.skippedIllegalGames();
     metadata.finalMse = trainingResult.finalMse();
     metadata.candidateWins = evaluation.candidateWins();
     metadata.currentWins = evaluation.currentWins();
@@ -265,6 +266,7 @@ public class PeriodicRetrainer implements AutoCloseable {
     public int examples;
     public int importedGames;
     public int skippedDuplicateGames;
+    public int skippedIllegalGames;
     public float finalMse;
     public int candidateWins;
     public int currentWins;

@@ -302,6 +302,37 @@ Acceptance evidence (2026-07-25):
     (`illegal_move`) rather than silently fabricating the board the mined features come from. Zero
     rejections on the current DB: both `nnue_v3_feature_stats.json` and
     `games_db_pattern_stats.json` regenerate byte-identically.
+  - `GamesDbReplay.java` (fourth review pass) — the legality check above rebuilt the `GoState` per
+    move with `movesLeft = ACTIONS_PER_TURN`, so nothing turn-scoped could ever fail: a turn with
+    more than 3 actions, or a neutral pair placed mid-turn (`legalAction` only rejects those when
+    `movesLeft != ACTIONS_PER_TURN`), replayed as legal. One state is now threaded through the whole
+    turn and an action recorded after the turn is spent (or after the game ends) skips the game.
+    Both committed artifacts still regenerate byte-identically — the real DB has no such turn.
+  - `SelfPlayGenerator.java`, `GameImporter.java` (fourth review pass) — the same replay-fidelity
+    bug fixed above for the miners was still live in two other data paths: both applied moves with
+    `SearchEngine.applyAction` (captures written `NORMAL` instead of `FORTIFIED`, cells that lose
+    base-connectivity erased), so every self-play position after the first capture — and every
+    board the live retrainer imported from real games — was one the rules cannot produce.
+    `FORTIFIED` was unobservable in the whole v2 corpus by construction. Both now go through
+    `GoState.applyAction`, the canonical transition exposed once (like `GoState.outcomeWinner`).
+    The negamax *search* still searches with the legacy transition — a strength issue, not a data
+    one. `GameImporterTest` asserted the erasing behavior and was corrected.
+  - `GameImporter.java`, `GamesDbReplay.java` (fifth review pass) — the fix above gave the live
+    retrainer's importer only the board-transition half of the miners' fix, not the legality half:
+    it still rebuilt a `GoState` per move (`movesLeft` reset to 3) and applied it with
+    `applyGenerated`, so a recorded turn with four actions, a mid-turn or repeated neutral pair, or
+    a disconnected target replayed as legal and was trained on. The turn transition is now one
+    shared helper, `GamesDbReplay.applyTurn` — threaded state, legality-checked `apply()` — used by
+    both the miners and the importer, so there is no second path left to forget. A rejected turn
+    skips the game (counted as `ImportResult.skippedIllegalGames`, reported in the run metadata)
+    rather than aborting the retrain. `GamesDbReplay` also absorbed the importer's tolerance for
+    Go's capitalized JSON keys; the committed artifacts are unaffected (the live DB is lowercase
+    and has no out-of-rules turn).
+  - `SelfPlayGenerator.java` (fourth review pass) — `config.dedup` was documented and reported as
+    on by default but only the GoBot path honored it; the negamax path added every record and used
+    the hash for `distinctGameRatio` only. Both its exports (v1 dataset, raw JSONL — the path
+    `scripts/gen_v2_corpus.sh` drives) now honor it; the raw corpus keys on `GoState.hash()` since
+    the v1 feature hash is 12x12-only.
   - `GameLoopHandler.java`, `PeriodicRetrainer.java` (third review pass, pre-existing) — the live
     handler armed the neutral action on every snapshot, not only at the turn opening, so the
     `SEARCH=NEGAMAX` path could answer mid-turn with a move the server rejects as illegal. The

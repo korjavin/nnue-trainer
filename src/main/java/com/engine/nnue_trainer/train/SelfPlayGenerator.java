@@ -24,6 +24,9 @@ import java.util.Set;
 
 public class SelfPlayGenerator {
 
+  /** Read-only "no neutral spent" flags for hash/transition helpers that copy their input. */
+  private static final boolean[] NO_NEUTRALS = new boolean[2];
+
   /** How a training record's target is labeled. */
   public enum LabelMode {
     /** Final game outcome mapped to ±1 (the original noisy label). */
@@ -55,7 +58,11 @@ public class SelfPlayGenerator {
      */
     public double exploreTemperature = 0.0;
 
-    /** Drop exact-duplicate positions (by feature hash) on export; default on. */
+    /**
+     * Drop exact-duplicate positions on export; default on. Honored by every export path: the v1
+     * dataset (keyed by feature hash) and the raw JSONL corpus (keyed by the size-agnostic {@code
+     * GoState.hash()}).
+     */
     public boolean dedup = true;
 
     public int searchDepth = 2;
@@ -302,6 +309,9 @@ public class SelfPlayGenerator {
     Set<Long> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
+    // Raw-corpus dedup needs a board-size-agnostic key: positionKey() hashes the 12x12-only v1
+    // feature vector, GoState.hash() hashes any (board, stm).
+    Set<Long> rawSeen = new HashSet<>();
 
     for (int game = 1; game <= config.numGames; game++) {
       // System.out.println("Simulating game " + game + "/" + config.numGames);
@@ -361,12 +371,15 @@ public class SelfPlayGenerator {
             }
           }
 
+          // GoState.applyAction, not SearchEngine.applyAction: the latter writes a captured cell as
+          // NORMAL (the rules FORTIFY it) and erases cells that lose base-connectivity (the rules
+          // keep them), so every generated position after the first capture was one the real game
+          // cannot reach. The negamax search still *searches* with that legacy transition — a
+          // strength issue, not a data one; the positions we record and label are now canonical.
+          board = GoState.applyAction(board, currentPlayer, chosenAction);
           if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
             neutralUsed[currentPlayer - 1] = true; // spent for the rest of the GAME
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
             break; // turn ends immediately on placement
-          } else {
-            board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
           }
 
           if (engine.isTerminal(board)) {
@@ -399,10 +412,12 @@ public class SelfPlayGenerator {
                   winner,
                   config);
           float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-          dataset.add(new TrainingRecord(features, target));
-
-          uniquePositionHashes.add(positionKey(features));
           totalPositions++;
+          boolean isNew = uniquePositionHashes.add(positionKey(features));
+          if (config.dedup && !isNew) {
+            continue; // exact-duplicate position already emitted — drop it (same as the GoBot path)
+          }
+          dataset.add(new TrainingRecord(features, target));
         }
       }
 
@@ -410,7 +425,14 @@ public class SelfPlayGenerator {
       if (rawPositions != null) {
         int every = Math.max(1, config.rawSampleEvery);
         for (int i = 0; i < turns.size(); i += every) {
-          rawPositions.add(toRawPosition(turns.get(i), winner));
+          TurnData t = turns.get(i);
+          if (config.dedup
+              && !rawSeen.add(
+                  GoState.fromBoard(t.board, t.activePlayer, GoState.ACTIONS_PER_TURN, NO_NEUTRALS)
+                      .hash())) {
+            continue; // exact-duplicate position already exported
+          }
+          rawPositions.add(toRawPosition(t, winner));
         }
       }
     }

@@ -1,15 +1,9 @@
 package com.engine.nnue_trainer.train;
 
-import com.engine.nnue_trainer.board.Action;
 import com.engine.nnue_trainer.board.Board;
-import com.engine.nnue_trainer.board.Cell;
-import com.engine.nnue_trainer.board.CellKind;
-import com.engine.nnue_trainer.board.MoveAction;
-import com.engine.nnue_trainer.board.PlaceNeutralsAction;
-import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUETrainer;
-import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -23,7 +17,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 public class GameImporter {
@@ -42,6 +35,7 @@ public class GameImporter {
     Set<String> seenPgn = new HashSet<>();
     int importedGames = 0;
     int skippedDuplicates = 0;
+    int skippedIllegal = 0;
 
     StringBuilder sql =
         new StringBuilder(
@@ -68,20 +62,28 @@ public class GameImporter {
             skippedDuplicates++;
             continue;
           }
-          examples.addAll(replayGame(gameId, pgnContent, result));
+          List<NNUETrainer.TrainingExample> replayed = replayGame(gameId, pgnContent, result);
+          if (replayed == null) {
+            skippedIllegal++;
+            continue;
+          }
+          examples.addAll(replayed);
           importedGames++;
         }
       }
     }
 
-    return new ImportResult(examples, importedGames, skippedDuplicates);
+    return new ImportResult(examples, importedGames, skippedDuplicates, skippedIllegal);
   }
 
+  /** Replays a game into training examples; empty when the rules reject one of its turns. */
   public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result)
       throws IOException {
-    return replayGame(-1L, pgnContent, result);
+    List<NNUETrainer.TrainingExample> examples = replayGame(-1L, pgnContent, result);
+    return examples == null ? List.of() : examples;
   }
 
+  /** Returns the turn-by-turn examples, or {@code null} if the rules reject a recorded turn. */
   private List<NNUETrainer.TrainingExample> replayGame(long gameId, String pgnContent, int result)
       throws IOException {
     JsonNode turns;
@@ -95,7 +97,8 @@ public class GameImporter {
     }
 
     List<NNUETrainer.TrainingExample> examples = new ArrayList<>();
-    Board board = initialBoard();
+    Board board = GamesDbReplay.initialBoard(12, 12);
+    boolean[] neutralUsed = new boolean[2];
 
     for (JsonNode turn : turns) {
       int player = requiredInt(turn, "player", "Player");
@@ -107,9 +110,23 @@ public class GameImporter {
         if (!moves.isArray()) {
           throw new IOException("moves must be an array for game " + gameId);
         }
-        for (JsonNode move : moves) {
-          Action action = parseAction(move);
-          board = SearchEngine.applyAction(board, player, action);
+        // Same legality-checked replay the miners use, so a recorded turn the rules reject (a
+        // fourth action, a mid-turn or repeated neutral pair, a disconnected/ineligible target)
+        // skips the game instead of training on a board the game never contained. It also carries
+        // the board-transition fidelity SearchEngine.applyAction lacks: captures are FORTIFIED and
+        // cells that lose base-connectivity are kept.
+        GoState state;
+        try {
+          state = GamesDbReplay.applyTurn(board, player, moves, neutralUsed);
+        } catch (RuntimeException e) {
+          throw new IOException("Invalid move for game " + gameId, e);
+        }
+        if (state == null) {
+          return null;
+        }
+        board = state.toBoard();
+        for (int p = 1; p <= 2; p++) {
+          neutralUsed[p - 1] = state.neutralUsed(p);
         }
       }
 
@@ -119,44 +136,6 @@ public class GameImporter {
     }
 
     return examples;
-  }
-
-  private static Board initialBoard() {
-    Board board = new Board(12, 12);
-    board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(11, 11, new Cell(2, CellKind.BASE));
-    return board;
-  }
-
-  private static Action parseAction(JsonNode move) throws IOException {
-    String type = requiredText(move, "type", "Type").toLowerCase(Locale.ROOT);
-    if ("place".equals(type) || "attack".equals(type) || "move".equals(type)) {
-      return new MoveAction(
-          new Pos(requiredInt(move, "row", "Row"), requiredInt(move, "col", "Col")));
-    }
-    if ("neutral".equals(type) || "neutrals".equals(type)) {
-      JsonNode cells = move.get("cells");
-      if (cells == null) {
-        cells = move.get("Cells");
-      }
-      if (cells == null || !cells.isArray() || cells.size() != 2) {
-        throw new IOException("neutral action must contain exactly two cells");
-      }
-      return new PlaceNeutralsAction(
-          new Pos(requiredInt(cells.get(0), "row", "Row"), requiredInt(cells.get(0), "col", "Col")),
-          new Pos(
-              requiredInt(cells.get(1), "row", "Row"), requiredInt(cells.get(1), "col", "Col")));
-    }
-    throw new IOException("Unsupported move type: " + type);
-  }
-
-  private static String requiredText(JsonNode node, String primary, String fallback)
-      throws IOException {
-    JsonNode value = node.has(primary) ? node.get(primary) : node.get(fallback);
-    if (value == null) {
-      throw new IOException("Missing required field: " + primary);
-    }
-    return value.asText();
   }
 
   private static int requiredInt(JsonNode node, String primary, String fallback)
@@ -177,6 +156,10 @@ public class GameImporter {
 
   public record ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {}
 
+  /** {@code skippedIllegalGames}: games dropped because the rules reject a recorded turn. */
   public record ImportResult(
-      List<NNUETrainer.TrainingExample> examples, int importedGames, int skippedDuplicates) {}
+      List<NNUETrainer.TrainingExample> examples,
+      int importedGames,
+      int skippedDuplicates,
+      int skippedIllegalGames) {}
 }

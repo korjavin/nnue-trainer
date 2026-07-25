@@ -24,16 +24,18 @@ Board sizes swept: 12x12, 9x9, 7x7, 5x5, 5x7 (`SEED = BASE_SEED + size_index`).
 - `corpus.sample.jsonl` — a 300-line slice, 60 lines/board size, for schema/CI
   checks. Each 60-line block is one contiguous game, not a stride, so it covers
   few distinct boards: 128 of the 300 lines are exact duplicates of another line.
-  No `FORTIFIED` cell appears in it — and that is structural, not a sampling
-  artefact: the negamax emit path applies moves with `SearchEngine.applyAction`,
-  which always writes `NORMAL` and never fortifies a captured cell, so the whole
-  corpus (and the dictionary mined from it) is fortification-free while real
-  games are not. Re-running the generator as-is will not fix this. The full
-  `corpus.jsonl`
+  No `FORTIFIED` cell appears in it — that was structural, not a sampling
+  artefact: the negamax emit path applied moves with `SearchEngine.applyAction`,
+  which always writes `NORMAL` and never fortifies a captured cell (and erases
+  cells that lose base-connectivity), so this committed corpus (and the
+  dictionary mined from it) is fortification-free while real games are not. The
+  generator now applies the canonical rules (`GoState.applyAction`), so
+  **re-running the command above does fix it** — the committed sample is simply
+  older than the fix. The full `corpus.jsonl`
   (~181 MB, 122,382 positions) is **gitignored**; regenerate it with the command
   above.
 
-## STALE: this corpus predates three `SelfPlayGenerator` fixes
+## STALE: this corpus predates six `SelfPlayGenerator` fixes
 Everything below (the position counts, the re-mining tables, and the promoted
 `nnue_v2_dictionary.json`) was measured on output from a generator that:
 1. spun on a territory tie, re-snapshotting the finished board into the dataset
@@ -44,7 +46,13 @@ Everything below (the position counts, the re-mining tables, and the promoted
    positions carry up to 18 NEUTRAL cells where the rules allow 4;
 4. deduplicated positions on `Arrays.hashCode(float[864])`, which for a 0/1
    vector has only ~512 reachable values — so an export kept at most ~512
-   distinct positions and dropped the rest as false duplicates.
+   distinct positions and dropped the rest as false duplicates;
+5. applied moves with `SearchEngine.applyAction` instead of the canonical rules,
+   so every position after the first capture is unreachable in a real game (no
+   fortification, plus disconnected cells erased — see above);
+6. ignored `config.dedup` entirely on the negamax path (it only fed
+   `distinctGameRatio`), so this corpus contains its exact duplicates even
+   though the run reported `dedup=true`.
 
 Rerunning the command above today will NOT reproduce these numbers. Regenerate
 the corpus, re-mine, and re-promote the dictionary before drawing conclusions

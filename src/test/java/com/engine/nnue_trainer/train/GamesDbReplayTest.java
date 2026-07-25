@@ -98,24 +98,29 @@ public class GamesDbReplayTest {
    */
   @Test
   public void testCaptureFortifiesAndDisconnectedCellsSurvive() {
-    // p1 chains base(0,0) -> (0,1) -> (0,2); p2 then captures the link at (0,1).
+    // p1 chains base(0,0) -> (0,1) -> (0,2); p2 walks its diagonal (three actions per turn, as the
+    // rules allow) and then captures the link at (0,1).
     JsonNode t =
         turns(
             "["
                 + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
                 + "{\"type\":\"place\",\"row\":0,\"col\":2}]},"
                 + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":6,\"col\":6},"
-                + "{\"type\":\"place\",\"row\":5,\"col\":5},{\"type\":\"place\",\"row\":4,\"col\":4},"
-                + "{\"type\":\"place\",\"row\":3,\"col\":3},{\"type\":\"place\",\"row\":2,\"col\":2},"
-                + "{\"type\":\"place\",\"row\":1,\"col\":1},"
-                + "{\"type\":\"attack\",\"row\":0,\"col\":1}]},"
+                + "{\"type\":\"place\",\"row\":5,\"col\":5},"
+                + "{\"type\":\"place\",\"row\":4,\"col\":4}]},"
+                + "{\"player\":1,\"moves\":[]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":3,\"col\":3},"
+                + "{\"type\":\"place\",\"row\":2,\"col\":2},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":1}]},"
+                + "{\"player\":1,\"moves\":[]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"attack\",\"row\":0,\"col\":1}]},"
                 + "{\"player\":1,\"moves\":[]}"
                 + "]");
 
     GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
 
     assertNull(r.skipReason);
-    var last = r.snapshots.get(2).board;
+    var last = r.snapshots.get(6).board;
     assertEquals(2, last.getCell(0, 1).owner, "captured cell changes owner");
     assertEquals(CellKind.FORTIFIED, last.getCell(0, 1).kind, "capturing a NORMAL cell fortifies");
     // (0,2) is now cut off from p1's base — the real rules keep it on the board.
@@ -148,6 +153,73 @@ public class GamesDbReplayTest {
     GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
     assertEquals("replay_error", r.skipReason);
     assertNull(r.snapshots);
+  }
+
+  /**
+   * The turn-scoped rules only bite if {@code movesLeft} decrements across a turn. Rebuilding the
+   * state per move (with {@code movesLeft} reset to ACTIONS_PER_TURN) replayed a mid-turn neutral —
+   * which the server rejects, since a neutral pair is a turn-opening action — as legal.
+   */
+  @Test
+  public void testSkipMidTurnNeutral() {
+    JsonNode t =
+        turns(
+            "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":0},"
+                + "{\"type\":\"neutral\",\"cells\":[{\"row\":0,\"col\":1},{\"row\":1,\"col\":0}]}]}]");
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+    assertEquals("illegal_move", r.skipReason);
+    assertNull(r.snapshots);
+  }
+
+  /** Same root cause: a turn carrying more than ACTIONS_PER_TURN actions cannot exist. */
+  @Test
+  public void testSkipTurnWithTooManyActions() {
+    JsonNode t =
+        turns(
+            "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":0},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":0,\"col\":2}]}]");
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+    assertEquals("illegal_move", r.skipReason);
+    assertNull(r.snapshots);
+  }
+
+  /** A neutral placement ends the turn, so an action recorded after it is out of rules too. */
+  @Test
+  public void testSkipActionAfterNeutralInSameTurn() {
+    JsonNode t =
+        turns(
+            "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":0},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":1}]},"
+                + "{\"player\":2,\"moves\":[]},"
+                + "{\"player\":1,\"moves\":[{\"type\":\"neutral\",\"cells\":"
+                + "[{\"row\":0,\"col\":1},{\"row\":1,\"col\":0}]},"
+                + "{\"type\":\"place\",\"row\":0,\"col\":2}]}]");
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+    assertEquals("illegal_move", r.skipReason);
+    assertNull(r.snapshots);
+  }
+
+  /** Three actions in one turn stay legal — the fix must not reject ordinary full turns. */
+  @Test
+  public void testFullThreeActionTurnIsLegal() {
+    JsonNode t =
+        turns(
+            "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":0},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":1}]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":7,\"col\":6},"
+                + "{\"type\":\"place\",\"row\":6,\"col\":7},"
+                + "{\"type\":\"place\",\"row\":6,\"col\":6}]},"
+                + "{\"player\":1,\"moves\":[]}]");
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+    assertNull(r.skipReason);
+    assertEquals(3, r.snapshots.size());
+    assertEquals(1, r.snapshots.get(2).board.getCell(1, 1).owner);
+    assertEquals(2, r.snapshots.get(2).board.getCell(6, 6).owner);
   }
 
   @Test

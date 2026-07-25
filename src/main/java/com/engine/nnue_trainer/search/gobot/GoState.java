@@ -221,6 +221,20 @@ public final class GoState {
     return fromBoard(board, currentPlayer, ACTIONS_PER_TURN, new boolean[2]).outcomeWinner();
   }
 
+  /**
+   * Canonical single-action board transition for a plain {@link Board} snapshot — the real server
+   * rules ({@link #mutate}), exposed once so every replay / self-play loop stops re-deriving them.
+   * Use this instead of {@code SearchEngine.applyAction}, which writes a captured cell as {@code
+   * NORMAL} (the rules FORTIFY it) and erases cells that lose base-connectivity (the rules keep
+   * them). Only the grid is returned, and the grid depends on neither {@code movesLeft} nor {@code
+   * neutralUsed}, so callers need not thread the turn bookkeeping through.
+   */
+  public static Board applyAction(Board board, int player, Action action) {
+    return fromBoard(board, player, ACTIONS_PER_TURN, new boolean[2])
+        .applyGenerated(action)
+        .toBoard();
+  }
+
   private int ownedCells(int player) {
     int count = 0;
     for (Cell cell : cells) {
