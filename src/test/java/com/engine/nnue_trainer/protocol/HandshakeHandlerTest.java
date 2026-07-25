@@ -142,8 +142,7 @@ public class HandshakeHandlerTest {
   public void testPeriodicTimerFiresChallenge() {
     ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
     HandshakeHandler handler =
-        new HandshakeHandler(
-            messageSender, () -> false, scheduler, new Random(1), true, 300);
+        new HandshakeHandler(messageSender, () -> false, scheduler, new Random(1), true, 300);
 
     handler.start();
 

@@ -46,7 +46,9 @@ public class HandshakeHandler {
     this(messageSender, () -> false);
   }
 
-  /** Production constructor: injectable in-game check, env-derived config + own scheduler/Random. */
+  /**
+   * Production constructor: injectable in-game check, env-derived config + own scheduler/Random.
+   */
   public HandshakeHandler(MessageSender messageSender, BooleanSupplier isInGame) {
     this(
         messageSender,
