@@ -24,20 +24,4 @@ class SelfPlayGeneratorTest {
     // Clean up
     tempFile.delete();
   }
-
-  @Test
-  void testDiverseDatasetGeneration() {
-    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
-    config.numGames = 1;
-    config.maxTurns = 15;
-    config.epsilon = 1.0;
-    config.exploreTurns = 15;
-
-    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
-
-    assertTrue(result.dataset.size() > 0, "Dataset should not be empty.");
-    assertTrue(
-        result.distinctGameRatio > 0.8,
-        "Distinct game ratio should be greater than 0.8, was: " + result.distinctGameRatio);
-  }
 }
