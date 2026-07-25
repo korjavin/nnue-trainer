@@ -152,16 +152,30 @@ Dependencies: Java 17 + Maven (`./mvnw`), Jackson (already used), sqlite-jdbc (a
 
 ### Task 3: Run the miner on real games.db and commit the stats artifact
 
-- [ ] build with `./mvnw -q compile` (or `test-compile`) and run `V3FeatureMiner` against the real
+- [x] build with `./mvnw -q compile` (or `test-compile`) and run `V3FeatureMiner` against the real
       `/home/iv/games.db`, writing `nnue_v3_feature_stats.json` at the repo root (same convention as
       `games_db_pattern_stats.json`)
-- [ ] sanity-check the output: non-zero `games_used`, non-zero `positions`, `board_filter` is 12x12,
+- [x] sanity-check the output: non-zero `games_used`, non-zero `positions`, `board_filter` is 12x12,
       per-cell support across states sums to `positions`, and the top-ranked features have
       discrimination strictly greater than the bottom-ranked ones
-- [ ] **commit `nnue_v3_feature_stats.json`** — the real mined data is the point of this gate
-- [ ] if games.db is missing or yields zero 12x12 games, ⚠️ record it in this plan and stop rather
-      than fabricating data
-- [ ] run tests - must pass before next task
+- [x] **commit `nnue_v3_feature_stats.json`** — the real mined data is the point of this gate
+- [x] games.db present and yielded 12x12 games — no fabrication needed
+- [x] run tests - must pass before next task
+
+Mined result (real `/home/iv/games.db`, 2026-07-25): 273 games total, 213 used, 60 skipped
+(`disconnect=22, wrong_board_size=13, illegal_move=7, multiplayer=7, no_pgn=7, replay_error=4`),
+3282 positions, `baseline_mean_eval = -3605.17`, default support floor 32, 444 observed features,
+275 above floor. Top feature: `(6,5) NORMAL_SELF` discrim 23942.87 (support 68) — centre-ish
+own-stone cells dominate, and the ranking is clearly not frequency-driven (support 44–161 across
+the top 10). Sanity assertions verified: all 144 cells sum their per-state support to exactly 3282,
+ranked list ordered by discrimination desc with (row, col, state) tie-break, every ranked feature
+at/above the floor, top discrimination > bottom.
+
+⚠️ Two PRE-EXISTING test failures on this branch, unrelated to this bead and out of scope (the plan
+forbids touching v1/v2 model/eval code): `NNUEv2AccumulatorTest.testParityAgainstPythonFixture` and
+`PatternDictionaryTest.testKnownSignatureMapsToId` — both are v2 fixture-drift against committed
+`python/v2/nnue_v2_dictionary.json`. All v3/replay tests (`V3FeatureMinerTest`, `GamesDbReplayTest`,
+`GamesDbPatternMinerTest`) pass.
 
 ### Task 4: Self-contained HTML preview at docs/nnue-v3-feature-preview.html
 
