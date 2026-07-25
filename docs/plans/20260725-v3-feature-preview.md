@@ -179,29 +179,33 @@ forbids touching v1/v2 model/eval code): `NNUEv2AccumulatorTest.testParityAgains
 
 ### Task 4: Self-contained HTML preview at docs/nnue-v3-feature-preview.html
 
-- [ ] create `docs/nnue-v3-feature-preview.html` following the structure and design language of
+- [x] create `docs/nnue-v3-feature-preview.html` following the structure and design language of
       `docs/games-db-features.html`: single file, data inlined as `<script>const DATA = {...}` from
       `nnue_v3_feature_stats.json`, inline CSS/JS, **no external assets/CDN/fonts**, theme-aware via
       `prefers-color-scheme`, responsive, reusing the `--c0..--c7` cell-code colors
-- [ ] headline stats band: games used/skipped, positions, baseline mean eval, support floor,
+- [x] headline stats band: games used/skipped, positions, baseline mean eval, support floor,
       features above floor, distinct features
-- [ ] **12x12 board heatmaps**: one board per cell-state (self/opp/base/fortified/neutral/empty),
+- [x] **12x12 board heatmaps**: one board per cell-state (self/opp/base/fortified/neutral/empty),
       each cell shaded by that `(r,c,state)` feature's signed deviation `mean_eval -
       baseline_mean_eval` (diverging scale: positive = good-for-STM, negative = bad-for-STM),
       intensity by magnitude, with below-floor cells visually muted; hover/title shows support,
       mean_eval, discrimination, rank
-- [ ] **ranked table** of the top features (row, col, state, discrimination, mean_eval, support,
+- [x] **ranked table** of the top features (row, col, state, discrimination, mean_eval, support,
       rank), sortable by clicking a column header, defaulting to discrimination descending
-- [ ] legend for the cell-state colors and the diverging eval scale, plus a short "how to read this"
+- [x] legend for the cell-state colors and the diverging eval scale, plus a short "how to read this"
       note stating explicitly that ranking is by **eval-discrimination, not frequency** (frequency
       ranking was the v2 bug), that features are absolute board positions from the side-to-move's
       perspective, and that this is a pre-model preview with no trained weights in it
-- [ ] verify the page opens standalone with no network requests and renders in both light and dark
-      color schemes
-- [ ] write a test asserting the committed HTML is self-contained and in sync with the stats: no
+- [x] verify the page opens standalone with no network requests and renders in both light and dark
+      color schemes (no-network verified by grep + test; DOM verified by executing the page under
+      jsdom — 6 tiles, 8 boards x 144 cells, 444 table rows, sorting works. ⚠️ no browser is
+      installed on this host, so the light/dark **visual** render was not screenshotted; the theme
+      mechanism is the same `prefers-color-scheme` + `[data-theme]` CSS-variable block already
+      shipped in `docs/games-db-features.html`)
+- [x] write a test asserting the committed HTML is self-contained and in sync with the stats: no
       `http://`/`https://`/`src=`-to-remote references, and the inlined `DATA` block's headline
       numbers (positions, feature count) match `nnue_v3_feature_stats.json`
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 5: Verify acceptance criteria
 
