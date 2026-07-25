@@ -33,8 +33,9 @@ public class BotWebSocketClient extends WebSocketClient {
   public BotWebSocketClient(URI serverUri, SearchEngine searchEngine) {
     super(serverUri);
     MessageSender sender = this::send;
-    this.handshakeHandler = new HandshakeHandler(sender);
     this.gameLoopHandler = new GameLoopHandler(sender, searchEngine);
+    this.handshakeHandler = new HandshakeHandler(sender, gameLoopHandler::isInGame);
+    handshakeHandler.start();
   }
 
   public BotWebSocketClient() throws URISyntaxException {
@@ -44,6 +45,7 @@ public class BotWebSocketClient extends WebSocketClient {
   /** Stop reconnecting and release the worker thread (e.g. on intentional shutdown). */
   public void shutdown() {
     shuttingDown = true;
+    handshakeHandler.shutdown();
     worker.shutdownNow();
   }
 

@@ -1,5 +1,6 @@
 package com.engine.nnue_trainer.protocol;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -62,6 +63,18 @@ public class GameLoopHandlerTest {
     assertTrue(sentMessage.contains("\"depth\""));
     assertTrue(sentMessage.contains("\"nodesEvaluated\""));
     assertTrue(sentMessage.contains("\"timeMs\""));
+  }
+
+  @Test
+  public void testIsInGame_falseInitially_trueAfterStart_falseAfterEnd() {
+    assertFalse(gameLoopHandler.isInGame());
+
+    gameLoopHandler.handleMessage(
+        "{\"type\":\"multiplayer_game_start\",\"gameId\":\"game-123\",\"yourPlayer\":1,\"rows\":3,\"cols\":3}");
+    assertTrue(gameLoopHandler.isInGame());
+
+    gameLoopHandler.handleMessage("{\"type\":\"game_end\",\"winner\":1}");
+    assertFalse(gameLoopHandler.isInGame());
   }
 
   @Test
