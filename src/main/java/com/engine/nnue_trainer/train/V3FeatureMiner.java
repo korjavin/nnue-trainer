@@ -173,6 +173,10 @@ public final class V3FeatureMiner {
     List<String> positional = new ArrayList<>();
     for (int i = 0; i < args.length; i++) {
       if ("--min-support".equals(args[i])) {
+        if (i + 1 >= args.length) {
+          System.err.println("--min-support needs a value");
+          System.exit(1);
+        }
         minSupportFlag = Integer.parseInt(args[++i]);
       } else {
         positional.add(args[i]);
@@ -280,7 +284,7 @@ public final class V3FeatureMiner {
       Feature f = features.get(i);
       System.out.printf(
           "#%-2d (%2d,%2d) %-18s discrim=%8.2f mean_eval=%9.2f support=%d%n",
-          f.rank, f.row, f.col, f.stateName(), f.discrimination, f.meanEval, f.support);
+          f.rank + 1, f.row, f.col, f.stateName(), f.discrimination, f.meanEval, f.support);
     }
     System.out.println("output             : " + out.toAbsolutePath());
   }

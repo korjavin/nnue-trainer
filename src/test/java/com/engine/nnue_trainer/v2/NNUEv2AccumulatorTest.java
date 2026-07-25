@@ -17,10 +17,10 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * Byte-for-byte parity against the Python contract: the Java accumulator's
- * per-perspective (id -> count) maps must equal the committed Python-generated
- * fixture ({@code src/test/resources/v2/accumulator_parity_fixture.json}) using
- * the SAME promoted dictionary both sides consume.
+ * Byte-for-byte parity against the Python contract: the Java accumulator's per-perspective (id ->
+ * count) maps must equal the committed Python-generated fixture ({@code
+ * src/test/resources/v2/accumulator_parity_fixture.json}) using the SAME promoted dictionary both
+ * sides consume.
  */
 public class NNUEv2AccumulatorTest {
 
@@ -62,8 +62,7 @@ public class NNUEv2AccumulatorTest {
     // which the promoted dictionary — all bucket 7 — cannot exercise).
     PatternContract.Window near = new PatternContract.Window(2, 2, symbols, 3);
     assertEquals(
-        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|3",
-        NNUEv2Accumulator.signature(near));
+        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4|3", NNUEv2Accumulator.signature(near));
   }
 
   @Test

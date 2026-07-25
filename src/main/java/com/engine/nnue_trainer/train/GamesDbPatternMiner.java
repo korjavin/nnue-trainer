@@ -41,7 +41,6 @@ import java.util.TreeMap;
 public final class GamesDbPatternMiner {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final int MOVES_LEFT = GamesDbReplay.MOVES_LEFT; // fresh turn start
   private static final int PATTERN_CAP =
       500; // patterns[] top-N by count (meta counts ALL distinct)
   private static final int TOP_EVAL_N = 50; // flagged top-N by |mean eval|
@@ -130,7 +129,8 @@ public final class GamesDbPatternMiner {
         for (GamesDbReplay.Snapshot s : replay.snapshots) {
           positions++;
           List<PatternContract.Window> windows = PatternContract.extractWindows(s.board, s.stm);
-          int posEval = HandTunedEval.staticEval(s.board, s.stm, MOVES_LEFT, s.neutralUsed);
+          int posEval =
+              HandTunedEval.staticEval(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
           Set<String> distinctInPos = new HashSet<>();
           for (PatternContract.Window w : windows) {
             windowOccurrences++;
@@ -224,7 +224,7 @@ public final class GamesDbPatternMiner {
     meta.put("window_occurrences", windowOccurrences);
     meta.put("distinct_patterns", accs.size());
     meta.put("pattern_cap", PATTERN_CAP);
-    meta.put("moves_left_assumption", MOVES_LEFT);
+    meta.put("moves_left_assumption", GamesDbReplay.MOVES_LEFT);
     meta.put(
         "sign_convention",
         "mean_handtuned_eval is STM-relative (positive = good for the side to move); "

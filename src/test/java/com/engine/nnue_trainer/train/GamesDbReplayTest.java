@@ -87,6 +87,38 @@ public class GamesDbReplayTest {
     assertEquals(CellKind.EMPTY, b.getCell(5, 5).kind);
   }
 
+  /**
+   * The replay must use the real server rules, not {@code SearchEngine.applyAction}: capturing an
+   * opponent NORMAL cell FORTIFIES it, and a cell that loses base-connectivity STAYS on the board.
+   * The erasing variant contradicts games.db — 503 recorded attacks target cells it has emptied.
+   */
+  @Test
+  public void testCaptureFortifiesAndDisconnectedCellsSurvive() {
+    // p1 chains base(0,0) -> (0,1) -> (0,2); p2 then captures the link at (0,1).
+    JsonNode t =
+        turns(
+            "["
+                + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+                + "{\"type\":\"place\",\"row\":0,\"col\":2}]},"
+                + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":6,\"col\":6},"
+                + "{\"type\":\"place\",\"row\":5,\"col\":5},{\"type\":\"place\",\"row\":4,\"col\":4},"
+                + "{\"type\":\"place\",\"row\":3,\"col\":3},{\"type\":\"place\",\"row\":2,\"col\":2},"
+                + "{\"type\":\"place\",\"row\":1,\"col\":1},"
+                + "{\"type\":\"attack\",\"row\":0,\"col\":1}]},"
+                + "{\"player\":1,\"moves\":[]}"
+                + "]");
+
+    GamesDbReplay.Replay r = GamesDbReplay.replay(8, 8, t);
+
+    assertNull(r.skipReason);
+    var last = r.snapshots.get(2).board;
+    assertEquals(2, last.getCell(0, 1).owner, "captured cell changes owner");
+    assertEquals(CellKind.FORTIFIED, last.getCell(0, 1).kind, "capturing a NORMAL cell fortifies");
+    // (0,2) is now cut off from p1's base — the real rules keep it on the board.
+    assertEquals(1, last.getCell(0, 2).owner, "disconnected cell must not be erased");
+    assertEquals(CellKind.NORMAL, last.getCell(0, 2).kind);
+  }
+
   @Test
   public void testSkipMissingPlayer() {
     JsonNode t = turns("[{\"turn\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]}]");

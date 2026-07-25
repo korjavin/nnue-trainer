@@ -162,20 +162,40 @@ Dependencies: Java 17 + Maven (`./mvnw`), Jackson (already used), sqlite-jdbc (a
 - [x] games.db present and yielded 12x12 games — no fabrication needed
 - [x] run tests - must pass before next task
 
-Mined result (real `/home/iv/games.db`, 2026-07-25): 273 games total, 213 used, 60 skipped
-(`disconnect=22, wrong_board_size=13, illegal_move=7, multiplayer=7, no_pgn=7, replay_error=4`),
-3282 positions, `baseline_mean_eval = -3605.17`, default support floor 32, 444 observed features,
-275 above floor. Top feature: `(6,5) NORMAL_SELF` discrim 23942.87 (support 68) — centre-ish
-own-stone cells dominate, and the ranking is clearly not frequency-driven (support 44–161 across
-the top 10). Sanity assertions verified: all 144 cells sum their per-state support to exactly 3282,
-ranked list ordered by discrimination desc with (row, col, state) tie-break, every ranked feature
-at/above the floor, top discrimination > bottom.
+Mined result (real `/home/iv/games.db`, 2026-07-25, after the ⚠️ replay-fidelity fix below): 273
+games total, 213 used, 60 skipped (`disconnect=22, wrong_board_size=13, illegal_move=7,
+multiplayer=7, no_pgn=7, replay_error=4`), 3282 positions, `baseline_mean_eval = -4571.33`, default
+support floor 32, 664 observed features, 408 above floor. Top feature: `(2,1) FORTIFIED_SELF`
+discrim 35578.62 (support 77) — captured/fortified cells near the bases dominate, and the ranking is
+clearly not frequency-driven (support 32–166 across the top 10). Sanity assertions verified: all 144
+cells sum their per-state support to exactly 3282, ranked list ordered by discrimination desc with
+(row, col, state) tie-break, every ranked feature at/above the floor, top discrimination > bottom.
 
-⚠️ Two PRE-EXISTING test failures on this branch, unrelated to this bead and out of scope (the plan
-forbids touching v1/v2 model/eval code): `NNUEv2AccumulatorTest.testParityAgainstPythonFixture` and
-`PatternDictionaryTest.testKnownSignatureMapsToId` — both are v2 fixture-drift against committed
-`python/v2/nnue_v2_dictionary.json`. All v3/replay tests (`V3FeatureMinerTest`, `GamesDbReplayTest`,
-`GamesDbPatternMinerTest`) pass.
+⚠️ Code-review fix (2026-07-25) — **the replay was not faithful to the real game rules**, so the
+first mined artifact was wrong and was regenerated. `GamesDbReplay` applied moves through
+`SearchEngine.applyAction`, which (a) never fortifies a captured cell and (b) erases cells that lose
+base-connectivity. Both contradict the server rules ported in `GoState` (`mutate` fortifies a
+captured NORMAL cell; `eliminateStuckPlayers` documents "eliminated players' cells stay on the
+board"), and games.db proves it: 503 recorded `attack` moves in 173 of 224 replayable 12x12 games
+target a cell the erasing variant has already emptied, while the `GoState.applyGenerated` rules
+replay all 9408 recorded moves consistently. Consequences of the old path: `FORTIFIED_SELF` /
+`FORTIFIED_OPPONENT` were **unobservable by construction** (0 of 444 features, i.e. 288 of the 1152
+candidates could never light up while the page reported them as merely unobserved), and every
+post-capture board — hence `baseline_mean_eval` and every `mean_eval` — was computed on a position
+that never occurred. Fixed in `GamesDbReplay` (the single shared helper, so both miners get it) by
+replaying through `GoState.applyGenerated`; `GoState.applyGenerated` was widened to public for this.
+Both artifacts were re-mined: `nnue_v3_feature_stats.json` (444 → 664 features, 275 → 408 above
+floor, top-10 now FORTIFIED-dominated) and `games_db_pattern_stats.json` (28357 → 48634 distinct
+patterns), and both HTML pages re-spliced. `GamesDbReplayTest` gained
+`testCaptureFortifiesAndDisconnectedCellsSurvive` to pin both rules.
+
+⚠️ Also fixed in review (the two failures previously recorded here as out-of-scope pre-existing):
+`NNUEv2AccumulatorTest.testParityAgainstPythonFixture` and
+`PatternDictionaryTest.testKnownSignatureMapsToId` were stale against the re-mined
+`python/v2/nnue_v2_dictionary.json` — the fixture was regenerated with
+`python/v2/gen_accumulator_fixture.py` and the hardcoded id literal was replaced by a read of the
+committed dictionary so a future re-mine cannot rot it. `./mvnw test` is now fully green (162 tests,
+0 failures) and `spotless:check` passes.
 
 ### Task 4: Self-contained HTML preview at docs/nnue-v3-feature-preview.html
 
@@ -214,15 +234,15 @@ forbids touching v1/v2 model/eval code): `NNUEv2AccumulatorTest.testParityAgains
       discrimination ranking with support floor, HTML board heatmap + ranked list
 - [x] verify NO model, regression, training or gauntlet code was added (this is the gate, not 6.1)
 - [x] verify `GamesDbPatternMiner` is behaviorally unchanged by the Task 1 refactor (its CLI still
-      runs and produces the same `games_db_pattern_stats.json` shape)
+      runs and produces the same `games_db_pattern_stats.json` shape) — ⚠️ byte-identity held for
+      the refactor itself, but the later replay-fidelity fix deliberately changes its output; its
+      artifact and HTML were re-mined together with the v3 ones
 - [x] verify edge cases: zero 12x12 games, support floor larger than any feature's support, a
       feature active in every position (discrimination ~0)
-- [x] run the full test suite (`./mvnw test`) — 161 tests, only the 2 documented PRE-EXISTING v2
-      fixture-drift failures remain (`NNUEv2AccumulatorTest.testParityAgainstPythonFixture`,
-      `PatternDictionaryTest.testKnownSignatureMapsToId`); this branch touches zero v2/nnue files
-      (`git diff --name-only 2138e9a..HEAD -- .../v2 .../nnue` is empty), so they are not ours and
-      the plan forbids fixing them here
-- [x] run the project's formatter/linter (spotless/checkstyle as configured) — all issues fixed
+- [x] run the full test suite (`./mvnw test`) — **162 tests, 0 failures** after the code-review pass
+      fixed the two stale v2 fixture tests (see the ⚠️ note under Task 3)
+- [x] run the project's formatter/linter (spotless/checkstyle as configured) — `spotless:check`
+      passes; the pre-existing unformatted `v2/` files were formatted in the review pass
 
 Acceptance evidence (2026-07-25):
 
@@ -239,15 +259,19 @@ Acceptance evidence (2026-07-25):
 - Refactor behavior-preserving: re-ran `GamesDbPatternMiner /home/iv/games.db
   /tmp/repro_pattern_stats.json` on the real DB — same console report (273 total, 222 used, 51
   skipped, 3406 positions, 28357 distinct patterns) and the output **diffs byte-identical** to the
-  committed `games_db_pattern_stats.json`.
+  committed `games_db_pattern_stats.json`. ⚠️ Superseded by the replay-fidelity fix: the miner is
+  still behaviorally identical *given the same replay*, but the replay itself was corrected, so the
+  committed artifact is now the re-mined one (222 used, 3406 positions, **48634** distinct patterns).
 - Edge cases covered by `V3FeatureMinerTest` (4 tests, pass): zero positions →
   `testEmptyStatsAndDefaultFloor` (empty ranking, floor clamps to 30); floor above every support →
   ➕ new `testFloorAboveEverySupportLeavesNothingRanked` (144 EMPTY features, all `rank = -1`);
   always-active feature → the `(0,0) EMPTY` assertion in
   `testMeanEvalDiscriminationAndSupportFloor` (support == positions, discrimination 0).
 - Formatter: `./mvnw spotless:apply` (google-java-format 1.35.0) — reformatted the two `train/`
-  files it owns. ⚠️ It also wanted to reformat four pre-existing unformatted `v2/` files; those were
-  reverted as out of scope (the plan forbids touching v2), so `spotless:check` still reports them.
+  files it owns, plus (in the review pass) the pre-existing unformatted `v2/` files, so
+  `spotless:check` is clean.
+- Preview page re-verified after the re-mine by executing it under jsdom: 6 tiles, 8 boards x 144
+  cells (1152), 664 table rows, column sorting works, zero JS errors, no network references.
 
 ### Task 6: [Final] Update documentation
 

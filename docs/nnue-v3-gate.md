@@ -20,6 +20,12 @@ side-to-move's perspective via `PatternContract.getSymbol`. Ranking is by **eval
 Frequency ranking was the v2 bug: it promoted the most common shapes, which are the least
 informative, and v2 lost the gauntlet 0-24.
 
+Positions come from replaying the recorded games with the real server rules (`GoState`, the port of
+`state.go`): capturing an opponent NORMAL cell **fortifies** it, and cells that lose base
+connectivity **stay on the board**. Replaying with `SearchEngine.applyAction` instead gets both
+backwards, which silently made `FORTIFIED_SELF`/`FORTIFIED_OPPONENT` unobservable and corrupted every
+post-capture board — if a future re-mine shows zero fortified features, that regression is back.
+
 Gate outcome: approve → d4a.6.1 proceeds; reject → the feature design is revised (e.g. pairwise or
 region features) before any model spend.
 

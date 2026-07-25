@@ -7,7 +7,7 @@ import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
 import com.engine.nnue_trainer.board.Pos;
-import com.engine.nnue_trainer.search.SearchEngine;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,11 +22,16 @@ import java.util.Locale;
  * <p>A "position" is the board <b>before</b> a turn; STM = that turn's player. Consumers evaluate
  * it with {@link #MOVES_LEFT} = 3 (fresh turn start — a fixed assumption; the real per-ply
  * movesLeft is not reconstructed from the PGN). Moves are applied through {@link
- * SearchEngine#applyAction} so virus-conversion/connectivity rules apply.
+ * GoState#applyGenerated}, the faithful port of the server's {@code state.go} transition — NOT
+ * {@code SearchEngine.applyAction}, which diverges from the real rules in two ways that corrupt a
+ * replay: it never fortifies a captured cell, and it erases cells that lose base-connectivity. Both
+ * are contradicted by games.db itself: 503 recorded {@code attack} moves (in 173 of 224 replayable
+ * 12x12 games) target a cell the erasing variant has already emptied, while the {@code
+ * applyGenerated} rules replay every recorded move consistently.
  *
  * <p>A game yields a skip reason instead of snapshots when a turn has no {@code player} ({@code
- * no_player}), a player outside 1..2 ({@code multiplayer} — applyAction only resolves connectivity
- * for players 1-2), or replay throws ({@code replay_error}).
+ * no_player}), a player outside 1..2 ({@code multiplayer} — the replay only models the 1v1 rules),
+ * or replay throws ({@code replay_error}).
  */
 public final class GamesDbReplay {
 
@@ -85,7 +90,10 @@ public final class GamesDbReplay {
             if (action instanceof PlaceNeutralsAction) {
               neutralUsed[player - 1] = true;
             }
-            board = SearchEngine.applyAction(board, player, action);
+            board =
+                GoState.fromBoard(board, player, GoState.ACTIONS_PER_TURN, neutralUsed)
+                    .applyGenerated(action)
+                    .toBoard();
           }
         }
       }
@@ -96,7 +104,7 @@ public final class GamesDbReplay {
   }
 
   /** Empty board with the two bases in opposite corners. */
-  public static Board initialBoard(int rows, int cols) {
+  static Board initialBoard(int rows, int cols) {
     Board board = new Board(rows, cols);
     board.setCell(0, 0, new Cell(1, CellKind.BASE));
     board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
@@ -104,7 +112,7 @@ public final class GamesDbReplay {
   }
 
   /** Parse one stored move node into an engine action. */
-  public static Action parseAction(JsonNode move) {
+  private static Action parseAction(JsonNode move) {
     String type = move.get("type").asText().toLowerCase(Locale.ROOT);
     if ("place".equals(type) || "attack".equals(type) || "move".equals(type)) {
       return new MoveAction(new Pos(move.get("row").asInt(), move.get("col").asInt()));

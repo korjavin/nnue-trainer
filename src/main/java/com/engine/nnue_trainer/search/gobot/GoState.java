@@ -289,7 +289,7 @@ public final class GoState {
    * emitted by {@link GoPosition}. Skips the legality traversal but shares the mutation,
    * elimination, terminal, and turn-advance semantics with {@link #apply}.
    */
-  GoState applyGenerated(Action action) {
+  public GoState applyGenerated(Action action) {
     return mutate(action);
   }
 

@@ -65,8 +65,13 @@ class TestTraining(unittest.TestCase):
         self.assertEqual(a, b)
 
     def test_read_num_patterns_from_real_dictionary(self):
+        # Not hardcoded: the count changes on every re-mine, so assert the reader agrees with the
+        # committed dictionary AND that the dictionary is self-consistent (metadata vs entries).
         dict_path = os.path.join(os.path.dirname(__file__), "nnue_v2_dictionary.json")
-        self.assertEqual(read_num_patterns(dict_path), 5571)
+        with open(dict_path) as f:
+            raw = json.load(f)
+        self.assertEqual(read_num_patterns(dict_path), raw["metadata"]["num_patterns"])
+        self.assertEqual(read_num_patterns(dict_path), len(raw["pattern_to_id"]))
 
 
 class TestMain(unittest.TestCase):
