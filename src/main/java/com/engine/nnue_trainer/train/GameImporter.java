@@ -1,15 +1,7 @@
 package com.engine.nnue_trainer.train;
 
-import com.engine.nnue_trainer.board.Action;
-import com.engine.nnue_trainer.board.Board;
-import com.engine.nnue_trainer.board.Cell;
-import com.engine.nnue_trainer.board.CellKind;
-import com.engine.nnue_trainer.board.MoveAction;
-import com.engine.nnue_trainer.board.PlaceNeutralsAction;
-import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUETrainer;
-import com.engine.nnue_trainer.search.SearchEngine;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -23,7 +15,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 public class GameImporter {
@@ -42,6 +33,7 @@ public class GameImporter {
     Set<String> seenPgn = new HashSet<>();
     int importedGames = 0;
     int skippedDuplicates = 0;
+    int skippedIllegal = 0;
 
     StringBuilder sql =
         new StringBuilder(
@@ -61,111 +53,76 @@ public class GameImporter {
 
       try (ResultSet rows = statement.executeQuery()) {
         while (rows.next()) {
-          long gameId = rows.getLong("id");
           int result = rows.getInt("result");
           String pgnContent = rows.getString("pgn_content");
           if (options.deduplicatePgn() && !seenPgn.add(pgnContent)) {
             skippedDuplicates++;
             continue;
           }
-          examples.addAll(replayGame(gameId, pgnContent, result));
+          List<NNUETrainer.TrainingExample> replayed = replayPgn(pgnContent, result);
+          if (replayed == null) {
+            skippedIllegal++;
+            continue;
+          }
+          examples.addAll(replayed);
           importedGames++;
         }
       }
     }
 
-    return new ImportResult(examples, importedGames, skippedDuplicates);
+    return new ImportResult(examples, importedGames, skippedDuplicates, skippedIllegal);
   }
 
-  public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result)
-      throws IOException {
-    return replayGame(-1L, pgnContent, result);
+  /** Replays a game into training examples; empty when the game cannot be replayed. */
+  public List<NNUETrainer.TrainingExample> replayGame(String pgnContent, int result) {
+    List<NNUETrainer.TrainingExample> examples = replayPgn(pgnContent, result);
+    return examples == null ? List.of() : examples;
   }
 
-  private List<NNUETrainer.TrainingExample> replayGame(long gameId, String pgnContent, int result)
-      throws IOException {
+  /**
+   * Turn-by-turn examples, or {@code null} when the game is unusable — the rules reject a recorded
+   * turn, or the PGN is malformed. Both are per-game skips: a single bad row must not abort a
+   * retrain cycle and discard every example already accumulated.
+   *
+   * <p>Delegates to {@link GamesDbReplay}, the same legality-checked replay the miners use, so a
+   * turn the rules reject (a fourth action, a mid-turn or repeated neutral pair, a
+   * disconnected/ineligible target) skips the game instead of training on a board the game never
+   * contained, and captures/base-connectivity follow the real transition rather than {@code
+   * SearchEngine.applyAction}.
+   *
+   * <p>An example is the board <b>before</b> a turn, oriented to that turn's player — {@link
+   * GamesDbReplay}'s definition of a position, and the same convention {@code SelfPlayGenerator}
+   * records and the engine queries at inference. Labelling the board <b>after</b> the turn with the
+   * mover's perspective (what this did) orients the identical board the opposite way from every
+   * other producer, so the two corpora {@code PeriodicRetrainer} concatenates disagreed on which
+   * side of a position "self" means.
+   */
+  private List<NNUETrainer.TrainingExample> replayPgn(String pgnContent, int result) {
+    if (pgnContent == null || pgnContent.isBlank()) {
+      return null;
+    }
     JsonNode turns;
     try {
       turns = MAPPER.readTree(pgnContent);
     } catch (IOException e) {
-      throw new IOException("Invalid PGN JSON for game " + gameId, e);
+      return null;
     }
-    if (!turns.isArray()) {
-      throw new IOException("PGN must be an array for game " + gameId);
+    if (turns == null || !turns.isArray()) {
+      return null;
     }
 
-    List<NNUETrainer.TrainingExample> examples = new ArrayList<>();
-    Board board = initialBoard();
+    GamesDbReplay.Replay replay = GamesDbReplay.replay(12, 12, turns);
+    if (replay.skipReason != null) {
+      return null;
+    }
 
-    for (JsonNode turn : turns) {
-      int player = requiredInt(turn, "player", "Player");
-      JsonNode moves = turn.get("moves");
-      if (moves == null) {
-        moves = turn.get("Moves");
-      }
-      if (moves != null) {
-        if (!moves.isArray()) {
-          throw new IOException("moves must be an array for game " + gameId);
-        }
-        for (JsonNode move : moves) {
-          Action action = parseAction(move);
-          board = SearchEngine.applyAction(board, player, action);
-        }
-      }
-
+    List<NNUETrainer.TrainingExample> examples = new ArrayList<>(replay.snapshots.size());
+    for (GamesDbReplay.Snapshot s : replay.snapshots) {
       examples.add(
           new NNUETrainer.TrainingExample(
-              BoardFeatureMapper.map(board, player), target(result, player)));
+              BoardFeatureMapper.map(s.board, s.stm), target(result, s.stm)));
     }
-
     return examples;
-  }
-
-  private static Board initialBoard() {
-    Board board = new Board(12, 12);
-    board.setCell(0, 0, new Cell(1, CellKind.BASE));
-    board.setCell(11, 11, new Cell(2, CellKind.BASE));
-    return board;
-  }
-
-  private static Action parseAction(JsonNode move) throws IOException {
-    String type = requiredText(move, "type", "Type").toLowerCase(Locale.ROOT);
-    if ("place".equals(type) || "attack".equals(type) || "move".equals(type)) {
-      return new MoveAction(
-          new Pos(requiredInt(move, "row", "Row"), requiredInt(move, "col", "Col")));
-    }
-    if ("neutral".equals(type) || "neutrals".equals(type)) {
-      JsonNode cells = move.get("cells");
-      if (cells == null) {
-        cells = move.get("Cells");
-      }
-      if (cells == null || !cells.isArray() || cells.size() != 2) {
-        throw new IOException("neutral action must contain exactly two cells");
-      }
-      return new PlaceNeutralsAction(
-          new Pos(requiredInt(cells.get(0), "row", "Row"), requiredInt(cells.get(0), "col", "Col")),
-          new Pos(
-              requiredInt(cells.get(1), "row", "Row"), requiredInt(cells.get(1), "col", "Col")));
-    }
-    throw new IOException("Unsupported move type: " + type);
-  }
-
-  private static String requiredText(JsonNode node, String primary, String fallback)
-      throws IOException {
-    JsonNode value = node.has(primary) ? node.get(primary) : node.get(fallback);
-    if (value == null) {
-      throw new IOException("Missing required field: " + primary);
-    }
-    return value.asText();
-  }
-
-  private static int requiredInt(JsonNode node, String primary, String fallback)
-      throws IOException {
-    JsonNode value = node.has(primary) ? node.get(primary) : node.get(fallback);
-    if (value == null) {
-      throw new IOException("Missing required field: " + primary);
-    }
-    return value.asInt();
   }
 
   private static float target(int result, int player) {
@@ -177,6 +134,13 @@ public class GameImporter {
 
   public record ImportOptions(Path dbPath, String minStartedAt, boolean deduplicatePgn) {}
 
+  /**
+   * {@code skippedIllegalGames}: games dropped because they cannot be replayed — the rules reject a
+   * recorded turn, or the PGN is malformed.
+   */
   public record ImportResult(
-      List<NNUETrainer.TrainingExample> examples, int importedGames, int skippedDuplicates) {}
+      List<NNUETrainer.TrainingExample> examples,
+      int importedGames,
+      int skippedDuplicates,
+      int skippedIllegalGames) {}
 }

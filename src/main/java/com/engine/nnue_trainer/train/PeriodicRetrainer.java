@@ -9,6 +9,7 @@ import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.nnue.NNUETrainer;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
+import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -161,7 +162,7 @@ public class PeriodicRetrainer implements AutoCloseable {
       SearchEngine engine = currentPlayer == 1 ? playerOneEngine : playerTwoEngine;
       for (int actionIndex = 0; actionIndex < 3; actionIndex++) {
         if (engine.isTerminal(board)) {
-          return winner(board);
+          return GoState.outcomeWinner(board, currentPlayer);
         }
 
         boolean canPlaceNeutral = actionIndex == 0 && !neutralUsed[currentPlayer];
@@ -170,43 +171,28 @@ public class PeriodicRetrainer implements AutoCloseable {
                 board, currentPlayer, config.searchDepth(), canPlaceNeutral);
         Action action = result.bestAction;
         if (action == null) {
-          return 3 - currentPlayer;
+          // A stuck player is not an automatic loss: on 12x12 the board fills and both sides run
+          // out of moves at once, so awarding the win by turn parity decided the promotion
+          // gauntlet on a coin flip. Same rule the self-play generators use.
+          return GoState.outcomeWinner(board, currentPlayer);
         }
 
+        // GoState.applyAction, not SearchEngine.applyAction: the latter writes a captured cell as
+        // NORMAL (the rules FORTIFY it) and erases cells that lose base-connectivity (the rules
+        // keep them). The promotion decision below is settled by GoState.outcomeWinner's territory
+        // count, so scoring boards the legacy transition had already emptied handed the gauntlet
+        // to whichever side that rule happened to delete less of.
         if (action instanceof PlaceNeutralsAction) {
           neutralUsed[currentPlayer] = true;
-          board = SearchEngine.applyAction(board, currentPlayer, action);
+          board = GoState.applyAction(board, currentPlayer, action);
           break;
         }
-        board = SearchEngine.applyAction(board, currentPlayer, action);
+        board = GoState.applyAction(board, currentPlayer, action);
       }
       currentPlayer = 3 - currentPlayer;
     }
-    return 0;
-  }
-
-  private static int winner(Board board) {
-    boolean playerOneBase = false;
-    boolean playerTwoBase = false;
-    for (int row = 0; row < board.rows; row++) {
-      for (int col = 0; col < board.cols; col++) {
-        Cell cell = board.getCell(row, col);
-        if (cell.kind == CellKind.BASE) {
-          if (cell.owner == 1) {
-            playerOneBase = true;
-          } else if (cell.owner == 2) {
-            playerTwoBase = true;
-          }
-        }
-      }
-    }
-    if (playerOneBase && !playerTwoBase) {
-      return 1;
-    }
-    if (!playerOneBase && playerTwoBase) {
-      return 2;
-    }
-    return 0;
+    // Turn cap: territory, not a defaulted draw.
+    return GoState.outcomeWinner(board, currentPlayer);
   }
 
   private void writeMetadata(
@@ -226,6 +212,7 @@ public class PeriodicRetrainer implements AutoCloseable {
     metadata.examples = importResult.examples().size() + spResult.dataset.size();
     metadata.importedGames = importResult.importedGames() + spConfig.numGames;
     metadata.skippedDuplicateGames = importResult.skippedDuplicates();
+    metadata.skippedIllegalGames = importResult.skippedIllegalGames();
     metadata.finalMse = trainingResult.finalMse();
     metadata.candidateWins = evaluation.candidateWins();
     metadata.currentWins = evaluation.currentWins();
@@ -284,6 +271,7 @@ public class PeriodicRetrainer implements AutoCloseable {
     public int examples;
     public int importedGames;
     public int skippedDuplicateGames;
+    public int skippedIllegalGames;
     public float finalMse;
     public int candidateWins;
     public int currentWins;

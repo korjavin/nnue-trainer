@@ -19,13 +19,29 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
 public class SelfPlayGenerator {
+
+  /** Read-only "no neutral spent" flags for hash helpers that copy their input. */
+  private static final boolean[] NO_NEUTRALS = new boolean[2];
+
+  /**
+   * 64-bit FNV-1a over the feature bits. The previous key, {@code Arrays.hashCode}, is degenerate
+   * on these vectors: every element is 0f or 1f, and {@code floatToIntBits(1f) == 127 * 2^23}, so
+   * every hash is congruent mod 2^23 and only ~512 values are reachable for ANY 0/1 vector. Dedup
+   * therefore capped an export at ~512 positions and silently discarded the rest of the corpus.
+   */
+  static long positionKey(float[] features) {
+    long hash = 0xcbf29ce484222325L;
+    for (float f : features) {
+      hash = (hash ^ Float.floatToIntBits(f)) * 0x100000001b3L;
+    }
+    return hash;
+  }
 
   /** How a training record's target is labeled. */
   public enum LabelMode {
@@ -206,6 +222,12 @@ public class SelfPlayGenerator {
     // deterministic engines converge to near-identical games (distinct-ratio ~0.02). Exposing
     // these lets us explore every turn (EXPLORE_TURNS high) at a higher rate for diverse data.
     config.epsilon = envDouble("EPSILON", config.epsilon);
+    // Dedup drops records by default (first label wins); DEDUP=false is the escape hatch from a
+    // shell wrapper, since every other knob has one.
+    String dedup = System.getenv("DEDUP");
+    if (dedup != null && !dedup.isBlank()) {
+      config.dedup = Boolean.parseBoolean(dedup.trim());
+    }
     config.exploreTurns = envInt("EXPLORE_TURNS", config.exploreTurns);
     // EXPLORE_TEMP>0 switches GoBot self-play to near-best softmax sampling (diverse-but-sensible)
     // instead of uniform-random epsilon flailing.
@@ -237,6 +259,12 @@ public class SelfPlayGenerator {
     config.tdLeafWdlScale = envDouble("TDLEAF_WDL_SCALE", config.tdLeafWdlScale);
     String emit = System.getenv("EMIT");
     boolean rawOnly = emit != null && emit.trim().equalsIgnoreCase("raw");
+    if (rawOnly && config.rawOutPath == null) {
+      // EMIT=raw suppresses the v1 write, so without RAW_OUT a multi-hour run would exit 0 having
+      // written nothing at all. Fail before the run, like the GOBOT validator in generate().
+      System.err.println("EMIT=raw needs RAW_OUT set (it suppresses the v1 dataset write).");
+      System.exit(1);
+    }
 
     System.out.println(
         "Starting self-play: games="
@@ -328,9 +356,12 @@ public class SelfPlayGenerator {
       engine = new SearchEngine();
     }
 
-    Set<Integer> uniquePositionHashes = new HashSet<>();
+    Set<Long> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     List<RawPosition> rawPositions = config.rawOutPath != null ? new ArrayList<>() : null;
+    // Raw-corpus dedup needs a board-size-agnostic key: positionKey() hashes the 12x12-only v1
+    // feature vector, GoState.hash() hashes any (board, stm).
+    Set<Long> rawSeen = new HashSet<>();
 
     // TD-leaf raw target uses a fixed-depth GoBot search with the HAND_TUNED leaf. Pin that as the
     // process-wide default while generating (restored in finally) so the recorded search_wdl is
@@ -348,20 +379,32 @@ public class SelfPlayGenerator {
 
         int currentPlayer = 1;
         int winner = 0;
+        // Separate from `winner`: canonicalWinner returns 0 for a genuine territory tie, which is
+        // also the not-yet-decided sentinel. Overloading it let a tied game keep looping to
+        // maxTurns, re-snapshotting the same finished board into the dataset every iteration.
+        boolean decided = false;
+        // Neutral placement is one pair per player PER GAME (GoState.legalActions, and the live
+        // GameLoopHandler which tracks the same boolean[2]) — not per turn. Re-arming it every turn
+        // generated boards with far more neutrals than the rules allow.
+        boolean[] neutralUsed = new boolean[2];
 
         for (int turn = 0; turn < config.maxTurns; turn++) {
-          boolean canPlaceNeutral = true;
+          boolean canPlaceNeutral = !neutralUsed[currentPlayer - 1];
           for (int actionIdx = 0; actionIdx < 3; actionIdx++) {
+            // ...and it is a turn-opening action only (GoState.legalActions gates on
+            // movesLeft == ACTIONS_PER_TURN).
+            boolean mayPlaceNeutral = canPlaceNeutral && actionIdx == 0;
             // Collect board snapshot BEFORE move
-            turns.add(new TurnData(copyBoard(board), currentPlayer, canPlaceNeutral));
+            turns.add(new TurnData(copyBoard(board), currentPlayer, mayPlaceNeutral));
 
             List<Action> legalActions =
-                MoveGenerator.getLegalActions(currentPlayer, board, canPlaceNeutral);
+                MoveGenerator.getLegalActions(currentPlayer, board, mayPlaceNeutral);
             if (legalActions.isEmpty()) {
               // Terminal-by-base or a stuck current player: both decided by the real size-general
               // rule (last player able to move wins, territory tiebreak) rather than a base check /
               // auto-award to the opponent, so a simultaneous board-fill is scored by territory.
               winner = canonicalWinner(board, currentPlayer);
+              decided = true;
               break;
             }
 
@@ -374,12 +417,12 @@ public class SelfPlayGenerator {
               if (engine.getNnueModel() != null) {
                 chosenAction =
                     engine.findBestActionUsingModel(
-                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                            board, currentPlayer, config.searchDepth, mayPlaceNeutral)
                         .bestAction;
               } else {
                 chosenAction =
                     SearchEngine.findBestAction(
-                            board, currentPlayer, config.searchDepth, canPlaceNeutral)
+                            board, currentPlayer, config.searchDepth, mayPlaceNeutral)
                         .bestAction;
               }
               if (chosenAction == null) {
@@ -387,26 +430,31 @@ public class SelfPlayGenerator {
               }
             }
 
+            // GoState.applyAction, not SearchEngine.applyAction: the latter writes a captured cell
+            // as NORMAL (the rules FORTIFY it) and erases cells that lose base-connectivity (the
+            // rules keep them), so every generated position after the first capture was one the
+            // real game cannot reach. The negamax search still *searches* with that legacy
+            // transition — a strength issue, not a data one; the positions we record and label are
+            // now canonical.
+            board = GoState.applyAction(board, currentPlayer, chosenAction);
             if (chosenAction instanceof com.engine.nnue_trainer.board.PlaceNeutralsAction) {
-              canPlaceNeutral = false;
-              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
+              neutralUsed[currentPlayer - 1] = true; // spent for the rest of the GAME
               break; // turn ends immediately on placement
-            } else {
-              board = SearchEngine.applyAction(board, currentPlayer, chosenAction);
             }
 
             if (engine.isTerminal(board)) {
               winner = canonicalWinner(board, currentPlayer);
+              decided = true;
               break;
             }
           }
-          if (winner != 0) break;
+          if (decided) break;
           currentPlayer = 3 - currentPlayer;
         }
 
-        // Turn-capped games (loop exits with winner==0 and no terminal position reached) are still
+        // Turn-capped games (loop exits undecided and no terminal position reached) are still
         // decided by the real territory rule instead of defaulting to draw.
-        if (winner == 0) {
+        if (!decided) {
           winner = canonicalWinner(board, currentPlayer);
         }
 
@@ -424,10 +472,12 @@ public class SelfPlayGenerator {
                     winner,
                     config);
             float[] features = BoardFeatureMapper.map(turnData.board, turnData.activePlayer);
-            dataset.add(new TrainingRecord(features, target));
-
-            uniquePositionHashes.add(Arrays.hashCode(features));
             totalPositions++;
+            boolean isNew = uniquePositionHashes.add(positionKey(features));
+            if (config.dedup && !isNew) {
+              continue; // exact-duplicate position already emitted — drop it (as the GoBot path)
+            }
+            dataset.add(new TrainingRecord(features, target));
           }
         }
 
@@ -435,7 +485,15 @@ public class SelfPlayGenerator {
         if (rawPositions != null) {
           int every = Math.max(1, config.rawSampleEvery);
           for (int i = 0; i < turns.size(); i += every) {
-            rawPositions.add(toRawPosition(turns.get(i), winner, config));
+            TurnData t = turns.get(i);
+            if (config.dedup
+                && !rawSeen.add(
+                    GoState.fromBoard(
+                            t.board, t.activePlayer, GoState.ACTIONS_PER_TURN, NO_NEUTRALS)
+                        .hash())) {
+              continue; // exact-duplicate position already exported
+            }
+            rawPositions.add(toRawPosition(t, winner, config));
           }
         }
       }
@@ -538,7 +596,7 @@ public class SelfPlayGenerator {
     // uniform-epsilon fallback below is unchanged by default.
     GoBotExploration explore =
         new GoBotExploration(config.exploreTemperature > 0.0, config.exploreTemperature, random);
-    Set<Integer> uniquePositionHashes = new HashSet<>();
+    Set<Long> uniquePositionHashes = new HashSet<>();
     int totalPositions = 0;
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
@@ -591,7 +649,10 @@ public class SelfPlayGenerator {
         state = next;
       }
 
-      int winner = state.gameOver() ? state.winner() : 0;
+      // Same rule as the negamax path: a game that exits on the ply cap (or a stuck player) is
+      // decided by territory, not defaulted to a draw. outcomeWinner() reduces to winner()
+      // when a single side survives, so terminal games are unchanged.
+      int winner = state.gameOver() ? state.winner() : state.outcomeWinner();
       for (GoPly p : plies) {
         float outcome = winner == 0 ? 0f : (winner == p.sideToMove ? 1f : -1f);
         float target =
@@ -599,7 +660,7 @@ public class SelfPlayGenerator {
                 ? (float) ((1.0 - config.tdLambda) * p.searchValue + config.tdLambda * outcome)
                 : outcome;
         totalPositions++;
-        boolean isNew = uniquePositionHashes.add(Arrays.hashCode(p.features));
+        boolean isNew = uniquePositionHashes.add(positionKey(p.features));
         if (config.dedup && !isNew) {
           continue; // exact-duplicate position already emitted — drop it
         }

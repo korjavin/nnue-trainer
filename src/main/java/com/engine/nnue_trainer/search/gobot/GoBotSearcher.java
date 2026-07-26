@@ -327,6 +327,9 @@ public final class GoBotSearcher {
     for (int i = 0; i < children.size(); i++) {
       Child child = children.get(i);
       long score;
+      // A scout that fails low yields a bound, not a value — flagged so consumers that rank or
+      // sample over the scores can skip it (see RootMove).
+      boolean exact = true;
       if (multi) {
         long[] values = maxN(child.state, depth - 1, 1);
         score = values[root - 1];
@@ -337,9 +340,11 @@ public final class GoBotSearcher {
         score = minimax(child.state, depth - 1, alpha, alpha + 1, 1);
         if (score > alpha && score < beta) {
           score = minimax(child.state, depth - 1, alpha, beta, 1);
+        } else {
+          exact = false;
         }
       }
-      roots.add(new RootMove(child.action, (int) score));
+      roots.add(new RootMove(child.action, (int) score, exact));
       if (score > bestScore) {
         best.action = child.action;
         bestScore = score;
