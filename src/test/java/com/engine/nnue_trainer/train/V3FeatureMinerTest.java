@@ -12,11 +12,23 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** Accumulation + discrimination-ranking math of the v3 feature miner. */
 public class V3FeatureMinerTest {
+
+  @TempDir Path tempDir;
+
+  private static final String[] GAME_IDS = {
+    "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1", "01297459-5cc3-4488-840d-2d800b749ab8"
+  };
 
   private static Board board12() {
     return new Board(V3FeatureMiner.BOARD, V3FeatureMiner.BOARD);
@@ -196,6 +208,116 @@ public class V3FeatureMinerTest {
           perCellSupport[i],
           "cell (" + i / V3FeatureMiner.BOARD + "," + i % V3FeatureMiner.BOARD + ") support sum");
     }
+  }
+
+  /**
+   * Row shape for the v3.1 ridge fit: exactly one feature per cell, so 144 in-range indices that
+   * never collide on a cell. A row that violates this silently makes the design matrix wrong.
+   */
+  @Test
+  public void testEmittedPositionRowShape() throws Exception {
+    Board b = board12();
+    b.setCell(3, 4, new Cell(1, CellKind.NORMAL));
+    b.setCell(5, 6, new Cell(2, CellKind.BASE));
+
+    JsonNode row =
+        new ObjectMapper()
+            .readTree(
+                V3FeatureMiner.positionRow(
+                    "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1",
+                    4,
+                    -1234,
+                    V3FeatureMiner.activeFeatures(b, 1)));
+
+    assertEquals("00e60d2e-4a2d-41c6-993f-7fc8c71f35b1", row.path("game_id").asText());
+    assertEquals(4, row.path("ply").asInt());
+    assertEquals(-1234, row.path("eval").asInt());
+
+    JsonNode active = row.path("active");
+    int cells = V3FeatureMiner.BOARD * V3FeatureMiner.BOARD;
+    assertEquals(cells, active.size(), "one active feature per cell");
+    boolean[] cellSeen = new boolean[cells];
+    for (JsonNode i : active) {
+      int index = i.asInt();
+      assertTrue(
+          index >= 0 && index < cells * V3FeatureMiner.STATES, "index out of range: " + index);
+      assertFalse(cellSeen[index / V3FeatureMiner.STATES], "two active states for one cell");
+      cellSeen[index / V3FeatureMiner.STATES] = true;
+    }
+
+    // The two placed stones map to the STM-normalized state of their own cell.
+    assertEquals(
+        V3FeatureMiner.idx(3, 4, PatternContract.NORMAL_SELF), active.get(3 * 12 + 4).asInt());
+    assertEquals(
+        V3FeatureMiner.idx(5, 6, PatternContract.BASE_OPPONENT), active.get(5 * 12 + 6).asInt());
+  }
+
+  /** {@code --emit-positions} is a pure addition: the aggregate artifact must not move at all. */
+  @Test
+  public void testEmitPositionsDoesNotAlterAggregateStats() throws Exception {
+    Path db = tempDir.resolve("games.db");
+    String pgn =
+        "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]},"
+            + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":11,\"col\":10}]},"
+            + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":2}]}]";
+    try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db);
+        Statement statement = connection.createStatement()) {
+      // TEXT uuid keys, exactly like the real games.db — an INTEGER id here would hide the
+      // getLong() coercion that used to collapse every uuid game into game_id 0.
+      statement.execute(
+          "CREATE TABLE games (id TEXT PRIMARY KEY, rows INTEGER, cols INTEGER, "
+              + "termination TEXT, pgn_content TEXT)");
+      for (String id : GAME_IDS) {
+        statement.execute(
+            "INSERT INTO games VALUES ('" + id + "', 12, 12, 'resign', '" + pgn + "')");
+      }
+    }
+
+    Path plain = tempDir.resolve("plain.json");
+    Path withRows = tempDir.resolve("with_rows.json");
+    Path jsonl = tempDir.resolve("positions.jsonl");
+    V3FeatureMiner.main(new String[] {db.toString(), plain.toString()});
+    V3FeatureMiner.main(
+        new String[] {db.toString(), withRows.toString(), "--emit-positions", jsonl.toString()});
+
+    assertEquals(
+        Files.readString(plain), Files.readString(withRows), "the flag must not move aggregates");
+
+    List<String> rows = Files.readAllLines(jsonl);
+    JsonNode meta = new ObjectMapper().readTree(plain.toFile()).path("meta");
+    long positions = meta.path("positions").asLong();
+    assertEquals(positions, rows.size(), "one row per accumulated position");
+    // The eval column is the regression target of the whole capacity fit, and nothing else here
+    // reads it: a sign flip or a different movesLeft/tempo frame than the one stats.add saw would
+    // leave every other assertion green and produce an inverted warm start. Tie it to the
+    // aggregate's own baseline sum, which is computed from the same evals.
+    long evalSum = 0;
+    for (String r : rows) {
+      evalSum += new ObjectMapper().readTree(r).path("eval").asLong();
+    }
+    assertEquals(
+        meta.path("baseline_mean_eval").asDouble() * positions,
+        evalSum,
+        1e-6,
+        "emitted evals must be the evals the aggregate accumulated");
+    // Both games are identical, so plies run 0..2 twice, once per game_id. The uuids must survive
+    // verbatim: the ridge fit splits on them, so two games sharing an id would be one game to it.
+    JsonNode last = new ObjectMapper().readTree(rows.get(rows.size() - 1));
+    assertEquals(GAME_IDS[1], last.path("game_id").asText());
+    assertEquals(2, last.path("ply").asInt());
+    assertEquals(
+        Set.of(GAME_IDS),
+        rows.stream()
+            .map(
+                r -> {
+                  try {
+                    return new ObjectMapper().readTree(r).path("game_id").asText();
+                  } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                  }
+                })
+            .collect(Collectors.toSet()),
+        "one distinct game_id per game");
   }
 
   @Test

@@ -71,7 +71,9 @@ public final class GamesDbPatternMiner {
   }
 
   public static void main(String[] args) throws Exception {
-    Path db = Path.of(args.length > 0 ? args[0] : "/home/iv/games.db");
+    Path db =
+        Path.of(
+            args.length > 0 ? args[0] : System.getenv().getOrDefault("NNUE_GAMES_DB", "games.db"));
     Path out = Path.of(args.length > 1 ? args[1] : "games_db_pattern_stats.json");
     if (!Files.exists(db)) {
       System.err.println("games.db not found: " + db);

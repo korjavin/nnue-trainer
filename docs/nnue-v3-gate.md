@@ -28,11 +28,34 @@ post-capture board — if a future re-mine shows zero fortified features, that r
 
 `meta.skip_reasons` distinguishes where a dropped game was dropped: `termination_*` is what the
 server recorded on the game, `replay_*` is this code rejecting it. A rising `replay_illegal_move`
-means the rules port drifted; a `replay_replay_error:*` bucket means the parser threw (the exception
-class is named — a blanket bucket hid a parser NPE that was discarding 4 of these games).
+means the rules port drifted; a `replay_moves_after_game_over` bucket means the recorder wrote a
+turn past the end of the game (kept separate precisely because it says something different about
+the corpus than a mid-game rules violation does); a `replay_replay_error:*` bucket means the parser
+threw (the exception class is named — a blanket bucket hid a parser NPE that was discarding 4 of
+these games).
 
 Gate outcome: approve → d4a.6.1 proceeds; reject → the feature design is revised (e.g. pairwise or
 region features) before any model spend.
+
+## Outcome: the features passed the capacity test
+
+The gate was approved and d4a.6.1 ran. [`docs/nnue-v3-capacity.md`](nnue-v3-capacity.md) holds the
+result: ridge-distilling the hand-tuned static eval onto these 1152 features reaches a **held-out
+R² of 0.976** (λ = 100, split by game, seed 0; **0.93–0.98** across seeds 0–5, with λ chosen on that
+same holdout). So absolute single-cell
+features *can* represent the hand-tuned eval — **proceed to `nnue-trainer-aov` and `d4a.6.2`; do not
+add pairwise/region features yet.** The fitted weights are in
+[`nnue_v3_weights.json`](../nnue_v3_weights.json), the warm start for `aov` and `1uz`.
+
+Two findings from that work that change how this page should be read:
+
+- the ranking here is stable but not fixed — doubling the corpus (217 → 446 games) kept **16 of the
+  top 25** features and Spearman ρ = 0.962, with most departures demoted by the raised support floor
+  rather than by discrimination;
+- `baseline_mean_eval` is strongly negative because of **turn parity**, not a sign bug: a position is
+  the board *before* a turn, scored from the player who has not yet moved, and one turn is worth
+  ~+11000. The constant offset does not affect discrimination, but its residual ply-dependence means
+  discrimination is partly a "how late does this feature appear" signal. See the capacity report.
 
 ## Regenerating
 
@@ -42,11 +65,11 @@ fixed at 3):
 ```bash
 ./mvnw -q compile dependency:build-classpath -Dmdep.outputFile=target/classpath.txt
 java -cp "target/classes:$(cat target/classpath.txt)" \
-  com.engine.nnue_trainer.train.V3FeatureMiner /home/iv/games.db nnue_v3_feature_stats.json
+  com.engine.nnue_trainer.train.V3FeatureMiner "$NNUE_GAMES_DB" nnue_v3_feature_stats.json
 ```
 
-CLI: `V3FeatureMiner [db-path] [out-path] [--min-support N]`, defaulting to `/home/iv/games.db` and
-`nnue_v3_feature_stats.json`. Only 12x12 games are used; others count as a `wrong_board_size` skip.
+CLI: `V3FeatureMiner [db-path] [out-path] [--min-support N]`, defaulting to `$NNUE_GAMES_DB` (then
+`./games.db`) and `nnue_v3_feature_stats.json`. Only 12x12 games are used; others count as a `wrong_board_size` skip.
 
 `--min-support N` sets the support floor. Default is `max(30, positions / 100)` (~1% of replayed
 positions, never below 30); features below it keep their stats but get `rank = -1` and

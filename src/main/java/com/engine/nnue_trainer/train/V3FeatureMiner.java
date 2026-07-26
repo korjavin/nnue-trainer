@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -16,6 +17,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -34,7 +36,10 @@ import java.util.TreeMap;
  * the v2 bug (it promotes the most common shapes, which are the most trivial ones). Support is a
  * <b>floor</b> only — features below it keep their stats but get {@code rank = -1}.
  *
- * <p>CLI: {@code V3FeatureMiner [db-path] [out-path] [--min-support N]}.
+ * <p>CLI: {@code V3FeatureMiner [db-path] [out-path] [--min-support N] [--emit-positions
+ * <jsonl-path>]}. The aggregates above are all the v3.0 gate needed; {@code --emit-positions}
+ * additionally dumps the per-position rows the v3.1 ridge fit regresses on, and changes nothing
+ * about the aggregate output.
  */
 public final class V3FeatureMiner {
 
@@ -60,6 +65,55 @@ public final class V3FeatureMiner {
   };
 
   private V3FeatureMiner() {}
+
+  /**
+   * Dense feature id for {@code (row, col, state)} — the index shared by stats, rows and weights.
+   */
+  public static int idx(int r, int c, int state) {
+    return (r * BOARD + c) * STATES + state;
+  }
+
+  /**
+   * The {@code BOARD*BOARD} active feature ids of a position, in row-major cell order — exactly one
+   * state per cell, so the indices are one per cell by construction.
+   */
+  public static int[] activeFeatures(Board board, int stm) {
+    // Off-board cells resolve to OUT_OF_BOUNDS (8), which idx() would fold into the NEXT cell's
+    // EMPTY bucket — silent corruption everywhere but (11,11), where it throws. Exact, not
+    // ">=": a larger board would otherwise be silently mined as its top-left 12x12. main()
+    // filters on board size; this makes that a precondition rather than a convention.
+    if (board.rows != BOARD || board.cols != BOARD) {
+      throw new IllegalArgumentException(
+          "v3 features need a "
+              + BOARD
+              + "x"
+              + BOARD
+              + " board, got "
+              + board.rows
+              + "x"
+              + board.cols);
+    }
+    int[] active = new int[BOARD * BOARD];
+    for (int r = 0; r < BOARD; r++) {
+      for (int c = 0; c < BOARD; c++) {
+        active[r * BOARD + c] = idx(r, c, PatternContract.getSymbol(board.getCell(r, c), stm));
+      }
+    }
+    return active;
+  }
+
+  /** One JSONL training row: the label plus the position's active feature ids. */
+  static String positionRow(String gameId, int ply, int eval, int[] active) throws Exception {
+    ObjectNode n = MAPPER.createObjectNode();
+    n.put("game_id", gameId);
+    n.put("ply", ply);
+    n.put("eval", eval);
+    ArrayNode a = n.putArray("active");
+    for (int i : active) {
+      a.add(i);
+    }
+    return MAPPER.writeValueAsString(n);
+  }
 
   /** One ranked {@code (row, col, state)} feature. {@code rank == -1} means below the floor. */
   public static final class Feature {
@@ -96,39 +150,17 @@ public final class V3FeatureMiner {
     private long positions;
     private long baselineEvalSum;
 
-    private static int idx(int r, int c, int state) {
-      return (r * BOARD + c) * STATES + state;
-    }
-
     /**
      * Accumulate one position: the board before a turn, its side to move, and its STM-relative
      * eval.
      */
     public void add(Board board, int stm, int eval) {
-      // Off-board cells resolve to OUT_OF_BOUNDS (8), which idx() would fold into the NEXT cell's
-      // EMPTY bucket — silent corruption everywhere but (11,11), where it throws. Exact, not
-      // ">=": a larger board would otherwise be silently mined as its top-left 12x12. main()
-      // filters on board size; this makes that a precondition rather than a convention.
-      if (board.rows != BOARD || board.cols != BOARD) {
-        throw new IllegalArgumentException(
-            "v3 features need a "
-                + BOARD
-                + "x"
-                + BOARD
-                + " board, got "
-                + board.rows
-                + "x"
-                + board.cols);
-      }
+      int[] active = activeFeatures(board, stm); // also enforces the 12x12 precondition
       positions++;
       baselineEvalSum += eval;
-      for (int r = 0; r < BOARD; r++) {
-        for (int c = 0; c < BOARD; c++) {
-          int state = PatternContract.getSymbol(board.getCell(r, c), stm);
-          int i = idx(r, c, state);
-          support[i]++;
-          evalSum[i] += eval;
-        }
+      for (int i : active) {
+        support[i]++;
+        evalSum[i] += eval;
       }
     }
 
@@ -181,12 +213,21 @@ public final class V3FeatureMiner {
   }
 
   public static void main(String[] args) throws Exception {
-    Path db = Path.of("/home/iv/games.db");
+    // Same knob the app uses (NnueTrainerApplication): the corpus is not in the repo, so a
+    // hardcoded developer path makes every documented repro command a no-op for everyone else.
+    Path db = Path.of(System.getenv().getOrDefault("NNUE_GAMES_DB", "games.db"));
     Path out = Path.of("nnue_v3_feature_stats.json");
     Integer minSupportFlag = null;
+    Path positionsOutPath = null;
     List<String> positional = new ArrayList<>();
     for (int i = 0; i < args.length; i++) {
-      if ("--min-support".equals(args[i])) {
+      if ("--emit-positions".equals(args[i])) {
+        if (i + 1 >= args.length) {
+          System.err.println("--emit-positions needs a path");
+          System.exit(1);
+        }
+        positionsOutPath = Path.of(args[++i]);
+      } else if ("--min-support".equals(args[i])) {
         if (i + 1 >= args.length) {
           System.err.println("--min-support needs a value");
           System.exit(1);
@@ -219,13 +260,19 @@ public final class V3FeatureMiner {
     int gamesUsed = 0;
     int gamesSkipped = 0;
 
-    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + db);
+    long positionsWritten = 0;
+    try (BufferedWriter positionsOut =
+            positionsOutPath == null ? null : Files.newBufferedWriter(positionsOutPath);
+        Connection conn = DriverManager.getConnection("jdbc:sqlite:" + db);
         Statement st = conn.createStatement();
         ResultSet rs =
             st.executeQuery(
                 "SELECT id, rows, cols, termination, pgn_content FROM games ORDER BY id")) {
       while (rs.next()) {
         gamesTotal++;
+        // games.db keys games by a TEXT uuid — getLong() would silently coerce every non-numeric
+        // id to 0 and collapse hundreds of games into one, which destroys the game-level split.
+        String gameId = rs.getString("id");
         int rows = rs.getInt("rows");
         int cols = rs.getInt("cols");
         String termination = rs.getString("termination");
@@ -265,11 +312,18 @@ public final class V3FeatureMiner {
         }
 
         gamesUsed++;
-        for (GamesDbReplay.Snapshot s : replay.snapshots) {
-          stats.add(
-              s.board,
-              s.stm,
-              HandTunedEval.staticEval(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed));
+        for (int ply = 0; ply < replay.snapshots.size(); ply++) {
+          GamesDbReplay.Snapshot s = replay.snapshots.get(ply);
+          int eval =
+              HandTunedEval.staticEval(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
+          stats.add(s.board, s.stm, eval);
+          if (positionsOut != null) {
+            // game_id rides along so the fit can split by GAME: positions inside one game share
+            // nearly all their features, so a position-level split leaks and inflates R².
+            positionsOut.write(positionRow(gameId, ply, eval, activeFeatures(s.board, s.stm)));
+            positionsOut.newLine();
+            positionsWritten++;
+          }
         }
       }
     }
@@ -305,11 +359,28 @@ public final class V3FeatureMiner {
     System.out.println("--- top 10 by discrimination (NOT by frequency) ---");
     for (int i = 0; i < Math.min(10, aboveFloor); i++) {
       Feature f = features.get(i);
+      // Locale.ROOT: these lines are transcribed into docs/nnue-v3-capacity.md, and a de_DE
+      // runner would print `discrim=4.255,25`.
       System.out.printf(
+          Locale.ROOT,
           "#%-2d (%2d,%2d) %-18s discrim=%8.2f mean_eval=%9.2f support=%d%n",
-          f.rank + 1, f.row, f.col, f.stateName(), f.discrimination, f.meanEval, f.support);
+          f.rank + 1,
+          f.row,
+          f.col,
+          f.stateName(),
+          f.discrimination,
+          f.meanEval,
+          f.support);
     }
     System.out.println("output             : " + out.toAbsolutePath());
+    if (positionsOutPath != null) {
+      System.out.println(
+          "positions output   : "
+              + positionsOutPath.toAbsolutePath()
+              + " ("
+              + positionsWritten
+              + " rows)");
+    }
   }
 
   private static void bump(Map<String, Integer> m, String k) {
