@@ -98,20 +98,21 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 1: NNUEv3Accumulator — active-feature extraction
 
-- [ ] create `src/main/java/com/engine/nnue_trainer/v3/NNUEv3Accumulator.java` exposing the active
+- [x] create `src/main/java/com/engine/nnue_trainer/v3/NNUEv3Accumulator.java` exposing the active
       feature indices for a `(board, stm)` pair: for each of the 144 cells, resolve the state via
       `PatternContract.getSymbol(board.getCell(r,c), stm)` and emit `idx(r,c,state)`
-- [ ] share the index definition with `V3FeatureMiner` rather than duplicating the arithmetic — a
+- [x] share the index definition with `V3FeatureMiner` rather than duplicating the arithmetic — a
       second copy of `(r*12+c)*8+state` is exactly how the runtime and the training data drift apart
-- [ ] guard board size explicitly: v3 is 12x12-only, so a non-12x12 board must be rejected by the
+      (thin delegation to `V3FeatureMiner.idx` / `activeFeatures`, plus a `FEATURES = 1152` constant)
+- [x] guard board size explicitly: v3 is 12x12-only, so a non-12x12 board must be rejected by the
       accumulator (the caller decides the fallback, see Task 4) rather than silently mining the
       top-left 12x12
-- [ ] write a test asserting exactly 144 indices, all in `[0,1152)`, and no two sharing a cell
-- [ ] write a test asserting perspective symmetry: the same board from stm=1 and stm=2 maps
+- [x] write a test asserting exactly 144 indices, all in `[0,1152)`, and no two sharing a cell
+- [x] write a test asserting perspective symmetry: the same board from stm=1 and stm=2 maps
       self/opponent states consistently (a cell owned by 1 is `*_SELF` for stm=1 and `*_OPP` for
       stm=2)
-- [ ] write a test for the non-12x12 rejection
-- [ ] run tests - must pass before next task
+- [x] write a test for the non-12x12 rejection
+- [x] run tests - must pass before next task
 
 ### Task 2: NNUEv3Evaluator — load weights, evaluate
 
