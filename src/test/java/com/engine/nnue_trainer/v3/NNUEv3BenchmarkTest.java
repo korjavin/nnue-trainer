@@ -99,10 +99,17 @@ public class NNUEv3BenchmarkTest {
     }
   }
 
-  /** Real corpus positions — same boards the parity fixture asserts on. */
+  /**
+   * Real corpus positions — the parity-fixture boards that are searchable. The fixture is
+   * STM-normalized, so a position mined with player 2 to move comes back with the bases swapped
+   * (player 1's base at (11,11)); {@code HandTunedEval.isActive} tests the FIXED corners, so on
+   * those boards both players read as base-less, the search terminates immediately and neither leaf
+   * is exercised. They are skipped rather than silently contributing 0 nodes to the NPS numbers.
+   */
   private static List<Board> fixtureBoards() throws Exception {
     JsonNode doc = new ObjectMapper().readTree(FIXTURE.toFile());
     List<Board> out = new ArrayList<>();
+    int skipped = 0;
     for (JsonNode fx : doc.get("fixtures")) {
       if (fx.get("stm").asInt() != 1) {
         continue; // each board appears twice (stm=1, stm=2); search from player 1 only
@@ -114,8 +121,21 @@ public class NNUEv3BenchmarkTest {
             cell.get("c").asInt(),
             new Cell(cell.get("owner").asInt(), CellKind.valueOf(cell.get("kind").asText())));
       }
-      out.add(b);
+      if (baseAt(b, 0, 0) == 1 && baseAt(b, 11, 11) == 2) {
+        out.add(b);
+      } else {
+        skipped++;
+      }
     }
+    System.out.printf(
+        "boards: %d searchable, %d skipped (bases not on the fixed corners)%n",
+        out.size(), skipped);
     return out;
+  }
+
+  /** Owner of the base at {@code (r,c)}, or 0 if that cell is not a base. */
+  private static int baseAt(Board b, int r, int c) {
+    Cell cell = b.getCell(r, c);
+    return cell != null && cell.kind == CellKind.BASE ? cell.owner : 0;
   }
 }

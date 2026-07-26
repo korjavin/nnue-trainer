@@ -562,8 +562,14 @@ public class SearchEngine {
         && board.cols == NNUEv3Accumulator.BOARD) {
       NNUEv3Evaluator v3 = nnueV3Evaluator();
       if (v3 != null) {
-        // Already in hand-tuned eval units, in originalPlayer's frame (positive == good for them).
-        return (float) v3.evaluate(board, originalPlayer);
+        // Already in hand-tuned eval units — no scale. The fit's labels are
+        // staticEval(board, stm, stm, ..) (V3FeatureMiner), i.e. scored player == mover, so query
+        // from the leaf's own mover (in distribution) and flip to originalPlayer's frame by
+        // zero-sum negation — the same convention as the GoBot v3 leaf. Querying originalPlayer
+        // directly would evaluate opponent-to-move leaves a tempo out of distribution, and the fit
+        // is not antisymmetric enough for the two to agree.
+        double v = v3.evaluate(board, sideToMove);
+        return (float) (sideToMove == originalPlayer ? v : -v);
       }
       // Load failed -> fall through to the baseline below (as does any non-12x12 board).
     }

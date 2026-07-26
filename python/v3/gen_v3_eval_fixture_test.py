@@ -62,6 +62,15 @@ class CommittedFixtureTest(unittest.TestCase):
             )
         # Both perspectives, or the fixture cannot catch a self/opponent mix-up.
         self.assertEqual({1, 2}, {fx["stm"] for fx in doc["fixtures"]})
+        # Every PatternContract state, or a Java/Python disagreement on a rare one (NEUTRAL is on
+        # ~3% of mined boards) slips through the parity test untested.
+        covered = set()
+        for fx in doc["fixtures"]:
+            b = Board(BOARD, BOARD)
+            for cell in fx["cells"]:
+                b.set_cell(cell["r"], cell["c"], Cell(cell["owner"], CellKind[cell["kind"]]))
+            covered |= {f % 8 for f in active_of(b, fx["stm"])}
+        self.assertEqual(set(range(8)), covered, "regenerate the fixture: a state is unsampled")
         self.assertEqual(PatternContract.NORMAL_SELF, 4)  # contract the ids are built on
 
 

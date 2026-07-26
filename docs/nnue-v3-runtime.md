@@ -20,7 +20,7 @@ idx(r, c, state)    = (r * 12 + c) * 8 + state           // 1152 dense slots
 | GoBot search leaf | programmatic: `GoBotSearcher.configureDefaultLeafEvalV3(LeafEval.NNUEV3, evaluator)` |
 | weights path override | `NNUEV3_WEIGHTS=/path/to/weights.json` (default: repo-root `nnue_v3_weights.json`) |
 
-`EVAL=NNUEV3` is read once per `SearchEngine` instance and gates the branch in `staticEval`. The
+`EVAL=NNUEV3` is read once per `SearchEngine` instance and gates the branch in `evaluate`. The
 weights load lazily into a `static volatile` shared evaluator behind a double-checked lock, so a
 process pays for it once; a load failure sets `v3LoadFailed`, warns once on stderr, and falls back to
 the default eval instead of propagating.
@@ -28,9 +28,11 @@ the default eval instead of propagating.
 **`EVAL=NNUEV3` does not reach the live bot's GoBot search.** `GameLoopHandler`'s static leaf-eval
 hook only recognizes `EVAL=NNUE` (the v1 net) — same as the v2 leaf before it, which is also
 programmatic-only. In production, where `SEARCH=GOBOT` is the default, setting `EVAL=NNUEV3` leaves
-the GoBot leaf hand-tuned. The GoBot v3 leaf exists for `configureDefaultLeafEvalV3` callers: the
-benchmark, the tests, and the `d4a.6.2` gauntlet. Wire it into `GameLoopHandler` only if a gauntlet
-result justifies it.
+the GoBot leaf hand-tuned. It does not do so silently: `GameLoopHandler.unwiredEvalWarning` prints a
+startup warning for any `EVAL` the GoBot leaf ignores, so a harness cannot report hand-tuned results
+as v3's. The GoBot v3 leaf exists for `configureDefaultLeafEvalV3` callers: the benchmark, the tests,
+`GauntletMatch.play(Object, Object, Config)` (which dispatches on the side type), and the `d4a.6.2`
+gauntlet. Wire it into `GameLoopHandler` only if a gauntlet result justifies it.
 
 Default OFF either way: with `EVAL` unset, `isUseNnueV3Eval()` is false and `newSearcher` returns
 `LeafEval.HAND_TUNED`, so play is byte-identical to today's hand-tuned behavior.
@@ -78,8 +80,12 @@ mapping. v3 has no such gap. If a v3 scale factor ever looks necessary, that is 
 wrong — refit it; do not add a knob.
 
 Perspective is STM-relative (positive = good for `stm`), matching `HandTunedEval.staticEval` and the
-training labels. The GoBot leaf queries from the leaf node's own mover and negates to the root's
-frame by zero-sum negation, exactly as the v2 branch does.
+training labels — `V3FeatureMiner` labels each position with `staticEval(board, stm, stm, ..)`, so
+the scored player and the mover coincide in the fit. Both search paths therefore query the leaf's
+**own mover** (in distribution) and negate to the root's frame by zero-sum negation: the GoBot leaf
+in `leafEval`, and `SearchEngine.evaluate` when `sideToMove != perspective`. Querying the root player
+directly would evaluate opponent-to-move leaves a tempo out of distribution, and the fit is not
+antisymmetric enough for the two to agree.
 
 ## Board size: 12x12 only, with fallback
 
@@ -87,7 +93,7 @@ The feature space is a dense 12x12x8 grid, so v3 is defined only on 12x12 boards
 `NNUEv3Accumulator` **rejects** other sizes rather than silently mining the top-left 12x12 — the
 caller decides the fallback:
 
-- `SearchEngine.staticEval` guards on `board.rows == board.cols == 12` and falls through to the
+- `SearchEngine.evaluate` guards on `board.rows == board.cols == 12` and falls through to the
   baseline eval otherwise.
 - `GoBotSearcher`'s v3 leaf branch does the same, falling back to the hand-tuned leaf.
 
@@ -99,21 +105,25 @@ The engine plays other sizes, so neither path throws. Covered by
 ## NPS benchmark
 
 `NNUEv3BenchmarkTest` (opt-in: `NNUEV3_BENCH=1 ./mvnw test -Dtest=NNUEv3BenchmarkTest`) searches the
-8 real corpus boards of the parity fixture at the live 60k-node budget, once with
-`LeafEval.HAND_TUNED` and once with `LeafEval.NNUEV3`. Both runs expand the same 300,000 nodes
-(`chooseNodeBudget` stops at exactly the limit), so the wall-clock ratio is a straight NPS
-comparison.
+real corpus boards of the parity fixture at the live 60k-node budget, once with `LeafEval.HAND_TUNED`
+and once with `LeafEval.NNUEV3`. Both runs expand the same 300,000 nodes (`chooseNodeBudget` stops at
+exactly the limit), so the wall-clock ratio is a straight NPS comparison.
+
+5 of the fixture's 8 boards are searched. The fixture is STM-normalized, so positions mined with
+player 2 to move come back with the bases swapped; `HandTunedEval.isActive` tests the *fixed* corners
+and reads both players as base-less there, so those boards terminate instantly and exercise neither
+leaf. The benchmark skips them instead of letting them pad the board count with 0 nodes.
 
 | leaf | nodes | wall | NPS |
 | --- | --- | --- | --- |
-| hand-tuned | 300,000 | 5,292 ms | 56,689 |
-| NNUE v3 (full recompute) | 300,000 | 1,076 ms | 278,810 |
+| hand-tuned | 300,000 | 5,425 ms | 55,300 |
+| NNUE v3 (full recompute) | 300,000 | 1,095 ms | 273,973 |
 
-**Ratio: 4.9x faster than hand-tuned.** Single-eval throughput is ~1.26M evals/s (0.0008 ms/eval) on
+**Ratio: 5.0x faster than hand-tuned.** Single-eval throughput is ~1.36M evals/s (0.0007 ms/eval) on
 a 12x12 board. Machine: AMD EPYC-Rome, Java 17.
 
 **Is full recompute fast enough for the 60k-node budget? Yes, with a wide margin.** A full 60k-node
-search costs ~215 ms with the v3 leaf versus ~1,060 ms with the hand-tuned eval. The v3 leaf is not
+search costs ~219 ms with the v3 leaf versus ~1,085 ms with the hand-tuned eval. The v3 leaf is not
 the bottleneck — it is cheaper than the eval it replaces, because 144 array reads and adds beat the
 hand-tuned eval's per-position flood fills. Incremental accumulator updates would optimize the part
 of the search that is already the fastest; they stay out of scope until a benchmark says otherwise.

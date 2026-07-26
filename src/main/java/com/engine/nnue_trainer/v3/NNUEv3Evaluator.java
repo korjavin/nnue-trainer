@@ -46,14 +46,6 @@ public final class NNUEv3Evaluator {
     return sum;
   }
 
-  public double bias() {
-    return bias;
-  }
-
-  public static NNUEv3Evaluator load() throws IOException {
-    return load(DEFAULT_WEIGHTS);
-  }
-
   /**
    * Loads {@code {"meta": {"bias": .., "n_features_total": 1152}, "weights": {"<id>": w, ..}}} as
    * written by {@code python/v3/fit_capacity.py}. Absent feature ids mean weight 0.

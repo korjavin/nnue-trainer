@@ -94,20 +94,36 @@ def main(argv=None):
         raise SystemExit("%s: only %d positions, need %d" % (args.positions, len(game_ids), args.n))
     ids, w, bias = load_weights(args.weights)
 
-    # Deterministic stride over (game, ply) order: different games, mixed opening/endgame,
-    # and stable across reruns (no RNG to re-seed when the fixture is regenerated). Advancing
-    # past duplicates matters: every game's opening plies are the SAME board, so a plain stride
-    # samples one position eight times and proves nothing eight times over.
+    # Deterministic (game, ply) order -- stable across reruns, no RNG to re-seed. Distinct boards
+    # only: every game's opening plies are the SAME board, so a plain stride would sample one
+    # position eight times and prove nothing eight times over.
     order = sorted(range(len(game_ids)), key=lambda i: (str(game_ids[i]), i))
-    picks, seen = [], set()
-    for i in range(args.n):
-        j = (i * len(order)) // args.n
-        while j < len(order) and tuple(active[order[j]]) in seen:
-            j += 1
-        if j == len(order):
-            raise SystemExit("%s: fewer than %d distinct boards" % (args.positions, args.n))
-        seen.add(tuple(active[order[j]]))
-        picks.append(order[j])
+    states = [frozenset(int(f) % 8 for f in active[i]) for i in range(len(active))]
+    uniq, seen = [], set()
+    for j in order:
+        key = tuple(active[j])
+        if key not in seen:
+            seen.add(key)
+            uniq.append(j)
+    if len(uniq) < args.n:
+        raise SystemExit("%s: only %d distinct boards, need %d" % (args.positions, len(uniq), args.n))
+
+    # Rarest states first: NEUTRAL is on ~3% of mined boards, so a plain stride can miss a whole
+    # PatternContract state and leave its index mapping untested across languages.
+    picks = []
+    for state in sorted(range(8), key=lambda s: sum(s in st for st in states)):
+        if len(picks) >= args.n or any(state in states[j] for j in picks):
+            continue
+        j = next((j for j in uniq if state in states[j] and j not in picks), None)
+        if j is not None:  # else the corpus itself never shows this state
+            picks.append(j)
+    # Fill the rest by striding the distinct boards: different games, mixed opening/endgame.
+    for j in (uniq[(i * len(uniq)) // args.n] for i in range(args.n)):
+        if len(picks) >= args.n:
+            break
+        if j not in picks:
+            picks.append(j)
+    picks += [j for j in uniq if j not in picks][: args.n - len(picks)]
 
     boards = [board_from_active(active[i]) for i in picks]
     fixtures = []

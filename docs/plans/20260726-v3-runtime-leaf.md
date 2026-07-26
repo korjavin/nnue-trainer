@@ -233,6 +233,33 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
       (the v2 leaf has the same programmatic-only status). Wiring it there is a `d4a.6.2`-gated
       decision, not part of this bead.
 
+### ➕ Task 8: Code-review fixes (post-implementation)
+
+- [x] `SearchEngine`'s v3 branch queried `originalPlayer` and ignored `sideToMove`, so
+      opponent-to-move leaves were scored a tempo out of distribution and disagreed with the GoBot
+      leaf (the fit is not antisymmetric: `v3(b,1) + v3(b,2)` spans thousands of eval units). Both
+      paths now query the leaf's own mover and negate — `SearchEngineNnueV3Test`
+      `.opponentToMoveLeafQueriesTheMoverAndNegates` pins it with a deliberately non-antisymmetric
+      stub (`V3TestEvaluators.selfStones`).
+- [x] `GauntletMatch.applyLeaf` fell through to `(NNUEModel) side` for anything not v1/v2, so passing
+      a v3 evaluator (the point of `d4a.6.2`) threw `ClassCastException` on the first move — added
+      the v3 branch. No gauntlet is *run* here; only the dispatch it will need.
+- [x] `EVAL=NNUEV3` under the default `SEARCH=GOBOT` was a silent no-op (the documented
+      `GameLoopHandler` gap) — a harness would report hand-tuned results as v3's. Added
+      `GameLoopHandler.unwiredEvalWarning` (pure, tested) and a startup warning; the leaf itself
+      stays deliberately unwired.
+- [x] The parity fixture sampled no `NEUTRAL` cell, leaving 1 of 8 states untested cross-language.
+      The generator now covers every `PatternContract` state (rarest first) before striding for
+      spread; fixture regenerated, and `gen_v3_eval_fixture_test.py` asserts the coverage.
+- [x] The NPS benchmark counted 8 boards but searched 5: STM-normalized fixture boards from
+      player-2-to-move positions have their bases off the fixed corners, so `HandTunedEval.isActive`
+      reads both players as base-less and the search terminates instantly. Those boards are now
+      skipped explicitly; doc numbers re-measured (5.0x).
+- [x] `SearchEngineNnueV3Test.failedWeightsLoadFallsBackInsteadOfPropagating` asserted only
+      `isFinite`, which would also pass if a shared evaluator served the call; it now pins the exact
+      baseline value (and revealed the fallback is the v1 net, not the piece count).
+- [x] Deleted the unused `NNUEv3Evaluator.bias()` and no-arg `load()`.
+
 ## Technical Details
 
 **Score units**: hand-tuned eval units, directly. Holdout MAE was 1230 against labels spanning

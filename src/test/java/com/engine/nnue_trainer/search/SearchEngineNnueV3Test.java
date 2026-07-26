@@ -52,6 +52,26 @@ public class SearchEngineNnueV3Test {
   }
 
   @Test
+  public void opponentToMoveLeafQueriesTheMoverAndNegates() {
+    SearchEngine engine = new SearchEngine();
+    engine.setNnueV3Evaluator(V3TestEvaluators.selfStones()); // eval(b, stm) == stm's NORMAL stones
+    engine.setUseNnueV3Eval(true);
+    Board b = board(12); // player 1 has 2 NORMALs, player 2 has 1
+
+    // Mover == perspective: straight through, in the training convention (scored player == mover).
+    assertEquals(
+        2.0f, engine.evaluate(b, null, 1, 1), 0.0f, "own-move leaf scores the perspective");
+    // Opponent to move: the model is queried from the mover (1 stone) and negated into player 1's
+    // frame. Querying player 1 directly would give +2 and evaluate the leaf a tempo out of
+    // distribution.
+    assertEquals(
+        -1.0f,
+        engine.evaluate(b, null, 1, 2),
+        0.0f,
+        "opponent-to-move leaf negates the mover view");
+  }
+
+  @Test
   public void nonTwelveByTwelveFallsBackInsteadOfThrowing() {
     SearchEngine engine = new SearchEngine();
     engine.setNnueV3Evaluator(V3TestEvaluators.constant(MARKER));
@@ -69,9 +89,16 @@ public class SearchEngineNnueV3Test {
     System.setProperty("NNUEV3_WEIGHTS", "target/no-such-v3-weights.json");
     try {
       SearchEngine engine = new SearchEngine(); // no injected evaluator -> real (failing) load
+      Board b = board(12);
+      float baseline = engine.evaluate(b, null, 1, 1); // flag still OFF
       engine.setUseNnueV3Eval(true);
-      float v = engine.evaluate(board(12), null, 1, 1);
-      assertTrue(Float.isFinite(v), "a failed load must fall back, not throw: " + v);
+      // Exactly the baseline, not merely "finite": a laxer assert would also pass if a shared
+      // evaluator loaded by some earlier test served this call instead of the fallback.
+      assertEquals(
+          baseline,
+          engine.evaluate(b, null, 1, 1),
+          0.0f,
+          "a failed load must fall back to the baseline eval, not throw");
     } finally {
       if (prev == null) {
         System.clearProperty("NNUEV3_WEIGHTS");
