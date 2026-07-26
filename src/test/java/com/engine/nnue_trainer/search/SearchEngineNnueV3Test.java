@@ -87,6 +87,9 @@ public class SearchEngineNnueV3Test {
   public void failedWeightsLoadFallsBackInsteadOfPropagating() {
     String prev = System.getProperty("NNUEV3_WEIGHTS");
     System.setProperty("NNUEV3_WEIGHTS", "target/no-such-v3-weights.json");
+    // Start and end from a clean shared state: the load is a static warn-once latch, so without
+    // this the outcome depends on test order in both directions.
+    SearchEngine.resetSharedV3Evaluator();
     try {
       SearchEngine engine = new SearchEngine(); // no injected evaluator -> real (failing) load
       Board b = board(12);
@@ -105,6 +108,7 @@ public class SearchEngineNnueV3Test {
       } else {
         System.setProperty("NNUEV3_WEIGHTS", prev);
       }
+      SearchEngine.resetSharedV3Evaluator();
     }
   }
 

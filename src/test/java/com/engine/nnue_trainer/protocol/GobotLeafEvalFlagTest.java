@@ -30,6 +30,9 @@ public class GobotLeafEvalFlagTest {
     assertNotNull(GameLoopHandler.unwiredEvalWarning("GOBOT", "NNUEV3"));
     assertNotNull(GameLoopHandler.unwiredEvalWarning(null, "NNUEV2")); // SEARCH defaults to GOBOT
     assertNotNull(GameLoopHandler.unwiredEvalWarning("GOBOT", "NNEU")); // typo
+    // SEARCH unset runs GoBot but gobotLeafEvalFor demands an explicit GOBOT, so the NNUE leaf is
+    // NOT wired here either — the warning must track the resolver, not the EVAL name.
+    assertNotNull(GameLoopHandler.unwiredEvalWarning(null, "NNUE"));
   }
 
   @Test

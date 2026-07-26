@@ -26,8 +26,9 @@ process pays for it once; a load failure sets `v3LoadFailed`, warns once on stde
 the default eval instead of propagating.
 
 **`EVAL=NNUEV3` does not reach the live bot's GoBot search.** `GameLoopHandler`'s static leaf-eval
-hook only recognizes `EVAL=NNUE` (the v1 net) — same as the v2 leaf before it, which is also
-programmatic-only. In production, where `SEARCH=GOBOT` is the default, setting `EVAL=NNUEV3` leaves
+hook only recognizes an explicit `SEARCH=GOBOT` together with `EVAL=NNUE` (the v1 net) — same as the
+v2 leaf before it, which is also programmatic-only. Note that `SEARCH` unset still *runs* the GoBot
+search but does not wire the v1 leaf, so `EVAL=NNUE` alone warns too. In production, where `SEARCH=GOBOT` is the default, setting `EVAL=NNUEV3` leaves
 the GoBot leaf hand-tuned. It does not do so silently: `GameLoopHandler.unwiredEvalWarning` prints a
 startup warning for any `EVAL` the GoBot leaf ignores, so a harness cannot report hand-tuned results
 as v3's. The GoBot v3 leaf exists for `configureDefaultLeafEvalV3` callers: the benchmark, the tests,

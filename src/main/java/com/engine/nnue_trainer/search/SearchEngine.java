@@ -140,6 +140,18 @@ public class SearchEngine {
     this.injectedV3Evaluator = evaluator;
   }
 
+  /**
+   * Drop the shared v3 load so the next call re-reads {@code NNUEV3_WEIGHTS}. Tests that point the
+   * property at a bad path must call this afterwards, or the warn-once latch stays set for the rest
+   * of the JVM and poisons every later shared load.
+   */
+  static void resetSharedV3Evaluator() {
+    synchronized (SearchEngine.class) {
+      sharedV3Evaluator = null;
+      v3LoadFailed = false;
+    }
+  }
+
   private NNUEv3Evaluator nnueV3Evaluator() {
     if (injectedV3Evaluator != null) {
       return injectedV3Evaluator;
