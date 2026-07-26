@@ -10,6 +10,7 @@ import unittest
 import numpy as np
 
 from python.v3.fit_capacity import (
+    N_FEATURES,
     design,
     evaluate,
     load_positions,
@@ -17,6 +18,11 @@ from python.v3.fit_capacity import (
     ranked_features,
     ridge,
     split_by_game,
+    weights_json,
+)
+
+COMMITTED_WEIGHTS = os.path.join(
+    os.path.dirname(__file__), "..", "..", "nnue_v3_weights.json"
 )
 
 
@@ -162,6 +168,44 @@ class LoadPositionsTest(unittest.TestCase):
             np.testing.assert_array_equal(game_ids, [4, 4])
             np.testing.assert_array_equal(y, [-12.0, 30.0])
             np.testing.assert_array_equal(active, [[1, 2], [3, 4]])
+
+
+class WeightsJsonTest(unittest.TestCase):
+    def _fit(self):
+        game_ids, y, active, _, _, n_features = synthetic(n_games=10)
+        train, holdout = split_by_game(game_ids, 0.2, seed=0)
+        ids = np.arange(n_features, dtype=np.int32)
+        return weights_json(
+            evaluate(active, y, ids, train, holdout, lam=1.0), ids, game_ids, train, holdout, 0
+        )
+
+    def test_round_trips_through_json(self):
+        doc = self._fit()
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "w.json")
+            with open(path, "w") as f:
+                json.dump(doc, f)
+            back = json.load(open(path))
+        self.assertEqual(back["meta"], doc["meta"])
+        self.assertEqual(len(back["weights"]), len(doc["weights"]))
+        for k, v in doc["weights"].items():
+            self.assertAlmostEqual(back["weights"][k], v, places=9)
+
+    def test_meta_counts_match_the_split(self):
+        meta = self._fit()["meta"]
+        self.assertEqual(meta["games_train"] + meta["games_holdout"], 10)
+        self.assertEqual(meta["positions_train"] + meta["positions_holdout"], 80)
+        self.assertEqual(meta["split_seed"], 0)
+
+    @unittest.skipUnless(os.path.exists(COMMITTED_WEIGHTS), "no committed weights artifact")
+    def test_committed_artifact_indices_are_in_range(self):
+        doc = json.load(open(COMMITTED_WEIGHTS))
+        keys = [int(k) for k in doc["weights"]]
+        self.assertTrue(all(0 <= k < N_FEATURES for k in keys))
+        self.assertEqual(len(set(keys)), len(keys))
+        self.assertEqual(len(keys), doc["meta"]["top_n"])
+        self.assertTrue(all(np.isfinite(list(doc["weights"].values()))))
+        self.assertTrue(np.isfinite(doc["meta"]["bias"]))
 
 
 if __name__ == "__main__":

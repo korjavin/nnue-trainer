@@ -158,3 +158,101 @@ in any dataset built this way, including the one the runtime leaf will see.
   near the floor are exactly the rows 10–11 cells that only occur in long games.
 - Nothing here changes the ridge fit: the intercept absorbs the constant part, and the ply-linked
   part is exactly the kind of structure the 144 active features are being asked to reproduce.
+
+## Task 4 — the capacity number
+
+### Verdict
+
+**Held-out R² = 0.976** (λ = 100, all 1152 features, 89 unseen games / 1289 positions, split seed 0).
+Correlation 0.988, MAE 1230 against a label that spans ±30000.
+
+**Decision: proceed to the runtime leaf (`nnue-trainer-aov`) and the gauntlet (`d4a.6.2`). Do not add
+pairwise/region features yet.** Absolute single-cell `(row, col, state)` indicators reproduce the
+hand-tuned static eval to within ~2.4% of its variance on games the fit never saw. The representation
+is not the bottleneck, so spending the next bead on richer features would be optimizing the part that
+is already working.
+
+Regenerate:
+
+```
+./mvnw -q compile exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3FeatureMiner \
+  -Dexec.classpathScope=runtime -Dexec.args="--emit-positions /tmp/nnue_v3_positions.jsonl"
+python3 -m python.v3.fit_capacity /tmp/nnue_v3_positions.jsonl   # -> nnue_v3_weights.json
+```
+
+### The λ sweep, top-332 vs full-1152
+
+446 games / 6589 positions, 20% held out by game → 357 train games (5300 positions) / 89 holdout
+games (1289 positions), seed 0. `p10`/`p90` are holdout residual quantiles (label units).
+
+| λ | R² hold (top-332) | R² hold (full-1152) | R² train (full) | corr | MAE | resid p10 | resid p90 |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.9482 | 0.9399 | 0.9890 | 0.9706 | 1272 | -513 | +284 |
+| 1 | 0.9544 | 0.9559 | 0.9872 | 0.9782 | 1156 | -639 | +280 |
+| 10 | 0.9670 | 0.9699 | 0.9820 | 0.9849 | 1041 | -673 | +322 |
+| **100** | 0.9740 | **0.9756** | 0.9634 | 0.9879 | 1230 | -1133 | +704 |
+| 1000 | 0.9400 | 0.9409 | 0.8966 | 0.9778 | 2989 | -4942 | +4461 |
+| 10000 | 0.6395 | 0.6401 | 0.5815 | 0.9460 | 8803 | -13743 | +15176 |
+| 100000 | 0.1426 | 0.1427 | 0.1251 | 0.8913 | 13265 | -22677 | +30378 |
+
+Reading it:
+
+- **λ matters, as predicted.** Each cell's 8 state columns sum to the intercept column, so the design
+  is rank-deficient 144 times over. At λ = 0 the full fit overfits visibly (train 0.989 vs holdout
+  0.940 — the only row where the top-332 cut *beats* the full set, because dropping 820 columns is
+  itself regularization). The curve peaks at λ = 100 and falls off a cliff past 1000.
+- **The top-N cut costs almost nothing.** At the peak, top-332 gives 0.9740 against full-1152's
+  0.9756 — 0.0016 of R² for 71% fewer columns. Whether `aov` ships 332 or 1152 weights is a runtime
+  memory question, not an accuracy one.
+- **Residuals are tight but asymmetric.** At λ = 100 the middle 80% of holdout residuals sit in
+  [-1133, +704] on a ±30000 label — but MAE (1230) exceeds the p90, i.e. the error is concentrated in
+  a thin tail rather than spread. The tail is where a linear-in-single-cells model cannot follow
+  the hand-tuned eval's interaction terms; that is the honest ceiling of this representation, and
+  it is what pairwise features would buy *if* 0.976 ever proves insufficient.
+- **The number moves with the split.** Held-out R² at λ = 100, full-1152: **0.976 (seed 0), 0.953
+  (seed 1), 0.944 (seed 2)**. So quote it as **R² ≈ 0.94–0.98**, not as 0.9756. Seed 0 is the
+  optimistic end of that band. The verdict does not turn on which seed — every seed clears any
+  plausible go/no-go bar — but a single decimal place here is noise.
+
+### Data-ratio caveat, with the actual counts
+
+6589 positions against 1152 columns is **≈ 5.7:1**; restricted to the 332 above-floor features it is
+**≈ 19.8:1**. (The plan guessed ~7000 positions and ~14:1 at top-500; the real corpus gives 6589
+positions, and only 332 features clear the floor, so the top-N ratio is better than guessed and the
+full-1152 ratio is what it is.) Better than the gate run's ~2.9:1, still modest.
+
+More importantly, those 6589 positions come from **446 games**, and positions inside a game are
+nearly collinear — the effective sample size is closer to the game count than to the position count.
+That is exactly why:
+
+- the split is **by game**, never by position;
+- **only the held-out R² is quoted as evidence.** The train R² is in the table for the overfit
+  diagnostic (the 0.989/0.940 gap at λ = 0) and for nothing else. A train-set R² on this data is not
+  evidence of capacity;
+- the seed spread above is reported rather than hidden. With 89 holdout games, which games land in
+  the holdout is worth ±0.03 of R².
+
+### `nnue_v3_weights.json`
+
+The warm start for `nnue-trainer-aov` (engine leaf) and `nnue-trainer-1uz` (net initialization).
+The fitter writes the best-held-out-R² model of the sweep — currently λ = 100, full 1152 features.
+
+```
+{"meta": {"lambda": 100.0, "top_n": 1152, "split_seed": 0,
+          "games_train": 357, "games_holdout": 89,
+          "positions_train": 5300, "positions_holdout": 1289,
+          "r2_holdout": 0.97564, "r2_train": 0.96339, "corr_holdout": 0.98790,
+          "mae_holdout": 1229.82, "bias": 9594.07, "n_features_total": 1152},
+ "weights": {"<feature_index>": w, ...}}
+```
+
+`eval_v3(board) = bias + Σ_{f active} weights[f]` over the 144 active indices, STM-relative, same
+units as the hand-tuned static eval. Weights range [-4990, +3813], mean |w| = 315. Note the bias:
++9594 against a mean label of -4255, because the 144 EMPTY-state weights sum to -11924 — the
+intercept and the per-cell weights are only identifiable together (the dummy-variable degeneracy),
+so a consumer must apply bias and weights as a pair; neither is meaningful alone.
+
+Sanity check on the empty board: the model scores it -2329 where the hand-tuned eval scores +36. That
+is a ~2400 miss on a label that spans ±30000, and it is shrinkage, not a bug — λ = 100 pulls the
+opening (a region where every position looks alike and the true evals are near zero) toward the
+corpus mean of -4255. It is a concrete instance of the residual tail above.

@@ -129,6 +129,28 @@ def evaluate(active, y, feature_ids, train, holdout, lam):
     }
 
 
+def weights_json(fit, feature_ids, game_ids, train, holdout, seed):
+    """The warm start consumed by nnue-trainer-aov / -1uz, plus repro metadata."""
+    return {
+        "meta": {
+            "lambda": fit["lambda"],
+            "top_n": len(feature_ids),
+            "split_seed": seed,
+            "games_train": len(np.unique(game_ids[train])),
+            "games_holdout": len(np.unique(game_ids[holdout])),
+            "positions_train": int(train.sum()),
+            "positions_holdout": int(holdout.sum()),
+            "r2_holdout": fit["r2_holdout"],
+            "r2_train": fit["r2_train"],
+            "corr_holdout": fit["corr_holdout"],
+            "mae_holdout": fit["mae_holdout"],
+            "bias": fit["bias"],
+            "n_features_total": N_FEATURES,
+        },
+        "weights": {str(int(i)): float(w) for i, w in zip(feature_ids, fit["weights"])},
+    }
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("positions", nargs="?", default="/tmp/nnue_v3_positions.jsonl")
@@ -137,6 +159,7 @@ def main(argv=None):
     p.add_argument("--holdout-frac", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--lambdas", type=float, nargs="+", default=list(DEFAULT_LAMBDAS))
+    p.add_argument("--out", default="nnue_v3_weights.json", help="'' to skip writing weights")
     args = p.parse_args(argv)
 
     game_ids, y, active = load_positions(args.positions)
@@ -149,14 +172,30 @@ def main(argv=None):
         f"({len(np.unique(game_ids[train]))} / {len(np.unique(game_ids[holdout]))}), "
         f"top-n {args.top_n} -> {len(top)} ranked features"
     )
-    print(f"{'set':>10} {'lambda':>10} {'r2_hold':>9} {'r2_train':>9} {'corr':>7} {'MAE':>10}")
+    print(
+        f"{'set':>10} {'lambda':>10} {'r2_hold':>9} {'r2_train':>9} {'corr':>7} {'MAE':>10} "
+        f"{'p10':>9} {'p90':>9}"
+    )
+    best = None
     for name, ids in (("top-%d" % len(top), top), ("full-1152", full)):
         for lam in args.lambdas:
             m = evaluate(active, y, ids, train, holdout, lam)
             print(
                 f"{name:>10} {lam:>10.4g} {m['r2_holdout']:>9.4f} {m['r2_train']:>9.4f} "
-                f"{m['corr_holdout']:>7.4f} {m['mae_holdout']:>10.1f}"
+                f"{m['corr_holdout']:>7.4f} {m['mae_holdout']:>10.1f} "
+                f"{m['resid_p10']:>9.1f} {m['resid_p90']:>9.1f}"
             )
+            if best is None or m["r2_holdout"] > best[0]["r2_holdout"]:
+                best = (m, ids)
+    if args.out and best is not None:
+        doc = weights_json(best[0], best[1], game_ids, train, holdout, args.seed)
+        with open(args.out, "w") as f:
+            json.dump(doc, f, indent=1, sort_keys=True)
+            f.write("\n")
+        print(
+            f"wrote {args.out}: lambda={doc['meta']['lambda']:g} "
+            f"n={doc['meta']['top_n']} r2_holdout={doc['meta']['r2_holdout']:.4f}"
+        )
 
 
 if __name__ == "__main__":
