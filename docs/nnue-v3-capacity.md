@@ -256,3 +256,40 @@ Sanity check on the empty board: the model scores it -2329 where the hand-tuned 
 is a ~2400 miss on a label that spans ±30000, and it is shrinkage, not a bug — λ = 100 pulls the
 opening (a region where every position looks alike and the true evals are near zero) toward the
 corpus mean of -4255. It is a concrete instance of the residual tail above.
+
+## Regenerating the capacity number
+
+Two steps: mine a per-position dataset out of games.db, then fit. Both are deterministic — same DB
+plus same `--seed` gives the same R².
+
+```bash
+# 1. mine. --emit-positions writes the JSONL dataset; the aggregate stats JSON is
+#    byte-identical with and without the flag (V3FeatureMinerTest asserts it).
+./mvnw -q compile dependency:build-classpath -Dmdep.outputFile=target/classpath.txt
+java -cp "target/classes:$(cat target/classpath.txt)" \
+  com.engine.nnue_trainer.train.V3FeatureMiner /home/iv/games.db nnue_v3_feature_stats.json \
+  --emit-positions /tmp/nnue_v3_positions.jsonl
+
+# 2. fit. Sweeps lambda, fits both top-N and full-1152, writes nnue_v3_weights.json.
+python3 python/v3/fit_capacity.py /tmp/nnue_v3_positions.jsonl
+```
+
+One JSONL row per replayed position: `{"game_id": "<uuid>", "ply": P, "eval": E, "active": [144
+indices]}`, `active` in row-major cell order so `active[r*12+c]` is that cell's feature id.
+`game_id` is a **string** — games.db keys games by uuid, and reading it as a long silently collapsed
+446 games into 173 during Task 3.
+
+Fitter knobs (`python/v3/fit_capacity.py --help`):
+
+| flag | default | what it does |
+|---|---|---|
+| `--lambdas` | `0 1 10 100 1000 10000 100000` | ridge penalty sweep. **Load-bearing, not cosmetic**: each cell's 8 state columns sum to the intercept, so the design is rank-deficient 144 times over and λ picks a point on that degenerate direction. Too low → the fit chases noise; too high → everything shrinks to the corpus mean. Best held-out was λ = 100. |
+| `--top-n` | `500` | fit only the top-N features by discrimination. **Clamps** to however many cleared the support floor (332 on the current corpus), so an over-large N is not an error. Costs ~0.002 R² vs the full 1152. |
+| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. |
+| `--seed` | `0` | which games land in the holdout. Worth ±0.03 R² at 89 holdout games — quote a range, not a decimal. |
+| `--stats` | `nnue_v3_feature_stats.json` | where the discrimination ranking and support floor come from. Must be mined from the same DB as the JSONL. |
+| `--out` | `nnue_v3_weights.json` | best-held-out model of the sweep. `--out ''` skips writing. |
+
+Tests: `python3 -m unittest discover -s python/v3 -p "*_test.py"` (fitter) and `./mvnw test`
+(miner, stats-artifact invariants, HTML splice, eval sign convention). Run `./mvnw spotless:apply`
+before pushing — CI checks formatting before it runs tests.

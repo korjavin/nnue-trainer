@@ -34,6 +34,25 @@ class is named — a blanket bucket hid a parser NPE that was discarding 4 of th
 Gate outcome: approve → d4a.6.1 proceeds; reject → the feature design is revised (e.g. pairwise or
 region features) before any model spend.
 
+## Outcome: the features passed the capacity test
+
+The gate was approved and d4a.6.1 ran. [`docs/nnue-v3-capacity.md`](nnue-v3-capacity.md) holds the
+result: ridge-distilling the hand-tuned static eval onto these 1152 features reaches a **held-out
+R² of 0.976** (λ = 100, split by game, seed 0; **0.94–0.98** across seeds). So absolute single-cell
+features *can* represent the hand-tuned eval — **proceed to `nnue-trainer-aov` and `d4a.6.2`; do not
+add pairwise/region features yet.** The fitted weights are in
+[`nnue_v3_weights.json`](../nnue_v3_weights.json), the warm start for `aov` and `1uz`.
+
+Two findings from that work that change how this page should be read:
+
+- the ranking here is stable but not fixed — doubling the corpus (217 → 446 games) kept **16 of the
+  top 25** features and Spearman ρ = 0.962, with most departures demoted by the raised support floor
+  rather than by discrimination;
+- `baseline_mean_eval` is strongly negative because of **turn parity**, not a sign bug: a position is
+  the board *before* a turn, scored from the player who has not yet moved, and one turn is worth
+  ~+11000. The constant offset does not affect discrimination, but its residual ply-dependence means
+  discrimination is partly a "how late does this feature appear" signal. See the capacity report.
+
 ## Regenerating
 
 Mine the stats from a games.db (positions = board before each turn, STM-relative eval, `movesLeft`
