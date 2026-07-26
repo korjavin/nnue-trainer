@@ -16,6 +16,8 @@ import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
 import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
+import com.engine.nnue_trainer.v3.NNUEv3NetEvaluator;
+import com.engine.nnue_trainer.v3.V3Eval;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -113,8 +115,9 @@ public class SearchEngine {
     }
   }
 
-  // Opt-in NNUE v3 dense-feature evaluator (EVAL=NNUEV3). 12x12 only — other sizes fall back to the
-  // default eval rather than throwing. Default OFF, same lazy-shared-load + warn-once shape as v2.
+  // Opt-in NNUE v3 dense-feature evaluator (EVAL=NNUEV3, linear fit). 12x12 only — other sizes fall
+  // back to the default eval rather than throwing. Default OFF, same lazy-shared-load + warn-once
+  // shape as v2. See the NNUEV3NET block below for the hidden-layer sibling.
   private boolean useNnueV3Eval = nnueV3FromEnv();
   private NNUEv3Evaluator injectedV3Evaluator; // test hook; overrides the shared lazy load
   private static volatile NNUEv3Evaluator sharedV3Evaluator;
@@ -175,6 +178,68 @@ public class SearchEngine {
                 + "); falling back to the default eval.");
       }
       return sharedV3Evaluator;
+    }
+  }
+
+  // Opt-in NNUE v3 NET evaluator (EVAL=NNUEV3NET) — the hidden-layer sibling of the block above,
+  // same feature set, same hand-tuned units, same 12x12-only fallback. Separate flag and separate
+  // shared load so a net weights file that fails to load cannot disable the linear leaf (or vice
+  // versa). Default OFF: with EVAL unset, play is byte-identical to today.
+  private boolean useNnueV3NetEval = nnueV3NetFromEnv();
+  private NNUEv3NetEvaluator injectedV3NetEvaluator; // test hook; overrides the shared lazy load
+  private static volatile NNUEv3NetEvaluator sharedV3NetEvaluator;
+  private static volatile boolean v3NetLoadFailed;
+
+  private static boolean nnueV3NetFromEnv() {
+    String v = System.getProperty("EVAL", System.getenv("EVAL"));
+    return "NNUEV3NET".equalsIgnoreCase(v);
+  }
+
+  public void setUseNnueV3NetEval(boolean value) {
+    this.useNnueV3NetEval = value;
+  }
+
+  public boolean isUseNnueV3NetEval() {
+    return useNnueV3NetEval;
+  }
+
+  /** Inject a v3 net evaluator (tests / callers that hold one), bypassing the lazy file load. */
+  public void setNnueV3NetEvaluator(NNUEv3NetEvaluator evaluator) {
+    this.injectedV3NetEvaluator = evaluator;
+  }
+
+  /** As {@link #resetSharedV3Evaluator}, for the net's shared load and warn-once latch. */
+  static void resetSharedV3NetEvaluator() {
+    synchronized (SearchEngine.class) {
+      sharedV3NetEvaluator = null;
+      v3NetLoadFailed = false;
+    }
+  }
+
+  private NNUEv3NetEvaluator nnueV3NetEvaluator() {
+    if (injectedV3NetEvaluator != null) {
+      return injectedV3NetEvaluator;
+    }
+    if (sharedV3NetEvaluator != null || v3NetLoadFailed) {
+      return sharedV3NetEvaluator;
+    }
+    synchronized (SearchEngine.class) {
+      if (sharedV3NetEvaluator != null || v3NetLoadFailed) {
+        return sharedV3NetEvaluator;
+      }
+      try {
+        sharedV3NetEvaluator =
+            NNUEv3NetEvaluator.load(
+                Path.of(
+                    sysval("NNUEV3NET_WEIGHTS", NNUEv3NetEvaluator.DEFAULT_WEIGHTS.toString())));
+      } catch (Exception e) {
+        v3NetLoadFailed = true;
+        System.err.println(
+            "EVAL=NNUEV3NET requested but weights failed to load ("
+                + e
+                + "); falling back to the default eval.");
+      }
+      return sharedV3NetEvaluator;
     }
   }
 
@@ -569,10 +634,11 @@ public class SearchEngine {
           board, originalPlayer, sideToMove, handTunedMovesLeft, handTunedNeutralUsed);
     }
 
-    if (useNnueV3Eval
+    if ((useNnueV3Eval || useNnueV3NetEval)
         && board.rows == NNUEv3Accumulator.BOARD
         && board.cols == NNUEv3Accumulator.BOARD) {
-      NNUEv3Evaluator v3 = nnueV3Evaluator();
+      // Net wins if both flags are somehow set; the two leaves are interchangeable by construction.
+      V3Eval v3 = useNnueV3NetEval ? nnueV3NetEvaluator() : nnueV3Evaluator();
       if (v3 != null) {
         // Already in hand-tuned eval units — no scale. The fit's labels are
         // staticEval(board, stm, stm, ..) (V3FeatureMiner), i.e. scored player == mover, so query

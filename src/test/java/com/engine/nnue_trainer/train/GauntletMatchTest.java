@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
+import com.engine.nnue_trainer.v3.V3TestEvaluators;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +54,19 @@ class GauntletMatchTest {
 
     // A null side is the hand-tuned bar — this is the challenger-vs-bar guard Task 2 needs.
     GauntletMatch.Result r = GauntletMatch.play(model, null, fastConfig());
+
+    assertEquals(fastConfig().games, r.wins + r.losses + r.draws, "every game counted once: " + r);
+  }
+
+  /**
+   * {@code applyLeaf} must dispatch a v3 <b>net</b> evaluator to the v3 leaf. Before the {@code
+   * V3Eval} dispatch it fell through to the v1 branch and died on {@code (NNUEModel) side}, so a
+   * match that merely completes is the assertion.
+   */
+  @Test
+  void v3NetSideDispatchesToTheV3Leaf() {
+    GauntletMatch.Result r =
+        GauntletMatch.play(V3TestEvaluators.selfStonesNet(), null, fastConfig());
 
     assertEquals(fastConfig().games, r.wins + r.losses + r.draws, "every game counted once: " + r);
   }
