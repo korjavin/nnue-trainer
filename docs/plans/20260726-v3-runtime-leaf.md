@@ -189,14 +189,35 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 6: Verify acceptance criteria
 
-- [ ] verify the bead is covered: accumulator, evaluator, `NNUEV3` leaf, `EVAL=NNUEV3` hook, NPS
-      benchmark
-- [ ] verify NO gauntlet, NO training, NO incremental updates, NO scale knob were added
-- [ ] verify the default-OFF guarantee explicitly: with `EVAL` unset the engine's chosen moves are
-      unchanged
-- [ ] verify edge cases: non-12x12 board, missing weights file, weights with fewer than 1152 entries
-- [ ] run the full test suite (`./mvnw test` and the Python tests) — must pass
-- [ ] run `./mvnw spotless:apply` — CI checks formatting before it runs tests
+- [x] verify the bead is covered: accumulator (`v3/NNUEv3Accumulator.java`, delegates `idx`/
+      `activeFeatures` to `V3FeatureMiner`), evaluator (`v3/NNUEv3Evaluator.java`, `DEFAULT_WEIGHTS`
+      + `load(Path)` + `evaluate(Board,int)`), `NNUEV3` leaf (`GoBotSearcher.LeafEval.NNUEV3`,
+      `LeafConfig.v3`, `configureDefaultLeafEvalV3`, the `leafEval` branch at ~line 622 and
+      `nnueV3Leaf` at ~line 704), `EVAL=NNUEV3` hook (`SearchEngine` lazy `volatile`
+      `sharedV3Evaluator` + `v3LoadFailed` warn-once, branch at ~line 560), NPS benchmark
+      (`NNUEv3BenchmarkTest`, result in `docs/nnue-v3-runtime.md`)
+- [x] verify NO gauntlet, NO training, NO incremental updates, NO scale knob were added — the
+      `master...HEAD` diff touches only `SearchEngine`, `GoBotSearcher`, new `v3/*`, tests, the
+      fixture, the generator and docs; `GauntletMatch`/`SelfPlayGenerator`/`train/` are untouched,
+      the accumulator is full-recompute (no delta state), and the only `*_SCALE` env read in
+      `GoBotSearcher` remains the pre-existing v2 one
+- [x] verify the default-OFF guarantee explicitly: with `EVAL` unset the engine's chosen moves are
+      unchanged — `GoBotNnueV3LeafTest.defaultOffIsUnchanged` asserts identical `action` *and*
+      `score` across configure/restore of the v3 leaf, `newSearcher` stays `HAND_TUNED`, and
+      `SearchEngineNnueV3Test` asserts `isUseNnueV3Eval()` is false by default and that the baseline
+      eval is restored when the flag is turned back off
+- [x] verify edge cases: non-12x12 board (`NNUEv3AccumulatorTest.testRejectsNon12x12`,
+      `NNUEv3EvaluatorTest.testNon12x12Rejected`, plus both fallback paths in
+      `GoBotNnueV3LeafTest.nonTwelveByTwelveFallsBackToHandTuned` and
+      `SearchEngineNnueV3Test.nonTwelveByTwelveFallsBackInsteadOfThrowing`); missing weights file
+      (`SearchEngineNnueV3Test.failedWeightsLoadFallsBackInsteadOfPropagating` points
+      `NNUEV3_WEIGHTS` at a nonexistent path and asserts a finite fallback score); fewer than 1152
+      entries (`testMissingWeightsAreZeroAndBiasOnlyFileLoads` — an empty `weights` map loads and
+      evaluates to the bias alone)
+- [x] run the full test suite (`./mvnw test` and the Python tests) — must pass (`./mvnw test`: 219
+      run, 0 failures, 0 errors, 3 skipped — the tagged benchmarks; `pytest python/`: 73 passed)
+- [x] run `./mvnw spotless:apply` — CI checks formatting before it runs tests (exit 0, no files
+      reformatted)
 
 ### Task 7: [Final] Update documentation
 
