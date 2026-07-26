@@ -10,6 +10,8 @@ import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
+import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
+import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -45,7 +47,8 @@ public final class GoBotSearcher {
   public enum LeafEval {
     HAND_TUNED,
     NNUE,
-    NNUEV2
+    NNUEV2,
+    NNUEV3
   }
 
   /**
@@ -80,21 +83,27 @@ public final class GoBotSearcher {
 
   /**
    * Immutable (mode, model) snapshot so newSearcher reads a consistent view in one volatile read.
-   * At most one of {@code model}/{@code v2} is non-null (matching {@code mode}).
+   * At most one of {@code model}/{@code v2}/{@code v3} is non-null (matching {@code mode}).
    */
   public static final class LeafConfig {
     final LeafEval mode;
     final NNUEModel model;
     final NNUEv2Evaluator v2;
+    final NNUEv3Evaluator v3;
 
     LeafConfig(LeafEval mode, NNUEModel model) {
-      this(mode, model, null);
+      this(mode, model, null, null);
     }
 
     LeafConfig(LeafEval mode, NNUEModel model, NNUEv2Evaluator v2) {
+      this(mode, model, v2, null);
+    }
+
+    LeafConfig(LeafEval mode, NNUEModel model, NNUEv2Evaluator v2, NNUEv3Evaluator v3) {
       this.mode = mode;
       this.model = model;
       this.v2 = v2;
+      this.v3 = v3;
     }
   }
 
@@ -109,6 +118,7 @@ public final class GoBotSearcher {
   LeafEval leafMode = LeafEval.HAND_TUNED;
   NNUEModel nnueModel;
   NNUEv2Evaluator nnueV2;
+  NNUEv3Evaluator nnueV3;
   long nodes;
   long evaluations;
   long nodeLimit; // 0 == unlimited
@@ -142,6 +152,16 @@ public final class GoBotSearcher {
     return prev;
   }
 
+  /**
+   * As above, for the NNUE v3 leaf ({@code mode} is normally {@link LeafEval#NNUEV3}). Distinct
+   * name (not an overload) for the same reason as the v2 variant.
+   */
+  public static LeafConfig configureDefaultLeafEvalV3(LeafEval mode, NNUEv3Evaluator v3) {
+    LeafConfig prev = defaultLeaf;
+    defaultLeaf = new LeafConfig(mode, null, null, v3);
+    return prev;
+  }
+
   /** Restore a previously-captured default (see {@link #configureDefaultLeafEval}). */
   public static void restoreDefaultLeafEval(LeafConfig prev) {
     defaultLeaf = prev;
@@ -167,6 +187,7 @@ public final class GoBotSearcher {
     s.leafMode = cfg.mode;
     s.nnueModel = cfg.model;
     s.nnueV2 = cfg.v2;
+    s.nnueV3 = cfg.v3;
     return s;
   }
 
@@ -590,7 +611,25 @@ public final class GoBotSearcher {
 
   // --- scoring helpers (port of terminalScore / evaluate / activeCount) ---
 
+  /** v3 is 12x12-only; other sizes fall back to the hand-tuned leaf rather than throwing. */
+  private static boolean v3Usable(Board board, NNUEv3Evaluator v3) {
+    return v3 != null
+        && board.rows == NNUEv3Accumulator.BOARD
+        && board.cols == NNUEv3Accumulator.BOARD;
+  }
+
   private long leafEval(GoState state) {
+    if (leafMode == LeafEval.NNUEV3) {
+      // Already in hand-tuned units (fitted against them) — no scale. STM-relative like v1/v2:
+      // query from the leaf's own mover, then flip to root's perspective by zero-sum negation.
+      Board board = state.toBoard();
+      if (v3Usable(board, nnueV3)) {
+        int mover = state.currentPlayer();
+        long v = nnueV3Leaf(board, mover, nnueV3);
+        return mover == root ? v : -v;
+      }
+      // fall through to hand-tuned
+    }
     if (leafMode == LeafEval.NNUEV2) {
       // v2 net is side-to-move relative (same rationale as v1 below): query from the leaf's own
       // mover, then flip to root's perspective by zero-sum negation.
@@ -619,8 +658,11 @@ public final class GoBotSearcher {
     // own stones. The clean 2-player gauntlet/test bench never hits maxN, so this is fine.
     NNUEModel model = leafMode == LeafEval.NNUE ? nnueModel : null;
     NNUEv2Evaluator v2 = leafMode == LeafEval.NNUEV2 ? nnueV2 : null;
+    NNUEv3Evaluator v3 = leafMode == LeafEval.NNUEV3 && v3Usable(board, nnueV3) ? nnueV3 : null;
     for (int p = 1; p <= 4; p++) {
-      if (v2 != null) {
+      if (v3 != null) {
+        all[p - 1] = nnueV3Leaf(board, p, v3);
+      } else if (v2 != null) {
         all[p - 1] = nnueV2Leaf(board, p, v2);
       } else if (model != null) {
         all[p - 1] = nnueLeaf(board, p, model);
@@ -652,6 +694,16 @@ public final class GoBotSearcher {
     double wdl = v2.evaluate(board, player);
     long scaled = Math.round((wdl - 0.5) * NNUEV2_SCALE);
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, scaled));
+  }
+
+  /**
+   * NNUE v3 leaf value oriented to {@code player}. The evaluator already emits hand-tuned eval
+   * units, so this only rounds to the search's {@code long} frame and clamps strictly inside {@code
+   * ±MATE_SCORE} — deliberately no scale knob (see {@link NNUEv3Evaluator}).
+   */
+  static long nnueV3Leaf(Board board, int player, NNUEv3Evaluator v3) {
+    long score = Math.round(v3.evaluate(board, player));
+    return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, score));
   }
 
   /**

@@ -14,6 +14,8 @@ import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
+import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
+import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,6 +110,59 @@ public class SearchEngine {
                 + "); falling back to the default eval.");
       }
       return sharedV2Evaluator;
+    }
+  }
+
+  // Opt-in NNUE v3 dense-feature evaluator (EVAL=NNUEV3). 12x12 only — other sizes fall back to the
+  // default eval rather than throwing. Default OFF, same lazy-shared-load + warn-once shape as v2.
+  private boolean useNnueV3Eval = nnueV3FromEnv();
+  private NNUEv3Evaluator injectedV3Evaluator; // test hook; overrides the shared lazy load
+  private static volatile NNUEv3Evaluator sharedV3Evaluator;
+  private static volatile boolean v3LoadFailed;
+
+  private static boolean nnueV3FromEnv() {
+    String v = System.getProperty("EVAL", System.getenv("EVAL"));
+    return "NNUEV3".equalsIgnoreCase(v);
+  }
+
+  public void setUseNnueV3Eval(boolean value) {
+    this.useNnueV3Eval = value;
+  }
+
+  public boolean isUseNnueV3Eval() {
+    return useNnueV3Eval;
+  }
+
+  /**
+   * Inject a v3 evaluator (tests / callers that already hold one), bypassing the lazy file load.
+   */
+  public void setNnueV3Evaluator(NNUEv3Evaluator evaluator) {
+    this.injectedV3Evaluator = evaluator;
+  }
+
+  private NNUEv3Evaluator nnueV3Evaluator() {
+    if (injectedV3Evaluator != null) {
+      return injectedV3Evaluator;
+    }
+    if (sharedV3Evaluator != null || v3LoadFailed) {
+      return sharedV3Evaluator;
+    }
+    synchronized (SearchEngine.class) {
+      if (sharedV3Evaluator != null || v3LoadFailed) {
+        return sharedV3Evaluator;
+      }
+      try {
+        sharedV3Evaluator =
+            NNUEv3Evaluator.load(
+                Path.of(sysval("NNUEV3_WEIGHTS", NNUEv3Evaluator.DEFAULT_WEIGHTS.toString())));
+      } catch (Exception e) {
+        v3LoadFailed = true;
+        System.err.println(
+            "EVAL=NNUEV3 requested but weights failed to load ("
+                + e
+                + "); falling back to the default eval.");
+      }
+      return sharedV3Evaluator;
     }
   }
 
@@ -500,6 +555,17 @@ public class SearchEngine {
       }
       return HandTunedEval.staticEval(
           board, originalPlayer, sideToMove, handTunedMovesLeft, handTunedNeutralUsed);
+    }
+
+    if (useNnueV3Eval
+        && board.rows == NNUEv3Accumulator.BOARD
+        && board.cols == NNUEv3Accumulator.BOARD) {
+      NNUEv3Evaluator v3 = nnueV3Evaluator();
+      if (v3 != null) {
+        // Already in hand-tuned eval units, in originalPlayer's frame (positive == good for them).
+        return (float) v3.evaluate(board, originalPlayer);
+      }
+      // Load failed -> fall through to the baseline below (as does any non-12x12 board).
     }
 
     if (useNnueV2Eval) {

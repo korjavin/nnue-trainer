@@ -155,21 +155,21 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 4: Wire the GoBot leaf and the EVAL=NNUEV3 env hook
 
-- [ ] add `NNUEV3` to `GoBotSearcher.LeafEval` and carry an `NNUEv3Evaluator` on `LeafConfig`
+- [x] add `NNUEV3` to `GoBotSearcher.LeafEval` and carry an `NNUEv3Evaluator` on `LeafConfig`
       alongside the existing v2 slot; add `configureDefaultLeafEvalV3(mode, evaluator)` as a
       distinct name (not an overload) so existing callers stay unambiguous
-- [ ] add the `leafEval(state)` branch mirroring the v2 one: query from the leaf's own mover, then
+- [x] add the `leafEval(state)` branch mirroring the v2 one: query from the leaf's own mover, then
       negate to the root's perspective by zero-sum negation
-- [ ] add the `EVAL=NNUEV3` branch in `SearchEngine`, mirroring the v2 lazy `volatile` shared load
+- [x] add the `EVAL=NNUEV3` branch in `SearchEngine`, mirroring the v2 lazy `volatile` shared load
       with a warn-once fallback when the weights fail to load
-- [ ] **12x12 fallback**: when `EVAL=NNUEV3` is set but the board is not 12x12, fall back to the
+- [x] **12x12 fallback**: when `EVAL=NNUEV3` is set but the board is not 12x12, fall back to the
       hand-tuned eval rather than throwing — the engine plays other sizes and must not crash
-- [ ] write a test asserting `EVAL` unset leaves `LeafEval.HAND_TUNED` and produces identical moves
+- [x] write a test asserting `EVAL` unset leaves `LeafEval.HAND_TUNED` and produces identical moves
       to today (the default-OFF guarantee)
-- [ ] write a test asserting `EVAL=NNUEV3` selects the v3 leaf, and one asserting the non-12x12
+- [x] write a test asserting `EVAL=NNUEV3` selects the v3 leaf, and one asserting the non-12x12
       fallback path
-- [ ] write a test asserting a failed weights load falls back instead of propagating
-- [ ] run tests - must pass before next task
+- [x] write a test asserting a failed weights load falls back instead of propagating
+- [x] run tests - must pass before next task
 
 ### Task 5: Benchmark NPS against hand-tuned
 
