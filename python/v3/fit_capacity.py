@@ -70,7 +70,7 @@ def split_by_game(game_ids, holdout_frac=0.2, seed=0):
     games = np.unique(game_ids)
     rng = np.random.default_rng(seed)
     shuffled = rng.permutation(games)
-    n_holdout = max(1, int(round(holdout_frac * len(games)))) if len(games) > 1 else 0
+    n_holdout = int(round(holdout_frac * len(games)))
     holdout_games = set(shuffled[:n_holdout].tolist())
     holdout = np.array([g in holdout_games for g in game_ids])
     return ~holdout, holdout
@@ -124,18 +124,30 @@ def evaluate(active, y, feature_ids, train, holdout, lam):
         "mae_holdout": float(np.mean(np.abs(resid))),
         "resid_p10": float(np.percentile(resid, 10)),
         "resid_p90": float(np.percentile(resid, 90)),
+        # The tail, not the middle 80%: MAE exceeds |p90|, so the error lives out here.
+        "resid_abs_p99": float(np.percentile(np.abs(resid), 99)),
+        "resid_abs_max": float(np.max(np.abs(resid))),
         "bias": float(bias),
         "weights": w,
     }
 
 
-def weights_json(fit, feature_ids, game_ids, train, holdout, seed):
-    """The warm start consumed by nnue-trainer-aov / -1uz, plus repro metadata."""
+def weights_json(fit, feature_ids, game_ids, train, holdout, seed, holdout_frac):
+    """The warm start consumed by nnue-trainer-aov / -1uz, plus repro metadata.
+
+    fit["weights"]/["bias"] are the model to SHIP (refit on every position); the
+    r2/corr/mae fields are the measurement from the train-only fit at the same
+    lambda, on games that fit never saw.
+    """
     return {
         "meta": {
             "lambda": fit["lambda"],
             "top_n": len(feature_ids),
             "split_seed": seed,
+            "holdout_frac": holdout_frac,
+            "fit_on": "all",  # weights use every game; the metrics below do not
+            "games_total": len(np.unique(game_ids)),
+            "positions_total": len(game_ids),
             "games_train": len(np.unique(game_ids[train])),
             "games_holdout": len(np.unique(game_ids[holdout])),
             "positions_train": int(train.sum()),
@@ -164,6 +176,12 @@ def main(argv=None):
 
     game_ids, y, active = load_positions(args.positions)
     train, holdout = split_by_game(game_ids, args.holdout_frac, args.seed)
+    if not holdout.any() or not train.any():
+        raise SystemExit(
+            "empty split: %d train / %d holdout positions over %d games -- "
+            "--holdout-frac %g needs a corpus with at least 2 games"
+            % (train.sum(), holdout.sum(), len(np.unique(game_ids)), args.holdout_frac)
+        )
     top = ranked_features(args.stats, args.top_n)
     full = np.arange(N_FEATURES, dtype=np.int32)
     print(
@@ -174,7 +192,7 @@ def main(argv=None):
     )
     print(
         f"{'set':>10} {'lambda':>10} {'r2_hold':>9} {'r2_train':>9} {'corr':>7} {'MAE':>10} "
-        f"{'p10':>9} {'p90':>9}"
+        f"{'p10':>9} {'p90':>9} {'|p99|':>9} {'|max|':>9}"
     )
     best = None
     for name, ids in (("top-%d" % len(top), top), ("full-1152", full)):
@@ -183,12 +201,18 @@ def main(argv=None):
             print(
                 f"{name:>10} {lam:>10.4g} {m['r2_holdout']:>9.4f} {m['r2_train']:>9.4f} "
                 f"{m['corr_holdout']:>7.4f} {m['mae_holdout']:>10.1f} "
-                f"{m['resid_p10']:>9.1f} {m['resid_p90']:>9.1f}"
+                f"{m['resid_p10']:>9.1f} {m['resid_p90']:>9.1f} "
+                f"{m['resid_abs_p99']:>9.1f} {m['resid_abs_max']:>9.1f}"
             )
             if best is None or m["r2_holdout"] > best[0]["r2_holdout"]:
                 best = (m, ids)
     if args.out and best is not None:
-        doc = weights_json(best[0], best[1], game_ids, train, holdout, args.seed)
+        # The holdout's job is to MEASURE and to pick lambda; the shipped warm start then
+        # refits at that lambda on every position -- withholding 20% of a 446-game corpus
+        # from the artifact aov/1uz initialize from would just be a worse initialization.
+        w, bias = ridge(design(active, best[1]), y, best[0]["lambda"])
+        final = dict(best[0], weights=w, bias=float(bias))
+        doc = weights_json(final, best[1], game_ids, train, holdout, args.seed, args.holdout_frac)
         with open(args.out, "w") as f:
             json.dump(doc, f, indent=1, sort_keys=True)
             f.write("\n")

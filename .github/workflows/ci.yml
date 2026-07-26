@@ -25,3 +25,10 @@ jobs:
 
     - name: Build and Test with Maven
       run: ./mvnw -B clean test --file pom.xml
+
+    # The ridge fitter is the only non-trivial math in the v3 capacity bead, and it also
+    # validates the committed nnue_v3_weights.json artifact.
+    - name: Test the v3 capacity fitter
+      run: |
+        pip install --quiet numpy
+        python3 -m unittest discover -s python/v3 -p "*_test.py"

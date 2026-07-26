@@ -38,7 +38,8 @@ region features) before any model spend.
 
 The gate was approved and d4a.6.1 ran. [`docs/nnue-v3-capacity.md`](nnue-v3-capacity.md) holds the
 result: ridge-distilling the hand-tuned static eval onto these 1152 features reaches a **held-out
-R² of 0.976** (λ = 100, split by game, seed 0; **0.94–0.98** across seeds). So absolute single-cell
+R² of 0.976** (λ = 100, split by game, seed 0; **0.93–0.98** across seeds 0–5, with λ chosen on that
+same holdout). So absolute single-cell
 features *can* represent the hand-tuned eval — **proceed to `nnue-trainer-aov` and `d4a.6.2`; do not
 add pairwise/region features yet.** The fitted weights are in
 [`nnue_v3_weights.json`](../nnue_v3_weights.json), the warm start for `aov` and `1uz`.

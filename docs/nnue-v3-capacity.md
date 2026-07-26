@@ -164,13 +164,16 @@ in any dataset built this way, including the one the runtime leaf will see.
 ### Verdict
 
 **Held-out R² = 0.976** (λ = 100, all 1152 features, 89 unseen games / 1289 positions, split seed 0).
-Correlation 0.988, MAE 1230 against a label that spans ±30000.
+Correlation 0.988, MAE 1230 against a label that spans ±30000. Across six split seeds the number runs
+**0.93–0.98**, and λ was chosen on that same holdout — see the caveats below before quoting a
+decimal.
 
 **Decision: proceed to the runtime leaf (`nnue-trainer-aov`) and the gauntlet (`d4a.6.2`). Do not add
 pairwise/region features yet.** Absolute single-cell `(row, col, state)` indicators reproduce the
-hand-tuned static eval to within ~2.4% of its variance on games the fit never saw. The representation
-is not the bottleneck, so spending the next bead on richer features would be optimizing the part that
-is already working.
+hand-tuned static eval to within ~2.4% of its variance on games the fit never saw, which clears any
+plausible go/no-go bar. What to watch in the gauntlet is the **residual tail**, not the mean: ~8.5%
+of held-out positions are off by more than one action's worth of eval (see "Residuals" below). That
+is the ceiling pairwise features would buy — after `d4a.6.2` says whether it costs games.
 
 Regenerate:
 
@@ -204,15 +207,29 @@ Reading it:
 - **The top-N cut costs almost nothing.** At the peak, top-332 gives 0.9740 against full-1152's
   0.9756 — 0.0016 of R² for 71% fewer columns. Whether `aov` ships 332 or 1152 weights is a runtime
   memory question, not an accuracy one.
-- **Residuals are tight but asymmetric.** At λ = 100 the middle 80% of holdout residuals sit in
-  [-1133, +704] on a ±30000 label — but MAE (1230) exceeds the p90, i.e. the error is concentrated in
-  a thin tail rather than spread. The tail is where a linear-in-single-cells model cannot follow
-  the hand-tuned eval's interaction terms; that is the honest ceiling of this representation, and
-  it is what pairwise features would buy *if* 0.976 ever proves insufficient.
-- **The number moves with the split.** Held-out R² at λ = 100, full-1152: **0.976 (seed 0), 0.953
-  (seed 1), 0.944 (seed 2)**. So quote it as **R² ≈ 0.94–0.98**, not as 0.9756. Seed 0 is the
-  optimistic end of that band. The verdict does not turn on which seed — every seed clears any
-  plausible go/no-go bar — but a single decimal place here is noise.
+- **Residuals: tight middle, fat tail.** At λ = 100 the middle 80% of holdout residuals sit in
+  [-1133, +704] on a ±30000 label — but MAE (1230) exceeds the p90, so the error is concentrated
+  rather than spread. The absolute holdout residual quantiles say it plainly:
+
+  | p50 | p75 | p90 | p95 | p99 | max |
+  |---|---|---|---|---|---|
+  | 390 | 920 | 3218 | 5686 | 12641 | 29388 |
+
+  One turn is worth ~11085 eval units (Task 2), i.e. ~3700 per action, so **~8.5% of held-out
+  positions are mispredicted by more than one action** and ~1% by three or more. The tail is where a
+  linear-in-single-cells model cannot follow the hand-tuned eval's interaction terms; that is the
+  honest ceiling of this representation, and it is what pairwise features would buy *if* the gauntlet
+  shows it costing games. Both well-populated ply buckets fit about equally well (ply 0–9 R² 0.961
+  over 888 holdout positions, ply 10–19 R² 0.984 over 389), so this is tail concentration, not an
+  opening/endgame split — the 12 holdout positions past ply 20 are too few to read.
+- **The number moves with the split.** Held-out R² at λ = 100, full-1152, by seed: **0.976 / 0.953 /
+  0.944 / 0.962 / 0.931 / 0.940** (seeds 0–5). So quote it as **R² ≈ 0.93–0.98**, not as 0.9756.
+  Seed 0 is the optimistic end of that band. The verdict does not turn on which seed — every seed
+  clears any plausible go/no-go bar — but a single decimal place here is noise.
+- **λ was selected on the reported holdout.** There is no third split: the sweep picks its best row
+  by held-out R² and that same number is the headline, so 0.9756 is optimistically biased as a point
+  estimate. The selection is nearly stable (λ = 100 wins on 5 of the 6 seeds; seed 3 prefers λ = 10
+  by 0.008), which is why the seed *band* above — not the max — is the number to carry forward.
 
 ### Data-ratio caveat, with the actual counts
 
@@ -235,27 +252,33 @@ That is exactly why:
 ### `nnue_v3_weights.json`
 
 The warm start for `nnue-trainer-aov` (engine leaf) and `nnue-trainer-1uz` (net initialization).
-The fitter writes the best-held-out-R² model of the sweep — currently λ = 100, full 1152 features.
+The sweep picks (λ, feature set) on the holdout — currently λ = 100, full 1152 features — and the
+fitter then **refits that model on every position** before writing the file (`"fit_on": "all"`). The
+holdout's job is to measure and to choose λ; withholding a fifth of a 446-game corpus from the
+artifact downstream beads initialize from would only make the initialization worse. So the `r2_*`
+/ `corr_*` / `mae_*` fields describe the train-only fit at the same λ, **not** the shipped weights —
+there is no held-out number for the shipped weights by construction.
 
 ```
-{"meta": {"lambda": 100.0, "top_n": 1152, "split_seed": 0,
-          "games_train": 357, "games_holdout": 89,
-          "positions_train": 5300, "positions_holdout": 1289,
+{"meta": {"lambda": 100.0, "top_n": 1152, "n_features_total": 1152, "fit_on": "all",
+          "split_seed": 0, "holdout_frac": 0.2,
+          "games_total": 446, "games_train": 357, "games_holdout": 89,
+          "positions_total": 6589, "positions_train": 5300, "positions_holdout": 1289,
           "r2_holdout": 0.97564, "r2_train": 0.96339, "corr_holdout": 0.98790,
-          "mae_holdout": 1229.82, "bias": 9594.07, "n_features_total": 1152},
+          "mae_holdout": 1229.82, "bias": 9912.07},
  "weights": {"<feature_index>": w, ...}}
 ```
 
 `eval_v3(board) = bias + Σ_{f active} weights[f]` over the 144 active indices, STM-relative, same
-units as the hand-tuned static eval. Weights range [-4990, +3813], mean |w| = 315. Note the bias:
-+9594 against a mean label of -4255, because the 144 EMPTY-state weights sum to -11924 — the
+units as the hand-tuned static eval. Weights range [-5099, +3954], mean |w| = 320. Note the bias:
++9912 against a mean label of -4255, because the 144 EMPTY-state weights sum to -12277 — the
 intercept and the per-cell weights are only identifiable together (the dummy-variable degeneracy),
 so a consumer must apply bias and weights as a pair; neither is meaningful alone.
 
-Sanity check on the empty board: the model scores it -2329 where the hand-tuned eval scores +36. That
-is a ~2400 miss on a label that spans ±30000, and it is shrinkage, not a bug — λ = 100 pulls the
-opening (a region where every position looks alike and the true evals are near zero) toward the
-corpus mean of -4255. It is a concrete instance of the residual tail above.
+Sanity check on the start position: the model scores it -266 where the hand-tuned eval scores +36 —
+a ~300 miss on a label that spans ±30000. (The train-only fit missed it by ~2400, because seed 0's
+holdout took 89 games' worth of opening positions out of the fit; the refit on all games is why the
+shipped artifact does better here.)
 
 ## Regenerating the capacity number
 
@@ -285,10 +308,10 @@ Fitter knobs (`python/v3/fit_capacity.py --help`):
 |---|---|---|
 | `--lambdas` | `0 1 10 100 1000 10000 100000` | ridge penalty sweep. **Load-bearing, not cosmetic**: each cell's 8 state columns sum to the intercept, so the design is rank-deficient 144 times over and λ picks a point on that degenerate direction. Too low → the fit chases noise; too high → everything shrinks to the corpus mean. Best held-out was λ = 100. |
 | `--top-n` | `500` | fit only the top-N features by discrimination. **Clamps** to however many cleared the support floor (332 on the current corpus), so an over-large N is not an error. Costs ~0.002 R² vs the full 1152. |
-| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. |
-| `--seed` | `0` | which games land in the holdout. Worth ±0.03 R² at 89 holdout games — quote a range, not a decimal. |
+| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. An empty train or holdout side is a hard error, not a silent one-game fallback. |
+| `--seed` | `0` | which games land in the holdout. Worth ±0.02 R² at 89 holdout games (0.93–0.98 over seeds 0–5) — quote a range, not a decimal. |
 | `--stats` | `nnue_v3_feature_stats.json` | where the discrimination ranking and support floor come from. Must be mined from the same DB as the JSONL. |
-| `--out` | `nnue_v3_weights.json` | best-held-out model of the sweep. `--out ''` skips writing. |
+| `--out` | `nnue_v3_weights.json` | the sweep's best-held-out (λ, feature set), **refit on all positions**. `--out ''` skips writing and leaves the sweep table as pure diagnostics. |
 
 Tests: `python3 -m unittest discover -s python/v3 -p "*_test.py"` (fitter) and `./mvnw test`
 (miner, stats-artifact invariants, HTML splice, eval sign convention). Run `./mvnw spotless:apply`

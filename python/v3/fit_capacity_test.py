@@ -14,6 +14,7 @@ from python.v3.fit_capacity import (
     design,
     evaluate,
     load_positions,
+    main,
     r2,
     ranked_features,
     ridge,
@@ -176,7 +177,7 @@ class WeightsJsonTest(unittest.TestCase):
         train, holdout = split_by_game(game_ids, 0.2, seed=0)
         ids = np.arange(n_features, dtype=np.int32)
         return weights_json(
-            evaluate(active, y, ids, train, holdout, lam=1.0), ids, game_ids, train, holdout, 0
+            evaluate(active, y, ids, train, holdout, lam=1.0), ids, game_ids, train, holdout, 0, 0.2
         )
 
     def test_round_trips_through_json(self):
@@ -197,6 +198,12 @@ class WeightsJsonTest(unittest.TestCase):
         self.assertEqual(meta["positions_train"] + meta["positions_holdout"], 80)
         self.assertEqual(meta["split_seed"], 0)
 
+    def test_meta_records_what_the_split_needs_to_be_reproduced(self):
+        meta = self._fit()["meta"]
+        self.assertEqual(meta["holdout_frac"], 0.2)
+        self.assertEqual(meta["games_total"], 10)
+        self.assertEqual(meta["positions_total"], 80)
+
     @unittest.skipUnless(os.path.exists(COMMITTED_WEIGHTS), "no committed weights artifact")
     def test_committed_artifact_indices_are_in_range(self):
         doc = json.load(open(COMMITTED_WEIGHTS))
@@ -206,6 +213,47 @@ class WeightsJsonTest(unittest.TestCase):
         self.assertEqual(len(keys), doc["meta"]["top_n"])
         self.assertTrue(all(np.isfinite(list(doc["weights"].values()))))
         self.assertTrue(np.isfinite(doc["meta"]["bias"]))
+
+
+class MainTest(unittest.TestCase):
+    """End-to-end: the shipped artifact is the refit on ALL positions, not the train fit."""
+
+    def _corpus(self, d, n_games):
+        game_ids, y, active, _, _, n_features = synthetic(n_games=n_games)
+        positions = os.path.join(d, "p.jsonl")
+        with open(positions, "w") as f:
+            for g, ev, act in zip(game_ids, y, active):
+                # Pad to the real 1152-slot index space so main's full-set fit is valid.
+                f.write(
+                    json.dumps(
+                        {"game_id": int(g), "ply": 0, "eval": float(ev), "active": act.tolist()}
+                    )
+                    + "\n"
+                )
+        stats = os.path.join(d, "stats.json")
+        with open(stats, "w") as f:
+            json.dump({"features": [{"row": 0, "col": 0, "state": 1, "rank": 0}]}, f)
+        return positions, stats, game_ids, y, active, n_features
+
+    def test_written_weights_are_refit_on_every_position(self):
+        with tempfile.TemporaryDirectory() as d:
+            positions, stats, _, y, active, _ = self._corpus(d, n_games=10)
+            out = os.path.join(d, "w.json")
+            main([positions, "--stats", stats, "--out", out, "--lambdas", "1.0"])
+            doc = json.load(open(out))
+            self.assertEqual(doc["meta"]["fit_on"], "all")
+            ids = np.arange(N_FEATURES, dtype=np.int32)
+            w, bias = ridge(design(active, ids), y, 1.0)
+            self.assertAlmostEqual(doc["meta"]["bias"], float(bias), places=6)
+            np.testing.assert_allclose(
+                [doc["weights"][str(i)] for i in range(N_FEATURES)], w, atol=1e-6
+            )
+
+    def test_empty_holdout_is_an_error_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            positions, stats, _, _, _, _ = self._corpus(d, n_games=1)
+            with self.assertRaises(SystemExit):
+                main([positions, "--stats", stats, "--out", ""])
 
 
 if __name__ == "__main__":
