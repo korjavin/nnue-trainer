@@ -158,9 +158,12 @@ public class NNUEv3NetEvaluatorTest {
 
   @Test
   public void committedFixtureWeightsLoad() throws Exception {
-    Path synth = Path.of("src", "test", "resources", "v3", "net_synth_weights.json");
-    assertTrue(Files.exists(synth), "synthetic net fixture must be committed");
-    assertTrue(NNUEv3NetEvaluator.load(synth).hidden() > 0);
+    // Assert the SHIPPED weights load. This pinned a synthetic H=4 stub while the real net was
+    // still training; the stub is gone now that nnue_v3_net.json exists, and pinning either name
+    // by literal would rot on that swap.
+    Path weights = NNUEv3NetEvaluator.DEFAULT_WEIGHTS;
+    assertTrue(Files.exists(weights), "committed net weights must exist: " + weights);
+    assertTrue(NNUEv3NetEvaluator.load(weights).hidden() > 0);
   }
 
   /** A weights doc with {@code hidden} all-zero w1 rows and the given b1/w2/b2 literals. */
