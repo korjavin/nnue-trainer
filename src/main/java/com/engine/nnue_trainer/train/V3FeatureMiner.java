@@ -102,7 +102,7 @@ public final class V3FeatureMiner {
   }
 
   /** One JSONL training row: the label plus the position's active feature ids. */
-  static String positionRow(long gameId, int ply, int eval, int[] active) throws Exception {
+  static String positionRow(String gameId, int ply, int eval, int[] active) throws Exception {
     ObjectNode n = MAPPER.createObjectNode();
     n.put("game_id", gameId);
     n.put("ply", ply);
@@ -267,7 +267,9 @@ public final class V3FeatureMiner {
                 "SELECT id, rows, cols, termination, pgn_content FROM games ORDER BY id")) {
       while (rs.next()) {
         gamesTotal++;
-        long gameId = rs.getLong("id");
+        // games.db keys games by a TEXT uuid — getLong() would silently coerce every non-numeric
+        // id to 0 and collapse hundreds of games into one, which destroys the game-level split.
+        String gameId = rs.getString("id");
         int rows = rs.getInt("rows");
         int cols = rs.getInt("cols");
         String termination = rs.getString("termination");

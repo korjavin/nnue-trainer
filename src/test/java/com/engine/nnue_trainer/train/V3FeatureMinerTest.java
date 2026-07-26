@@ -16,6 +16,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,6 +25,10 @@ import org.junit.jupiter.api.io.TempDir;
 public class V3FeatureMinerTest {
 
   @TempDir Path tempDir;
+
+  private static final String[] GAME_IDS = {
+    "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1", "01297459-5cc3-4488-840d-2d800b749ab8"
+  };
 
   private static Board board12() {
     return new Board(V3FeatureMiner.BOARD, V3FeatureMiner.BOARD);
@@ -217,9 +223,13 @@ public class V3FeatureMinerTest {
     JsonNode row =
         new ObjectMapper()
             .readTree(
-                V3FeatureMiner.positionRow(77L, 4, -1234, V3FeatureMiner.activeFeatures(b, 1)));
+                V3FeatureMiner.positionRow(
+                    "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1",
+                    4,
+                    -1234,
+                    V3FeatureMiner.activeFeatures(b, 1)));
 
-    assertEquals(77L, row.path("game_id").asLong());
+    assertEquals("00e60d2e-4a2d-41c6-993f-7fc8c71f35b1", row.path("game_id").asText());
     assertEquals(4, row.path("ply").asInt());
     assertEquals(-1234, row.path("eval").asInt());
 
@@ -252,11 +262,14 @@ public class V3FeatureMinerTest {
             + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":2}]}]";
     try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db);
         Statement statement = connection.createStatement()) {
+      // TEXT uuid keys, exactly like the real games.db — an INTEGER id here would hide the
+      // getLong() coercion that used to collapse every uuid game into game_id 0.
       statement.execute(
-          "CREATE TABLE games (id INTEGER PRIMARY KEY, rows INTEGER, cols INTEGER, "
+          "CREATE TABLE games (id TEXT PRIMARY KEY, rows INTEGER, cols INTEGER, "
               + "termination TEXT, pgn_content TEXT)");
-      for (int id = 1; id <= 2; id++) {
-        statement.execute("INSERT INTO games VALUES (" + id + ", 12, 12, 'resign', '" + pgn + "')");
+      for (String id : GAME_IDS) {
+        statement.execute(
+            "INSERT INTO games VALUES ('" + id + "', 12, 12, 'resign', '" + pgn + "')");
       }
     }
 
@@ -274,10 +287,24 @@ public class V3FeatureMinerTest {
     long positions =
         new ObjectMapper().readTree(plain.toFile()).path("meta").path("positions").asLong();
     assertEquals(positions, rows.size(), "one row per accumulated position");
-    // Both games are identical, so plies run 0..2 twice, once per game_id.
+    // Both games are identical, so plies run 0..2 twice, once per game_id. The uuids must survive
+    // verbatim: the ridge fit splits on them, so two games sharing an id would be one game to it.
     JsonNode last = new ObjectMapper().readTree(rows.get(rows.size() - 1));
-    assertEquals(2, last.path("game_id").asInt());
+    assertEquals(GAME_IDS[1], last.path("game_id").asText());
     assertEquals(2, last.path("ply").asInt());
+    assertEquals(
+        Set.of(GAME_IDS),
+        rows.stream()
+            .map(
+                r -> {
+                  try {
+                    return new ObjectMapper().readTree(r).path("game_id").asText();
+                  } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                  }
+                })
+            .collect(Collectors.toSet()),
+        "one distinct game_id per game");
   }
 
   @Test
