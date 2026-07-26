@@ -14,6 +14,9 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Diagnostic for the strongly negative {@code baseline_mean_eval} that {@link V3FeatureMiner}
@@ -25,7 +28,8 @@ import java.util.List;
  * deficit, the mean eval under {@code movesLeft} 0..3, and an antisymmetry check ({@code eval(stm)
  * == -eval(other)} on the same board). Read-only — writes no artifact.
  *
- * <p>CLI: {@code V3EvalBaselineProbe [db-path]}, default {@code /home/iv/games.db}.
+ * <p>CLI: {@code V3EvalBaselineProbe [db-path]}, defaulting to {@code $NNUE_GAMES_DB} then {@code
+ * ./games.db}.
  */
 public final class V3EvalBaselineProbe {
 
@@ -44,7 +48,9 @@ public final class V3EvalBaselineProbe {
   }
 
   public static void main(String[] args) throws Exception {
-    Path db = Path.of(args.length > 0 ? args[0] : "/home/iv/games.db");
+    Path db =
+        Path.of(
+            args.length > 0 ? args[0] : System.getenv().getOrDefault("NNUE_GAMES_DB", "games.db"));
     if (!Files.exists(db)) {
       System.err.println("games.db not found: " + db);
       System.exit(1);
@@ -54,6 +60,11 @@ public final class V3EvalBaselineProbe {
     long[] movesLeftSum = new long[4];
     int antisymmetryViolations = 0;
     int games = 0;
+    // The probe exists to EXPLAIN the miner's baseline_mean_eval, which only means anything if it
+    // sees the same positions. Without a denominator and reasons, a filter drifting apart from
+    // V3FeatureMiner's would silently make every table below describe a different corpus.
+    int gamesTotal = 0;
+    Map<String, Integer> skipReasons = new TreeMap<>();
     // The same player's score before its turn vs after it: -eval(ply+1) is the ply-p mover's own
     // score once its turn is spent, so this is the value of ONE turn in eval units.
     long turnSwingSum = 0;
@@ -65,27 +76,33 @@ public final class V3EvalBaselineProbe {
             st.executeQuery(
                 "SELECT id, rows, cols, termination, pgn_content FROM games ORDER BY id")) {
       while (rs.next()) {
+        gamesTotal++;
         int boardRows = rs.getInt("rows");
         int boardCols = rs.getInt("cols");
         String termination = rs.getString("termination");
         String pgn = rs.getString("pgn_content");
         if (boardRows != V3FeatureMiner.BOARD || boardCols != V3FeatureMiner.BOARD) {
+          bump(skipReasons, "board_size");
           continue;
         }
         if ("illegal_move".equals(termination) || "disconnect".equals(termination)) {
+          bump(skipReasons, "termination:" + termination);
           continue;
         }
         JsonNode turns;
         try {
           turns = (pgn == null) ? null : MAPPER.readTree(pgn);
         } catch (Exception e) {
-          turns = null;
+          bump(skipReasons, "pgn_parse:" + e.getClass().getSimpleName());
+          continue;
         }
         if (turns == null || !turns.isArray() || turns.isEmpty()) {
+          bump(skipReasons, "no_turns");
           continue;
         }
         GamesDbReplay.Replay replay = GamesDbReplay.replay(boardRows, boardCols, turns);
         if (replay.skipReason != null) {
+          bump(skipReasons, replay.skipReason);
           continue;
         }
         games++;
@@ -125,8 +142,11 @@ public final class V3EvalBaselineProbe {
           for (int ml = 0; ml <= 3; ml++) {
             movesLeftSum[ml] += HandTunedEval.staticEval(s.board, s.stm, ml, s.neutralUsed);
           }
-          // Utility is raw(p) - raw(opponent) with two active players, so it must be exactly
-          // antisymmetric in the SCORED player when the mover (tempo frame) is held fixed.
+          // NOT sign-convention evidence: with two ACTIVE players utility is exactly
+          // raw(p) - raw(opponent), so antisymmetry is an algebraic identity that a globally
+          // flipped eval would satisfy too. It only catches an eliminated player leaking in
+          // (scored a flat -MATE_SCORE/2), which is the ±5e8 outlier the replay filters out.
+          // The sign itself is pinned by HandTunedEvalSignConventionTest.
           int mirrored =
               HandTunedEval.staticEval(
                   s.board, other, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
@@ -148,7 +168,8 @@ public final class V3EvalBaselineProbe {
         "=== v3 baseline_mean_eval probe (movesLeft="
             + GamesDbReplay.MOVES_LEFT
             + ", STM-relative) ===");
-    System.out.println("games_used  : " + games);
+    System.out.println("games_used  : " + games + " / " + gamesTotal);
+    System.out.println("games_skipped: " + (gamesTotal - games) + " " + skipReasons);
     System.out.println("positions   : " + n);
     printDistribution("all positions", evals);
 
@@ -177,30 +198,41 @@ public final class V3EvalBaselineProbe {
     double stmStones = rows.stream().mapToInt(r -> r.stmStones).average().orElse(0);
     double oppStones = rows.stream().mapToInt(r -> r.oppStones).average().orElse(0);
     System.out.printf(
+        Locale.ROOT,
         "mean stones: stm=%.2f opp=%.2f deficit=%.2f%n",
-        stmStones, oppStones, stmStones - oppStones);
+        stmStones,
+        oppStones,
+        stmStones - oppStones);
     long stmBehind = rows.stream().filter(r -> r.stmStones < r.oppStones).count();
     System.out.printf(
+        Locale.ROOT,
         "positions where the mover has fewer stones: %d / %d (%.1f%%)%n",
-        stmBehind, n, 100.0 * stmBehind / n);
+        stmBehind,
+        n,
+        100.0 * stmBehind / n);
 
     System.out.println("--- mean eval vs the movesLeft assumption ---");
     for (int ml = 0; ml <= 3; ml++) {
-      System.out.printf("movesLeft=%d mean=%.2f%n", ml, (double) movesLeftSum[ml] / n);
+      System.out.printf(Locale.ROOT, "movesLeft=%d mean=%.2f%n", ml, (double) movesLeftSum[ml] / n);
     }
 
     System.out.println("--- mover-keyed terms (tempo frame handed to the opponent) ---");
     double opponentFrame = rows.stream().mapToInt(r -> r.evalOpponentFrame).average().orElse(0);
     double moverFrame = Arrays.stream(evals).average().orElse(0);
     System.out.printf(
+        Locale.ROOT,
         "mean eval, mover frame=%.2f opponent frame=%.2f -> mover-keyed mass=%.2f%n",
-        moverFrame, opponentFrame, moverFrame - opponentFrame);
+        moverFrame,
+        opponentFrame,
+        moverFrame - opponentFrame);
 
     System.out.println("--- value of one turn ---");
     System.out.printf(
+        Locale.ROOT,
         "mean turn swing (-(eval[p] + eval[p+1]), same player before vs after its turn) = %.2f "
             + "over %d turn pairs%n",
-        (double) turnSwingSum / Math.max(1, turnSwingCount), turnSwingCount);
+        (double) turnSwingSum / Math.max(1, turnSwingCount),
+        turnSwingCount);
     int[] plyZero = rows.stream().filter(r -> r.ply == 0).mapToInt(r -> r.eval).toArray();
     if (plyZero.length > 0) {
       printDistribution("ply 0 (start)", plyZero);
@@ -208,12 +240,18 @@ public final class V3EvalBaselineProbe {
 
     System.out.println("--- sign convention ---");
     System.out.println(
-        "antisymmetry violations (eval(stm) != -eval(other)): "
+        "antisymmetry violations (identity for 2 active players; >0 means an eliminated "
+            + "player leaked into the corpus): "
             + antisymmetryViolations
             + " / "
             + n);
     long positive = Arrays.stream(evals).filter(e -> e > 0).count();
-    System.out.printf("positive evals: %d / %d (%.1f%%)%n", positive, n, 100.0 * positive / n);
+    System.out.printf(
+        Locale.ROOT, "positive evals: %d / %d (%.1f%%)%n", positive, n, 100.0 * positive / n);
+  }
+
+  private static void bump(Map<String, Integer> counts, String reason) {
+    counts.merge(reason, 1, Integer::sum);
   }
 
   private static void printDistribution(String label, int[] values) {
@@ -221,6 +259,7 @@ public final class V3EvalBaselineProbe {
     Arrays.sort(sorted);
     double mean = Arrays.stream(sorted).average().orElse(0);
     System.out.printf(
+        Locale.ROOT,
         "%-16s n=%-6d mean=%10.2f median=%10.2f p10=%10.2f p90=%10.2f min=%d max=%d%n",
         label,
         sorted.length,

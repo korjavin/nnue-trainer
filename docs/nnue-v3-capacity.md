@@ -10,8 +10,10 @@ fresh prod dump on 2026-07-26 (502 games), so `nnue_v3_feature_stats.json` and
 `docs/nnue-v3-feature-preview.html` were regenerated from it. Command:
 
 ```
-./mvnw -q exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3FeatureMiner \
-  -Dexec.classpathScope=runtime          # defaults: /home/iv/games.db -> nnue_v3_feature_stats.json
+NNUE_GAMES_DB=/path/to/games.db \
+  ./mvnw -q compile exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3FeatureMiner \
+  -Dexec.classpathScope=runtime   # db defaults to $NNUE_GAMES_DB then ./games.db;
+                                  # output to nnue_v3_feature_stats.json
 ```
 
 The preview page inlines the stats verbatim between `<!-- DATA:BEGIN -->` / `<!-- DATA:END -->`;
@@ -89,7 +91,7 @@ feature property. Regenerate with:
 
 ```
 ./mvnw -q compile exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3EvalBaselineProbe \
-  -Dexec.classpathScope=runtime          # default db: /home/iv/games.db, read-only, writes nothing
+  -Dexec.classpathScope=runtime   # db from $NNUE_GAMES_DB; read-only, writes nothing
 ```
 
 ### Distribution, not just the mean
@@ -111,12 +113,16 @@ the quantiles from here on.
 
 ### The three candidate causes, checked
 
-1. **Sign convention — ruled out.** Two active players make the utility `raw(p) − raw(opponent)`,
-   so it must be exactly antisymmetric in the scored player at a fixed tempo frame. Measured over
-   all 6589 positions: **0 violations** of `eval(stm) == −eval(other)`. At ply 0 (the symmetric
-   start board, all 446 games) the eval is **+36 for whoever is to move** — the mover's
-   `movesLeft × W_MOVES_LEFT_TEMPO` bonus, and the only asymmetry on an empty board. Both
-   properties are now pinned by `HandTunedEvalSignConventionTest`.
+1. **Sign convention — ruled out.** The evidence is **directional**: at ply 0 (the symmetric start
+   board, all 446 games) the eval is **+36 for whoever is to move** — the mover's `movesLeft ×
+   W_MOVES_LEFT_TEMPO` bonus, and the only asymmetry on an empty board — and a clearly winning
+   position scores positive for its owner (`HandTunedEvalSignConventionTest`, plus the integer-exact
+   `HandTunedEvalParityTest` against the GoBot fixture). A globally flipped eval fails all of those.
+   The probe's **0 violations** of `eval(stm) == −eval(other)` over 6589 positions is *not*
+   independent evidence: with two active players the utility is exactly `raw(p) − raw(opponent)`, so
+   antisymmetry is an algebraic identity that a flipped eval satisfies too. What that counter
+   actually rules out is an *eliminated* player (scored a flat `−MATE_SCORE/2`) leaking into the
+   corpus, i.e. it confirms the replay's game-over cutoff worked.
 2. **`movesLeft = 3` — not the cause, and it is the *least* negative choice.** Mean eval under the
    other assumptions: `movesLeft=0 → -5578.50`, `1 → -5423.84`, `2 → -4839.54`, `3 → -4255.25`.
    The fixed fresh-turn assumption moves the baseline by ~1300 and in the direction that *reduces*
@@ -230,6 +236,12 @@ Reading it:
   by held-out R² and that same number is the headline, so 0.9756 is optimistically biased as a point
   estimate. The selection is nearly stable (λ = 100 wins on 5 of the 6 seeds; seed 3 prefers λ = 10
   by 0.008), which is why the seed *band* above — not the max — is the number to carry forward.
+- **The top-N ranking also saw the holdout.** `V3FeatureMiner` computes discrimination over *every*
+  mined position, holdout included, and `fit_capacity` reads that ranking as given — so the
+  **`R² hold (top-332)` column is selection-biased by an unmeasured amount** and is not a clean
+  out-of-sample number. It affects only that column: the shipped artifact and the verdict below are
+  the **full-1152** fit, which selects no features and is unaffected. Ranking from train rows only
+  would fix it, at the cost of a ranking that no longer matches `nnue_v3_feature_stats.json`.
 
 ### Data-ratio caveat, with the actual counts
 
@@ -300,7 +312,7 @@ plus same `--seed` gives the same R².
 #    byte-identical with and without the flag (V3FeatureMinerTest asserts it).
 ./mvnw -q compile dependency:build-classpath -Dmdep.outputFile=target/classpath.txt
 java -cp "target/classes:$(cat target/classpath.txt)" \
-  com.engine.nnue_trainer.train.V3FeatureMiner /home/iv/games.db nnue_v3_feature_stats.json \
+  com.engine.nnue_trainer.train.V3FeatureMiner "$NNUE_GAMES_DB" nnue_v3_feature_stats.json \
   --emit-positions /tmp/nnue_v3_positions.jsonl
 
 # 2. fit. Sweeps lambda, fits both top-N and full-1152. --out is required to write the artifact:

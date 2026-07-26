@@ -17,6 +17,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -212,7 +213,9 @@ public final class V3FeatureMiner {
   }
 
   public static void main(String[] args) throws Exception {
-    Path db = Path.of("/home/iv/games.db");
+    // Same knob the app uses (NnueTrainerApplication): the corpus is not in the repo, so a
+    // hardcoded developer path makes every documented repro command a no-op for everyone else.
+    Path db = Path.of(System.getenv().getOrDefault("NNUE_GAMES_DB", "games.db"));
     Path out = Path.of("nnue_v3_feature_stats.json");
     Integer minSupportFlag = null;
     Path positionsOutPath = null;
@@ -356,9 +359,18 @@ public final class V3FeatureMiner {
     System.out.println("--- top 10 by discrimination (NOT by frequency) ---");
     for (int i = 0; i < Math.min(10, aboveFloor); i++) {
       Feature f = features.get(i);
+      // Locale.ROOT: these lines are transcribed into docs/nnue-v3-capacity.md, and a de_DE
+      // runner would print `discrim=4.255,25`.
       System.out.printf(
+          Locale.ROOT,
           "#%-2d (%2d,%2d) %-18s discrim=%8.2f mean_eval=%9.2f support=%d%n",
-          f.rank + 1, f.row, f.col, f.stateName(), f.discrimination, f.meanEval, f.support);
+          f.rank + 1,
+          f.row,
+          f.col,
+          f.stateName(),
+          f.discrimination,
+          f.meanEval,
+          f.support);
     }
     System.out.println("output             : " + out.toAbsolutePath());
     if (positionsOutPath != null) {

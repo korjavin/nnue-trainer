@@ -81,6 +81,21 @@ class SyntheticRecoveryTest(unittest.TestCase):
         self.assertGreater(m["r2_holdout"], 0.999)
         self.assertLess(m["mae_holdout"], 1.0)
 
+    def test_holdout_is_never_part_of_the_fit(self):
+        # The other tests here use a NOISELESS target, under which a fit on all positions and a fit
+        # on train only make the same predictions -- so they would all still pass if `evaluate`
+        # leaked. This one pins the fit itself, and adds noise so the two are separable.
+        game_ids, y, active, _, _, n_features = synthetic(n_games=30)
+        rng = np.random.default_rng(11)
+        y = y + rng.normal(0, 400, len(y)) + rng.normal(0, 300, 30)[game_ids]
+        train, holdout = split_by_game(game_ids, 0.2, seed=3)
+        ids = np.arange(n_features, dtype=np.int32)
+        m = evaluate(active, y, ids, train, holdout, lam=1.0)
+        w, bias = ridge(design(active, ids, n_features=n_features)[train], y[train], 1.0)
+        np.testing.assert_allclose(m["weights"], w, atol=1e-9)
+        self.assertAlmostEqual(m["bias"], float(bias), places=9)
+        self.assertGreater(m["r2_train"], m["r2_holdout"])
+
     def test_lambda_zero_stays_finite_on_the_rank_deficient_design(self):
         game_ids, y, active, _, _, n_features = synthetic()
         train, holdout = split_by_game(game_ids, 0.2, seed=0)
@@ -93,7 +108,11 @@ class SplitByGameTest(unittest.TestCase):
     def test_no_game_lands_on_both_sides(self):
         game_ids = np.repeat(np.arange(20), 7)
         train, holdout = split_by_game(game_ids, 0.25, seed=5)
-        self.assertTrue(np.all(train ^ holdout))  # every position on exactly one side
+        # `train ^ holdout` would be a tautology (train IS ~holdout) -- the property worth
+        # asserting is that a whole GAME lands on one side.
+        for g in np.unique(game_ids):
+            rows = game_ids == g
+            self.assertTrue(np.all(train[rows]) or np.all(holdout[rows]), "game %d split" % g)
         self.assertFalse(set(game_ids[train].tolist()) & set(game_ids[holdout].tolist()))
         self.assertEqual(len(np.unique(game_ids[holdout])), 5)
 
@@ -162,6 +181,34 @@ class RankedFeaturesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(len(ranked_features(self._stats(d), top_n=500)), 2)
 
+    def test_an_out_of_range_entry_is_rejected(self):
+        # state 8 (OUT_OF_BOUNDS) aliases the NEXT cell's EMPTY id, and a negative row/col indexes
+        # col_of from the end -- both bind weights to the wrong cell, silently.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "stats.json")
+            with open(path, "w") as f:
+                json.dump({"features": [{"row": -1, "col": 0, "state": 0, "rank": 0}]}, f)
+            with self.assertRaises(SystemExit):
+                ranked_features(path)
+
+    def test_duplicate_entries_are_rejected(self):
+        # col_of is last-wins: a duplicate silently costs a feature its column and leaves the
+        # weights dict shorter than meta.top_n claims.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "stats.json")
+            with open(path, "w") as f:
+                json.dump(
+                    {
+                        "features": [
+                            {"row": 1, "col": 1, "state": 2, "rank": 0},
+                            {"row": 1, "col": 1, "state": 2, "rank": 1},
+                        ]
+                    },
+                    f,
+                )
+            with self.assertRaises(SystemExit):
+                ranked_features(path)
+
 
 class LoadPositionsTest(unittest.TestCase):
     def test_reads_jsonl_rows(self):
@@ -175,6 +222,37 @@ class LoadPositionsTest(unittest.TestCase):
             np.testing.assert_array_equal(game_ids, [4, 4])
             np.testing.assert_array_equal(y, [-12.0, 30.0])
             np.testing.assert_array_equal(active, [[1, 2], [3, 4]])
+
+    def test_a_truncated_or_malformed_row_names_the_file_and_line(self):
+        # The realistic corruption is a miner killed mid-write; json's own message says "line 1",
+        # meaning the fragment, which is actively misleading on a 6589-line file.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.jsonl")
+            with open(path, "w") as f:
+                f.write(json.dumps({"game_id": 1, "ply": 0, "eval": 0, "active": [0, 1]}) + "\n")
+                f.write('{"game_id": 1, "ply": 1, "eval": 3, "act')
+            with self.assertRaises(SystemExit) as caught:
+                load_positions(path)
+            self.assertIn("p.jsonl:2", str(caught.exception))
+
+    def test_a_row_missing_a_key_is_a_named_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.jsonl")
+            with open(path, "w") as f:
+                f.write(json.dumps({"game_id": 1, "ply": 0, "eval": 0}) + "\n")
+            with self.assertRaises(SystemExit):
+                load_positions(path)
+
+    def test_ragged_active_rows_are_rejected(self):
+        # A non-12x12 game slipping the miner's board filter otherwise surfaces as numpy's
+        # "inhomogeneous shape", which points at numpy rather than at the corpus.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.jsonl")
+            with open(path, "w") as f:
+                f.write(json.dumps({"game_id": 1, "ply": 0, "eval": 0, "active": [0, 1]}) + "\n")
+                f.write(json.dumps({"game_id": 1, "ply": 1, "eval": 0, "active": [2]}) + "\n")
+            with self.assertRaises(SystemExit):
+                load_positions(path)
 
     def test_negative_feature_index_is_rejected(self):
         # numpy would read -1 as feature 1151 and bind the weight to the wrong cell; only an
@@ -207,6 +285,26 @@ class WeightsJsonTest(unittest.TestCase):
         self.assertEqual(len(back["weights"]), len(doc["weights"]))
         for k, v in doc["weights"].items():
             self.assertAlmostEqual(back["weights"][k], v, places=9)
+
+    def test_a_degenerate_correlation_is_written_as_null_not_nan(self):
+        # json.dump emits a bare NaN token by default, which is not JSON and which the Java warm
+        # start loader rejects outright. Reachable via a one-position holdout.
+        ids = np.array([0, 1], dtype=np.int32)
+        active = np.array([[0], [1], [0]], dtype=np.int32)
+        y = np.array([1.0, 2.0, 3.0])
+        game_ids = np.array([0, 0, 1])
+        holdout = np.array([False, False, True])
+        one = weights_json(
+            evaluate(active, y, ids, ~holdout, holdout, lam=1.0),
+            ids,
+            game_ids,
+            ~holdout,
+            holdout,
+            0,
+            0.2,
+        )
+        self.assertIsNone(one["meta"]["corr_holdout"])
+        json.dumps(one, allow_nan=False)
 
     def test_meta_counts_match_the_split(self):
         meta = self._fit()["meta"]
@@ -253,6 +351,17 @@ class WeightsJsonTest(unittest.TestCase):
         self.assertTrue(all(np.isfinite(list(doc["weights"].values()))))
         self.assertTrue(np.isfinite(doc["meta"]["bias"]))
 
+    def test_committed_artifact_was_fit_on_the_committed_corpus(self):
+        # Provenance, not numbers: pinning lambda/R2 would break on every legitimate re-mine, but
+        # nothing otherwise stops a `--seed 3` or stale-corpus artifact from being committed while
+        # every number quoted in docs/nnue-v3-capacity.md silently goes stale.
+        stats_path = os.path.join(os.path.dirname(COMMITTED_WEIGHTS), "nnue_v3_feature_stats.json")
+        self.assertTrue(os.path.exists(stats_path), stats_path)
+        weights = json.load(open(COMMITTED_WEIGHTS))
+        stats = json.load(open(stats_path))
+        self.assertEqual(weights["meta"]["positions_total"], stats["meta"]["positions"])
+        self.assertEqual(weights["meta"]["games_used"], stats["meta"]["games_used"])
+
 
 class MainTest(unittest.TestCase):
     """End-to-end: the shipped artifact is the refit on ALL positions, not the train fit."""
@@ -262,7 +371,8 @@ class MainTest(unittest.TestCase):
         positions = os.path.join(d, "p.jsonl")
         with open(positions, "w") as f:
             for g, ev, act in zip(game_ids, y, active):
-                # Pad to the real 1152-slot index space so main's full-set fit is valid.
+                # Ids stay in the low 24 slots; main's full-1152 fit leaves the rest as all-zero
+                # columns, which is fine here -- the property under test is the refit-on-all path.
                 f.write(
                     json.dumps(
                         {"game_id": int(g), "ply": 0, "eval": float(ev), "active": act.tolist()}

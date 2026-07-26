@@ -26,8 +26,10 @@ jobs:
     - name: Build and Test with Maven
       run: ./mvnw -B clean test --file pom.xml
 
-    # The ridge fitter is the only non-trivial math in the v3 capacity bead, and it also
-    # validates the committed nnue_v3_weights.json artifact.
+    # The ridge fitter is the only non-trivial math in the v3 capacity bead. The suite also
+    # checks the committed nnue_v3_weights.json: index range/uniqueness, finiteness, and that it
+    # was fit on the same corpus nnue_v3_feature_stats.json was mined from. It deliberately does
+    # NOT pin lambda or R2 -- that would fail on every legitimate re-mine.
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
@@ -35,5 +37,7 @@ jobs:
 
     - name: Test the v3 capacity fitter
       run: |
-        python -m pip install --quiet 'numpy<3'
+        # Floor is the version the report's numbers were produced with; the fitter only uses
+        # APIs stable across the 1->2 boundary (lstsq(rcond=None), percentile, corrcoef).
+        python -m pip install --quiet 'numpy>=1.26,<3'
         python -m unittest discover -s python/v3 -p "*_test.py"

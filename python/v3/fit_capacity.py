@@ -16,6 +16,7 @@ singular directions) instead of a plain inverse.
 """
 import argparse
 import json
+import math
 
 import numpy as np
 
@@ -31,24 +32,44 @@ def load_positions(path):
     """
     game_ids, evals, active = [], [], []
     with open(path) as f:
-        for line in f:
+        for lineno, line in enumerate(f, 1):
             line = line.strip()
             if not line:
                 continue
-            row = json.loads(line)
-            game_ids.append(row["game_id"])
-            evals.append(row["eval"])
-            active.append(row["active"])
-    idx = np.array(active, dtype=np.int32)
-    # Range-check HERE, once, for every caller: `design` indexes col_of by these, and numpy reads a
-    # NEGATIVE index from the end -- feature -1 would silently alias feature 1151 and bind a weight
-    # to the wrong cell. Only an out-of-range POSITIVE index raises on its own.
-    if idx.size and (idx.min() < 0 or idx.max() >= N_FEATURES):
+            # Name the file AND the line: the realistic corruption is a miner killed mid-write, and
+            # json's own "line 1 column 31" refers to the fragment, not to the position in the file.
+            try:
+                row = json.loads(line)
+                game_ids.append(row["game_id"])
+                evals.append(row["eval"])
+                active.append(row["active"])
+            except (ValueError, KeyError, TypeError) as exc:
+                raise SystemExit("%s:%d: %s" % (path, lineno, exc)) from exc
+    # A ragged `active` (a non-12x12 game slipping the miner's board filter) otherwise surfaces as
+    # numpy's "inhomogeneous shape" deep inside np.array, pointing at numpy rather than the corpus.
+    try:
+        idx = np.array(active, dtype=np.int32)
+    except ValueError as exc:
+        raise SystemExit(
+            "%s: every row needs the same number of active features (%s)" % (path, exc)
+        ) from exc
+    if idx.size and idx.ndim != 2:
+        raise SystemExit("%s: expected one active list per row, got shape %s" % (path, idx.shape))
+    check_feature_ids(idx, path)
+    return np.array(game_ids), np.array(evals, dtype=np.float64), idx
+
+
+def check_feature_ids(ids, where):
+    """Both index paths into `design`'s col_of run through here.
+
+    numpy reads a NEGATIVE index from the end -- feature -1 would silently alias feature 1151 and
+    bind a weight to the wrong cell. Only an out-of-range POSITIVE index raises on its own.
+    """
+    if ids.size and (ids.min() < 0 or ids.max() >= N_FEATURES):
         raise SystemExit(
             "feature index out of range in %s: [%d, %d] not within [0, %d)"
-            % (path, idx.min(), idx.max(), N_FEATURES)
+            % (where, ids.min(), ids.max(), N_FEATURES)
         )
-    return np.array(game_ids), np.array(evals, dtype=np.float64), idx
 
 
 def ranked_features(stats_path, top_n=None, n_positions=None):
@@ -60,6 +81,13 @@ def ranked_features(stats_path, top_n=None, n_positions=None):
     n_positions cross-checks provenance: the ranking is only meaningful for the corpus it was
     mined from, so re-mining the JSONL without re-mining the stats would otherwise silently
     select the wrong top-N set. Both artifacts already count their positions.
+
+    SELECTION BIAS, disclosed rather than fixed: the miner's discrimination ranking is computed
+    over EVERY mined position, holdout included, so a top-N holdout R2 is measured on games whose
+    labels helped choose the feature set. The shipped artifact is the full-1152 fit, which selects
+    nothing and is unaffected; the top-N rows of the sweep table in docs/nnue-v3-capacity.md are
+    optimistic by an unmeasured amount. Ranking from train rows only would fix it, at the cost of
+    a ranking that no longer matches the committed nnue_v3_feature_stats.json.
     """
     with open(stats_path) as f:
         stats = json.load(f)
@@ -72,7 +100,15 @@ def ranked_features(stats_path, top_n=None, n_positions=None):
     ranked = sorted((f for f in stats["features"] if f["rank"] >= 0), key=lambda f: f["rank"])
     if top_n is not None:
         ranked = ranked[:top_n]
-    return np.array([(f["row"] * 12 + f["col"]) * 8 + f["state"] for f in ranked], dtype=np.int32)
+    ids = np.array(
+        [(f["row"] * 12 + f["col"]) * 8 + f["state"] for f in ranked], dtype=np.int32
+    )
+    check_feature_ids(ids, stats_path)
+    # Duplicates would be silent too: col_of is last-wins, so one feature loses its column and the
+    # emitted weights dict comes out shorter than meta.top_n claims.
+    if len(np.unique(ids)) != len(ids):
+        raise SystemExit("duplicate (row, col, state) entries in %s" % stats_path)
+    return ids
 
 
 def split_by_game(game_ids, holdout_frac=0.2, seed=0):
@@ -177,7 +213,13 @@ def weights_json(fit, feature_ids, game_ids, train, holdout, seed, holdout_frac)
             "positions_holdout": int(holdout.sum()),
             "r2_holdout": fit["r2_holdout"],
             "r2_train": fit["r2_train"],
-            "corr_holdout": fit["corr_holdout"],
+            # null, not NaN: json.dump writes a bare NaN token by default, which is not JSON and
+            # which Jackson rejects outright -- a degenerate split would otherwise ship a warm
+            # start that aov/1uz cannot parse. Reachable via a one-position holdout, or via a
+            # constant prediction making corrcoef NaN.
+            "corr_holdout": (
+                fit["corr_holdout"] if math.isfinite(fit["corr_holdout"]) else None
+            ),
             "mae_holdout": fit["mae_holdout"],
             "bias": fit["bias"],
             "n_features_total": N_FEATURES,
@@ -270,7 +312,9 @@ def main(argv=None):
         final = dict(best[0], weights=w, bias=float(bias))
         doc = weights_json(final, best[1], game_ids, train, holdout, args.seed, args.holdout_frac)
         with open(args.out, "w") as f:
-            json.dump(doc, f, indent=1, sort_keys=True)
+            # allow_nan=False for the same reason: fail loudly here rather than write a file the
+            # Java consumer cannot read.
+            json.dump(doc, f, indent=1, sort_keys=True, allow_nan=False)
             f.write("\n")
         print(
             f"wrote {args.out}: lambda={doc['meta']['lambda']:g} "

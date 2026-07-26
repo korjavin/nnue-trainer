@@ -88,12 +88,13 @@ public final class GamesDbReplay {
 
         JsonNode moves = field(turn, "moves");
         if (gameOver) {
-          // Turns recorded AFTER a base fell. An EMPTY one is just Go's omitempty tail and is
+          // Turns recorded after the game ended. An EMPTY one is just Go's omitempty tail and is
           // skipped; one carrying moves is a turn that cannot exist under the rules, and stays a
-          // rejection -- that skip count is the signal docs/nnue-v3-gate.md asks the reader to
-          // trust when the rules port regresses.
+          // rejection -- under its OWN reason, because it says something different about the port
+          // than a mid-game rules violation does, and docs/nnue-v3-gate.md asks the reader to
+          // trust these counts.
           if (moves != null && moves.isArray() && moves.size() > 0) {
-            return new Replay(null, "illegal_move");
+            return new Replay(null, "moves_after_game_over");
           }
           continue;
         }
@@ -111,11 +112,13 @@ public final class GamesDbReplay {
           for (int p = 1; p <= 2; p++) {
             neutralUsed[p - 1] = state.neutralUsed(p);
           }
-          // Stop snapshotting once a base falls: a snapshot of a decided board is scored
-          // ±MATE_SCORE/2 (5e8) by HandTunedEval against a corpus that spans ±3e4, and one such
-          // row silently dominates the least-squares fit and every mean_eval. Go's omitempty drops
-          // an empty move slice, so a trailing {"player":N} turn reaches here as a no-op turn that
-          // applyTurn never sees and therefore never rejects.
+          // Stop snapshotting once the game is decided: GoState sets over when only one player is
+          // still active, which in practice is stuck-player elimination (hasMove == false), not a
+          // captured base -- legalMove never lets a BASE be taken. A snapshot of a decided board
+          // is scored ±MATE_SCORE/2 (5e8) by HandTunedEval against a corpus that spans ±3e4, and
+          // one such row silently dominates the least-squares fit and every mean_eval. Go's
+          // omitempty drops an empty move slice, so a trailing {"player":N} turn reaches here as a
+          // no-op turn that applyTurn never sees and therefore never rejects.
           gameOver = state.gameOver();
         }
       }

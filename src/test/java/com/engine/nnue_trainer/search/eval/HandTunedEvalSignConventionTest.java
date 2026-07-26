@@ -13,10 +13,11 @@ import org.junit.jupiter.api.Test;
  * Task 2): {@code baseline_mean_eval} came out strongly negative (-4255 on the 502-game corpus) and
  * the first thing to rule out was a flipped sign.
  *
- * <p>Three properties, all independent of the corpus: a position clearly winning for the side to
- * move scores positive, the score is exactly antisymmetric in the scored player when the tempo
- * frame is held fixed, and the symmetric start position favours the mover (so nothing in the eval
- * structurally penalizes the side to move).
+ * <p>The SIGN evidence is directional and lives in {@link #winningForTheSideToMoveScoresPositive}
+ * and {@link #symmetricStartPositionFavoursTheMover} — a globally flipped eval fails both.
+ * Antisymmetry is NOT sign evidence: with two active players {@code HandTunedEval} computes {@code
+ * raw(p) - raw(opponent)} exactly, so it is an algebraic identity a flipped eval satisfies too. It
+ * is pinned here only as a regression guard on the {@code activeCount} division.
  */
 public class HandTunedEvalSignConventionTest {
 
@@ -48,9 +49,9 @@ public class HandTunedEvalSignConventionTest {
     board.setCell(10, 10, new Cell(2, CellKind.NORMAL));
 
     // Same board, same mover (tempo frame): utility is raw(p) - raw(opponent) with two active
-    // players, so swapping only the SCORED player must flip the sign exactly. This is what makes
-    // a constant skew in baseline_mean_eval a property of the sampled positions rather than of
-    // the eval.
+    // players, so swapping only the SCORED player must flip the sign exactly. An identity, not a
+    // sign check -- what it buys is that a constant skew in baseline_mean_eval is a property of
+    // the sampled positions rather than of an asymmetry in the eval's two-player utility.
     for (int mover = 1; mover <= 2; mover++) {
       int a = HandTunedEval.staticEval(board, 1, mover, 3, null);
       int b = HandTunedEval.staticEval(board, 2, mover, 3, null);
@@ -59,15 +60,17 @@ public class HandTunedEvalSignConventionTest {
   }
 
   /**
-   * The other half of the antisymmetry story, and the reason {@link
-   * com.engine.nnue_trainer.train.GamesDbReplay} stops snapshotting once a base falls: with a base
-   * captured the identity above STOPS holding, because the eliminated player is scored as a flat
-   * {@code -MATE_SCORE/2} rather than through the {@code raw(p) - raw(opponent)} difference. Those
-   * positions are 5e8-magnitude outliers against a corpus that spans ±3e4, which is exactly why the
-   * probe's "0 antisymmetry violations" only means anything over the positions the replay emits.
+   * The other half of the antisymmetry story: with a player inactive the identity above STOPS
+   * holding, because the eliminated player is scored as a flat {@code -MATE_SCORE/2} rather than
+   * through the {@code raw(p) - raw(opponent)} difference. Those positions are 5e8-magnitude
+   * outliers against a corpus that spans ±3e4, which is why {@link
+   * com.engine.nnue_trainer.train.GamesDbReplay} stops snapshotting once the game is over — and
+   * what the probe's antisymmetry counter actually detects. The board is hand-built: the rules
+   * cannot capture a BASE, so a decided replay position reaches this state via stuck-player
+   * elimination instead.
    */
   @Test
-  public void aCapturedBaseBreaksAntisymmetryAndScoresMate() {
+  public void anInactivePlayerBreaksAntisymmetryAndScoresMate() {
     Board board = startPosition();
     // Player 2's base corner is now a player 1 cell — p2 is eliminated.
     board.setCell(BOARD - 1, BOARD - 1, new Cell(1, CellKind.FORTIFIED));
@@ -76,9 +79,12 @@ public class HandTunedEvalSignConventionTest {
     int loser = HandTunedEval.staticEval(board, 2, 1, 3, null);
     int winner = HandTunedEval.staticEval(board, 1, 1, 3, null);
     assertEquals(-1_000_000_000 / 2, loser, "eliminated player is scored -MATE_SCORE/2");
+    // `winner != -loser` alone would pass for every value but one; the point is that the survivor
+    // stays in the ordinary eval band while the loser is a 5e8 outlier.
+    assertTrue(winner > 0, "the surviving player must score positive, got " + winner);
     assertTrue(
-        winner != -loser,
-        "antisymmetry must NOT hold once a base falls, got " + winner + " vs " + loser);
+        Math.abs(winner) < 1_000_000,
+        "the survivor must not inherit the mate magnitude, got " + winner);
   }
 
   @Test

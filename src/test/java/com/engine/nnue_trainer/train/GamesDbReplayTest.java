@@ -143,13 +143,14 @@ public class GamesDbReplayTest {
   }
 
   /**
-   * Snapshotting stops when a base falls. HandTunedEval scores a decided board ±MATE_SCORE/2 (5e8)
-   * against a corpus spanning ±3e4, so one such row would dominate the least-squares fit and every
-   * mean_eval. Go's omitempty drops an empty move slice, so the trailing {@code {"player":2}} turn
-   * is what the real recorder writes.
+   * Snapshotting stops once the game is over — here by stuck-player elimination, which is what
+   * actually sets {@code GoState.over} (a BASE is never capturable). HandTunedEval scores a decided
+   * board ±MATE_SCORE/2 (5e8) against a corpus spanning ±3e4, so one such row would dominate the
+   * least-squares fit and every mean_eval. Go's omitempty drops an empty move slice, so the
+   * trailing {@code {"player":2}} turn is what the real recorder writes.
    */
   @Test
-  public void testStopsSnapshottingOnceABaseFalls() {
+  public void testStopsSnapshottingOnceTheGameIsOver() {
     GamesDbReplay.Replay r = GamesDbReplay.replay(1, 4, gameEndingTurnThen(",{\"player\":2}"));
 
     assertNull(r.skipReason);
@@ -165,7 +166,9 @@ public class GamesDbReplayTest {
             4,
             gameEndingTurnThen(",{\"player\":2,\"moves\":[{\"type\":\"attack\",\"col\":2}]}"));
 
-    assertEquals("illegal_move", r.skipReason);
+    // Its own reason, not illegal_move: a turn recorded after the game ended says something
+    // different about the recorder than a move the rules reject mid-game does.
+    assertEquals("moves_after_game_over", r.skipReason);
   }
 
   @Test
