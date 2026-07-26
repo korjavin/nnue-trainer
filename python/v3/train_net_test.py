@@ -90,11 +90,26 @@ class RankingMathTest(unittest.TestCase):
         pos = np.array([0, 0, 0, 1, 1, 1])
         start, length = groups(pos)
         ht = np.array([3.0, 1.0, 2.0, 5.0, 9.0, 7.0])
+        sgn = np.ones(6)
         gids = np.array([0, 1])
-        self.assertEqual(metrics(ht, ht, start, length, gids)["top1"], 1.0)
-        rev = metrics(-ht, ht, start, length, gids)
+        self.assertEqual(metrics(ht, ht, sgn, start, length, gids)["top1"], 1.0)
+        rev = metrics(-ht, ht, sgn, start, length, gids)
         self.assertEqual(rev["top1"], 0.0)
         self.assertAlmostEqual(rev["spearman_mean"], -1.0)
+
+    @unittest.skipUnless(HAS_TORCH, "torch not installed")
+    def test_metrics_rank_in_the_parent_frame(self):
+        """A turn-flipping child (s=-1) is ranked on -value; ignoring the sign inverts it."""
+        pos = np.array([0, 0, 0])
+        start, length = groups(pos)
+        ht = np.array([3.0, 1.0, -9.0])
+        sgn = np.array([1.0, 1.0, -1.0])  # parent-frame: 3, 1, +9 -> the flipped child is best
+        gids = np.array([0])
+        self.assertEqual(metrics(ht, ht, sgn, start, length, gids)["top1"], 1.0)
+        # A model that got the flipped child's own-frame value right but is ranked without the
+        # sign would pick index 0, not 2.
+        self.assertEqual(int(np.argmax(ht)), 0)
+        self.assertEqual(int(np.argmax(sgn * ht)), 2)
 
     @unittest.skipUnless(HAS_TORCH, "torch not installed")
     def test_split_is_by_whole_game(self):

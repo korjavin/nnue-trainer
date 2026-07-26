@@ -3,7 +3,19 @@
 Input is the JSONL emitted by V3SiblingDatasetEmitter -- one row per legal child
 of a replayed position:
 
-    {"game_id": G, "pos_id": P, "active": [144 ids], "ht": <hand-tuned score>}
+    {"game_id": G, "pos_id": P, "active": [144 ids], "ht": <score>, "s": +1|-1}
+
+FRAMES.  `active`/`ht` are in the CHILD's own frame -- the child's currentPlayer,
+movesLeft and neutralUsed -- because that is the only frame the runtime ever queries:
+GoBotSearcher.leafEval evaluates the leaf from state.currentPlayer() and negates into
+the root's frame.  `s` IS that negation: +1 when the child kept the mover, -1 when the
+action ended the turn (47% of children).  So the model fits the CHILD frame, and every
+ordering quantity -- the ListNet loss, top-1, Spearman -- is computed on `s * f(x)`,
+which is the parent frame search actually compares in.
+
+    Before the frame fix the emitter wrote every child from the PARENT's mover, so the
+    net was trained and scored on inputs the engine never produces.  The 76.0% top-1
+    that came out of that is not a valid holdout number.
 
     python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep
     python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --hidden 32 --out nnue_v3_net.json
@@ -12,11 +24,15 @@ WHY RANKING AND NOT REGRESSION.  The v3.1 linear ridge fit reached held-out
 R2 = 0.976 and lost the strength gauntlet 7-17.  R2 is variance explained over
 the whole position distribution, which is dominated by wide, easy differences
 between unrelated positions.  Search never makes that comparison: it compares
-the CHILDREN OF ONE POSITION, whose hand-tuned scores differ by a median of
-~1300 while the linear model's holdout MAE was 1230.  The error was 0.9x the
-difference it had to resolve, so the ordering was noise.  This trains the
-decision search actually makes: a listwise softmax (ListNet) loss over each
-sibling group, with an MSE term only as a UNIT ANCHOR (see --mse-weight).
+the CHILDREN OF ONE POSITION, differing by a single action.  So the loss is a
+listwise softmax (ListNet) over each sibling group, with an MSE term only as a
+UNIT ANCHOR (see --mse-weight).
+
+(The old version of this note put the linear model's 1230 MAE against the 1299
+median sibling gap and called the ordering noise.  Those two numbers come from
+different populations -- 1230 from PARENT positions, 1299 from CHILDREN -- so
+the ratio never meant anything.  The actual reason v3.1 lost was the frame bug
+described above.)
 
 x is 0/1 over 1152 features with exactly 144 active, so W1 @ x is the SUM OF
 W1's COLUMNS over the active ids -- an nn.EmbeddingBag(mode="sum"), never a
@@ -42,29 +58,30 @@ import torch.nn.functional as F
 N_FEATURES = 1152  # 12*12 cells * 8 states, idx(r,c,s) = (r*12+c)*8 + s
 N_ACTIVE = 144
 
-# Recorded by V3OrderingProbe / docs/nnue-v3-capacity.md for the shipped LINEAR model, quoted
-# beside every result so the comparison is never left implicit.
-#
-# CAVEAT, and it matters: top1/spearman were measured over sibling groups, but mae/r2 were
-# measured over the 6589 PARENT positions, a much narrower population than the children this
-# trains on. The same linear model refit on sibling rows has MAE 5275-6939 (`--ridge`), so
-# 1230 is NOT the MAE to beat here -- see the "MAE target was mis-derived" section of
-# docs/nnue-v3-net.md. `--ridge` and `--rank-weight 0` are the like-for-like controls.
-LINEAR_BASELINE = {"top1": 0.412, "spearman": 0.586, "mae": 1230.0, "r2": 0.976}
+# The v3.1 linear model measured by the FIXED V3OrderingProbe -- i.e. in the frame the engine
+# actually queries. The old "41.2% / rho 0.586" on record was measured with every child scored from
+# the PARENT's mover, which the runtime never does; it is void, not a baseline. In the real frame
+# the shipped linear model orders WORSE THAN RANDOM. See docs/nnue-v3-net.md.
+LINEAR_BASELINE = {"top1": 0.098, "spearman": -0.161}
 
 
 # --------------------------------------------------------------------------- data
 
 
+KEYS = ("gidx", "pos", "active", "ht", "sgn", "ml")
+
+
 def load_dataset(path):
-    """-> dict(gidx, pos, active, ht). Accepts the emitter's .jsonl or a cached .npz.
+    """-> dict(gidx, pos, active, ht, sgn). Accepts the emitter's .jsonl or a cached .npz.
 
     The .jsonl is parsed into PREALLOCATED arrays: a list-of-lists of 224k x 144 ints costs
     several GB as Python objects and gets the process OOM-killed on a normal dev box.
     """
     if path.endswith(".npz"):
         d = np.load(path, allow_pickle=True)
-        return {k: d[k] for k in ("gidx", "pos", "active", "ht")}
+        if "sgn" not in d:  # pre-frame-fix cache: the sign is not recoverable, re-emit
+            raise SystemExit("%s predates the frame fix (no `sgn`) -- delete it and re-parse" % path)
+        return {k: d[k] for k in KEYS if k in d}
     cache = path + ".npz"
     if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(path):
         return load_dataset(cache)
@@ -75,6 +92,8 @@ def load_dataset(path):
     ht = np.empty(n, dtype=np.float64)
     pos = np.empty(n, dtype=np.int32)
     gidx = np.empty(n, dtype=np.int32)
+    sgn = np.empty(n, dtype=np.float64)
+    ml = np.zeros(n, dtype=np.int16)
     seen = {}
     with open(path) as f:
         for i, line in enumerate(f):
@@ -85,6 +104,8 @@ def load_dataset(path):
                     raise ValueError("expected %d active ids, got %d" % (N_ACTIVE, len(a)))
                 active[i] = a
                 ht[i] = r["ht"]
+                sgn[i] = r["s"]
+                ml[i] = r.get("ml", 0)
                 pos[i] = r["pos_id"]
                 g = r["game_id"]
             except (ValueError, KeyError, TypeError) as exc:
@@ -97,7 +118,9 @@ def load_dataset(path):
             "feature id out of range in %s: [%d, %d] not within [0, %d)"
             % (path, active.min(), active.max(), N_FEATURES)
         )
-    data = {"gidx": gidx, "pos": pos, "active": active, "ht": ht}
+    if not np.isin(sgn, (-1.0, 1.0)).all():
+        raise SystemExit("`s` must be +-1 in %s" % path)
+    data = {"gidx": gidx, "pos": pos, "active": active, "ht": ht, "sgn": sgn, "ml": ml}
     np.savez_compressed(cache, **data)
     return data
 
@@ -139,11 +162,12 @@ def subset(start, length, mask):
 class Net(nn.Module):
     """eval(x) = w2 . relu(sum_{i in active} w1[:, i] + b1) + b2, on standardised targets."""
 
-    def __init__(self, hidden, dropout=0.0):
+    def __init__(self, hidden, dropout=0.0, n_features=N_FEATURES):
         super().__init__()
         self.hidden = hidden
+        self.n_features = n_features
         # weight is (features, hidden) -- w1[h][i] is emb.weight[i, h] on export.
-        self.emb = nn.EmbeddingBag(N_FEATURES, max(hidden, 1), mode="sum")
+        self.emb = nn.EmbeddingBag(n_features, max(hidden, 1), mode="sum")
         # 144 terms are summed, so std(sum) = 12 * std(w): 1/12 keeps the pre-activation O(1).
         nn.init.normal_(self.emb.weight, std=1.0 / N_ACTIVE**0.5)
         self.b1 = nn.Parameter(torch.zeros(max(hidden, 1)))
@@ -160,8 +184,15 @@ class Net(nn.Module):
 # --------------------------------------------------------------------------- loss
 
 
-def group_loss(pred, target, mask, temp, mse_weight, rank_weight=1.0):
+def group_loss(pred, target, mask, sgn, temp, shift, mse_weight, rank_weight=1.0):
     """ListNet cross-entropy over each sibling group + an MSE unit anchor.
+
+    `pred`/`target` are standardised CHILD-frame values -- the frame the runtime queries the net
+    in. Ranking happens in the PARENT frame, `sgn * raw`, exactly mirroring leafEval's
+    `mover == root ? v : -v`. In standardised units raw/temp_raw == (z + shift)/temp, with
+    shift = mu/sigma and temp = temp_raw/sigma; the mu term does NOT cancel out of the softmax
+    here, because a group holds both signs and softmax is only invariant to a shift shared by
+    the whole row.
 
     ListNet, not pairwise: the metric that matters is top-1 agreement, and a softmax over the
     group is a smooth surrogate for exactly that -- at temp ~ the median sibling gap most of the
@@ -169,9 +200,12 @@ def group_loss(pred, target, mask, temp, mse_weight, rank_weight=1.0):
     makes its decision instead of on the 30 hopeless moves.
     """
     neg = torch.finfo(pred.dtype).min
-    tgt = torch.softmax(torch.where(mask, target / temp, torch.full_like(target, neg)), dim=1)
-    logp = torch.log_softmax(torch.where(mask, pred / temp, torch.full_like(pred, neg)), dim=1)
+    p_par = sgn * (pred + shift) / temp
+    t_par = sgn * (target + shift) / temp
+    tgt = torch.softmax(torch.where(mask, t_par, torch.full_like(t_par, neg)), dim=1)
+    logp = torch.log_softmax(torch.where(mask, p_par, torch.full_like(p_par, neg)), dim=1)
     listnet = -(tgt * logp * mask).sum(dim=1).mean()
+    # Squaring makes the sign irrelevant here: MSE on sgn*pred vs sgn*target is the same number.
     mse = (((pred - target) ** 2) * mask).sum() / mask.sum()
     # rank_weight=0 turns this into a pure value regression -- the objective the shipped v3.1
     # linear model was fit with, kept as a runnable control rather than a quoted number.
@@ -205,15 +239,21 @@ def spearman(a, b):
     return 0.0 if den == 0 else float((ra * rb).sum() / den)
 
 
-def metrics(pred, ht, start, length, gids):
-    """Ordering metrics over sibling groups, plus MAE/R2 over their rows (SECONDARY)."""
+def metrics(pred, ht, sgn, start, length, gids):
+    """Ordering metrics over sibling groups, plus MAE/R2 over their rows (SECONDARY).
+
+    `pred`/`ht` are child-frame; ordering is judged on `sgn * value`, the parent frame search
+    compares in. MAE/R2 stay in the child frame -- they measure the value fit, and squaring or
+    taking |.| of a sign-flipped pair gives the same number anyway.
+    """
     rhos = np.empty(len(gids))
     top1 = 0
     rows = []
     within = []
     for k, g in enumerate(gids):
         sl = slice(start[g], start[g] + length[g])
-        p, y = pred[sl], ht[sl]
+        sg = sgn[sl]
+        p, y = sg * pred[sl], sg * ht[sl]
         rhos[k] = spearman(y, p)
         # np.argmax takes the FIRST maximum, matching V3OrderingProbe's argmax.
         top1 += int(np.argmax(p) == np.argmax(y))
@@ -292,7 +332,7 @@ def batches(gids, start, length, batch_groups, rng):
     return chunks
 
 
-def pad_batch(chunk, start, length, active, y_t):
+def pad_batch(chunk, start, length, active, y_t, s_t):
     """Pad a batch of variable-length groups to (B, Lmax) with a validity mask.
 
     `active` stays int16 in numpy (64 MB); only the batch is widened to the int64 EmbeddingBag
@@ -303,7 +343,8 @@ def pad_batch(chunk, start, length, active, y_t):
     mask = ar[None, :] < length[chunk][:, None]
     idx = np.minimum(start[chunk][:, None] + ar[None, :], len(y_t) - 1)
     rows = torch.from_numpy(active[idx.ravel()].astype(np.int64))
-    return rows, y_t[torch.from_numpy(idx)], torch.from_numpy(mask), idx.shape
+    t_idx = torch.from_numpy(idx)
+    return rows, y_t[t_idx], s_t[t_idx], torch.from_numpy(mask), idx.shape
 
 
 def predict(model, active, chunk=8192):
@@ -316,34 +357,54 @@ def predict(model, active, chunk=8192):
     return out
 
 
-def train(data, start, length, tr, va, args, hidden, verbose=True):
+def with_tempo(data):
+    """Append a 4-way movesLeft one-hot: ids 1152+ml, so 1152 -> 1156 features, 145 active.
+
+    EXPERIMENT ONLY -- the Java runtime hardcodes 1152 and the parity fixture is built for it, so
+    a net trained this way is NOT loadable and must not overwrite nnue_v3_net.json.
+    """
+    ml = np.asarray(data["ml"], dtype=np.int32)
+    if ml.max() > 3 or ml.min() < 0:
+        raise SystemExit("movesLeft out of 0..3: [%d, %d]" % (ml.min(), ml.max()))
+    extra = (N_FEATURES + ml).astype(np.int32)[:, None]
+    out = dict(data)
+    out["active"] = np.concatenate([data["active"].astype(np.int32), extra], axis=1)
+    return out, N_FEATURES + 4
+
+
+def train(data, start, length, tr, va, args, hidden, verbose=True, n_features=N_FEATURES):
     """Fit one H. Early-stops on VAL top-1 and returns the best-val state."""
     ht = data["ht"]
     active = data["active"]
+    sgn = data["sgn"]
     tr_rows = np.concatenate([np.arange(start[g], start[g] + length[g]) for g in tr])
     mu, sigma = float(ht[tr_rows].mean()), float(ht[tr_rows].std())
     y_t = torch.from_numpy((ht - mu) / sigma).float()
+    s_t = torch.from_numpy(sgn).float()
 
     torch.manual_seed(args.seed)
-    model = Net(hidden, args.dropout)
+    model = Net(hidden, args.dropout, n_features)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     rng = np.random.default_rng(args.seed)
     temp = args.temp / sigma
+    shift = mu / sigma  # standardised -> raw, so the ListNet logits are sgn * raw / args.temp
 
     best = (-1.0, None, 0)
     for epoch in range(1, args.epochs + 1):
         model.train()
         tot = 0.0
         for chunk in batches(tr, start, length, args.batch_groups, rng):
-            idx2d, tgt, mask, shape = pad_batch(chunk, start, length, active, y_t)
+            idx2d, tgt, sg, mask, shape = pad_batch(chunk, start, length, active, y_t, s_t)
             pred = model(idx2d).reshape(shape)
-            loss, _, _ = group_loss(pred, tgt, mask, temp, args.mse_weight, args.rank_weight)
+            loss, _, _ = group_loss(
+                pred, tgt, mask, sg, temp, shift, args.mse_weight, args.rank_weight
+            )
             opt.zero_grad()
             loss.backward()
             opt.step()
             tot += loss.item()
         pred = predict(model, active) * sigma + mu
-        m = metrics(pred, ht, start, length, va)
+        m = metrics(pred, ht, sgn, start, length, va)
         if verbose:
             print(
                 "  H=%-4d epoch %2d  loss %.4f  val top1 %.3f  rho %.3f  MAE %.0f  R2 %.3f"
@@ -411,10 +472,20 @@ def main(argv=None):
     p.add_argument("--ridge", type=float, nargs="*", default=None,
                    help="fit the v3.1 linear ridge baseline at these lambdas and stop "
                         "(default 1 10 100 1000)")
+    p.add_argument("--tempo", action="store_true",
+                   help="EXPERIMENT: append a 4-way movesLeft one-hot (1152 -> 1156 features). "
+                        "The Java runtime hardcodes 1152, so --out is refused with this on.")
     p.add_argument("--out", default="", help="path to write nnue_v3_net.json; empty = measure only")
     args = p.parse_args(argv)
 
     data = load_dataset(args.dataset)
+    n_features = N_FEATURES
+    if args.tempo:
+        if args.out:
+            raise SystemExit("--tempo nets are 1156-wide; the runtime cannot load them. Drop --out.")
+        data, n_features = with_tempo(data)
+        print("TEMPO EXPERIMENT: %d features, %d active (NOT the shipped schema)"
+              % (n_features, data["active"].shape[1]))
     start, length = groups(data["pos"])
     tr_mask, va_mask, te_mask = split_games(data["gidx"], args.seed)
     tr, va, te = (subset(start, length, m) for m in (tr_mask, va_mask, te_mask))
@@ -427,16 +498,16 @@ def main(argv=None):
     )
     print("loss: %g * ListNet(temp=%g ht units) + %g * MSE   wd=%g dropout=%g"
           % (args.rank_weight, args.temp, args.mse_weight, args.weight_decay, args.dropout))
-    print("linear baseline on record (V3OrderingProbe): top1 %.1f%%  rho %.3f  "
-          "MAE %.0f / R2 %.3f (parent positions, NOT comparable -- see --ridge)"
-          % (100 * LINEAR_BASELINE["top1"], LINEAR_BASELINE["spearman"],
-             LINEAR_BASELINE["mae"], LINEAR_BASELINE["r2"]))
+    print("v3.1 linear as SHIPPED, in the engine's frame (fixed V3OrderingProbe): "
+          "top1 %.1f%%  rho %.3f -- worse than random"
+          % (100 * LINEAR_BASELINE["top1"], LINEAR_BASELINE["spearman"]))
 
     if args.ridge is not None:
         for lam in args.ridge or [1.0, 10.0, 100.0, 1000.0]:
             pred = ridge_baseline(data, start, length, tr, lam)
-            print(fmt("ridge %-6g val" % lam, metrics(pred, data["ht"], start, length, va)))
-            print(fmt("ridge %-6g TEST" % lam, metrics(pred, data["ht"], start, length, te)))
+            args_m = (data["ht"], data["sgn"], start, length)
+            print(fmt("ridge %-6g val" % lam, metrics(pred, *args_m, va)))
+            print(fmt("ridge %-6g TEST" % lam, metrics(pred, *args_m, te)))
         return
 
     if args.sweep is None:
@@ -445,11 +516,13 @@ def main(argv=None):
         hs = args.sweep or [0, 16, 32, 64, 128]
     results = {}
     for h in hs:
-        model, mu, sigma, epoch = train(data, start, length, tr, va, args, h)
+        model, mu, sigma, epoch = train(
+            data, start, length, tr, va, args, h, n_features=n_features
+        )
         pred = predict(model, data["active"]) * sigma + mu
         results[h] = {
-            "val": metrics(pred, data["ht"], start, length, va),
-            "test": metrics(pred, data["ht"], start, length, te),
+            "val": metrics(pred, data["ht"], data["sgn"], start, length, va),
+            "test": metrics(pred, data["ht"], data["sgn"], start, length, te),
             "epoch": epoch,
             "model": (model, mu, sigma),
         }

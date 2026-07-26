@@ -28,13 +28,24 @@ import java.util.List;
  * <p>Enumeration mirrors {@code V3OrderingProbe} exactly — replay 12x12 games via {@link
  * GamesDbReplay}, rebuild each snapshot as a {@link GoState} with {@link GamesDbReplay#MOVES_LEFT}
  * moves left, take every {@link GoState#legalActions()} child, and score it with {@link
- * HandTunedEval} from the PARENT'S mover frame. Same frame for every sibling: a per-child
- * perspective flip would make the group's ordering meaningless. Positions with fewer than {@link
- * #MIN_CHILDREN} children are skipped — there is no ordering to learn from one or two moves.
+ * HandTunedEval} in the RUNTIME FRAME: from the CHILD's own {@code currentPlayer()}, with the
+ * child's own {@code movesLeft} and {@code neutralUsed}. That is exactly what {@code
+ * GoBotSearcher.leafEval} queries the net with, and 47% of children end the turn (a neutral
+ * placement, or the last action of a turn), so the mover flips on them. Emitting those in the
+ * parent's frame — as this did until bead 1uz's frame fix — trained and validated the net on inputs
+ * the engine never produces.
+ *
+ * <p>Ordering is still the PARENT's decision, so each row carries {@code s = +1} when the child
+ * kept the mover and {@code -1} when the turn flipped: the parent-frame score is {@code s * value},
+ * mirroring {@code leafEval}'s {@code mover == root ? v : -v} negation. Rank on {@code s * value},
+ * never on the raw value. Positions with fewer than {@link #MIN_CHILDREN} children are skipped —
+ * there is no ordering to learn from one or two moves.
  *
  * <p>Output is JSONL, one child per line: {@code {"game_id":G,"pos_id":P,"active":[144
- * ids],"ht":S}}. {@code game_id} rides along because the holdout MUST be split by game (positions
- * inside a game share nearly all their features); {@code pos_id} is the sibling group key.
+ * ids],"ht":S,"s":±1,"ml":M}}. {@code ml} is the child's {@code movesLeft}, metadata for the
+ * tempo-feature experiment only — the shipped 1152 features do not encode it. {@code game_id} rides
+ * along because the holdout MUST be split by game (positions inside a game share nearly all their
+ * features); {@code pos_id} is the sibling group key.
  *
  * <p>CLI: {@code V3SiblingDatasetEmitter [db-path] [out-path]}; db defaults to {@code
  * $NNUE_GAMES_DB} then {@code games.db}, output to {@code /tmp/nnue_v3_siblings.jsonl}.
@@ -48,20 +59,37 @@ public final class V3SiblingDatasetEmitter {
 
   private V3SiblingDatasetEmitter() {}
 
-  /** One legal child: its active feature ids and its hand-tuned score, both in the parent frame. */
+  /**
+   * One legal child: its active feature ids and hand-tuned score in the CHILD's own frame (what the
+   * runtime queries), plus the sign that maps them back into the parent's frame (what the runtime
+   * ranks on).
+   */
   public static final class Child {
     public final int[] active;
     public final int ht;
 
-    Child(int[] active, int ht) {
+    /** +1 if the child kept the parent's mover, -1 if the action ended the turn. */
+    public final int sign;
+
+    /**
+     * The child's own {@code movesLeft}. Metadata only — the shipped 1152 features cannot see it.
+     * It rides along so the tempo-feature experiment (a 4-way one-hot, 1152 -> 1156) can be run
+     * from the same dataset without a schema change.
+     */
+    public final int movesLeft;
+
+    Child(int[] active, int ht, int sign, int movesLeft) {
       this.active = active;
       this.ht = ht;
+      this.sign = sign;
+      this.movesLeft = movesLeft;
     }
   }
 
   /**
-   * Every legal child of a snapshot, scored and featurized from the parent mover's frame. Returns
-   * an empty list when the position has fewer than {@link #MIN_CHILDREN} children.
+   * Every legal child of a snapshot, scored and featurized from the CHILD's own frame, with the
+   * parent-frame sign attached. Returns an empty list when the position has fewer than {@link
+   * #MIN_CHILDREN} children.
    */
   public static List<Child> children(GamesDbReplay.Snapshot s) {
     GoState state = GoState.fromBoard(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
@@ -76,8 +104,17 @@ public final class V3SiblingDatasetEmitter {
       if (child == null) {
         continue;
       }
-      int ht = HandTunedEval.staticEval(child.toBoard(), mover, child.movesLeft(), s.neutralUsed);
-      out.add(new Child(V3FeatureMiner.activeFeatures(child.toBoard(), mover), ht));
+      int cp = child.currentPlayer();
+      // The child's OWN neutral state: a neutral-placement child has by definition just spent its
+      // neutral, so the parent's flags are wrong for exactly the rows the frame fix is about.
+      boolean[] nu = {child.neutralUsed(1), child.neutralUsed(2)};
+      int ht = HandTunedEval.staticEval(child.toBoard(), cp, child.movesLeft(), nu);
+      out.add(
+          new Child(
+              V3FeatureMiner.activeFeatures(child.toBoard(), cp),
+              ht,
+              cp == mover ? 1 : -1,
+              child.movesLeft()));
     }
     return out.size() < MIN_CHILDREN ? List.of() : out;
   }
@@ -91,6 +128,8 @@ public final class V3SiblingDatasetEmitter {
       a.add(i);
     }
     n.put("ht", c.ht);
+    n.put("s", c.sign);
+    n.put("ml", c.movesLeft);
     return MAPPER.writeValueAsString(n);
   }
 
@@ -110,6 +149,7 @@ public final class V3SiblingDatasetEmitter {
 
     long posId = 0;
     long rows = 0;
+    long flipped = 0;
     int gamesUsed = 0;
     try (BufferedWriter w = Files.newBufferedWriter(out);
         Connection conn = DriverManager.getConnection("jdbc:sqlite:" + db);
@@ -148,6 +188,9 @@ public final class V3SiblingDatasetEmitter {
             w.write(row(gameId, posId, c));
             w.newLine();
             rows++;
+            if (c.sign < 0) {
+              flipped++;
+            }
           }
           posId++;
         }
@@ -158,6 +201,9 @@ public final class V3SiblingDatasetEmitter {
     System.out.println("sibling groups : " + posId);
     System.out.println("rows           : " + rows);
     System.out.printf("avg children   : %.1f%n", posId == 0 ? 0.0 : (double) rows / posId);
+    System.out.printf(
+        "turn-flipping  : %d (%.1f%% of rows, s=-1)%n",
+        flipped, rows == 0 ? 0.0 : 100.0 * flipped / rows);
     System.out.println("output         : " + out.toAbsolutePath());
   }
 }

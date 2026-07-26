@@ -2,252 +2,270 @@
 
 Bead `nnue-trainer-1uz`, training half. Artifact: `nnue_v3_net.json` at the repo root.
 
-**Headline: the ≥ 70% top-1 gate is cleared (76.0% held-out, linear baseline 41.2%). The MAE < 400
-target is not, and the reason is that 400 was derived from a number measured on a different
-distribution — see "The MAE target was mis-derived".**
+> **CORRECTION (frame bug).** Everything this document said before was measured in a frame the
+> engine never queries. `V3SiblingDatasetEmitter` and `V3OrderingProbe` scored every child from the
+> **parent mover's** perspective; `GoBotSearcher.leafEval` evaluates each leaf from the **leaf's
+> own** `currentPlayer()` and negates into the root frame. 47% of children end the turn, so the
+> mover flips on them and the old labels had the sign inverted. **The previously headlined 76.0%
+> held-out top-1 is void.** The corrected numbers are below, and they do not support the old
+> conclusion: once the frame is right, the hidden layer buys nothing over the linear model.
 
-## Why this exists
+## The bug
 
-v3.1 shipped a linear model, `eval = bias + Σ weight_f` over the 1152 absolute
-`(row, col, cell-state)` features. It reached held-out **R² = 0.976** and then lost the strength
-gauntlet **7-17 (29.2%)**.
+`leafEval` for `LeafEval.NNUEV3`:
 
-`V3OrderingProbe` (bead `nnue-trainer-78a`) explained the contradiction. R² is variance explained
-across the whole position distribution, which is dominated by wide differences between unrelated
-positions. Search never makes that comparison — it compares the **children of one position**, which
-differ by a single action. Measured on real positions:
+```java
+int mover = state.currentPlayer();
+long v = nnueV3Leaf(state.toBoard(), mover, nnueV3);
+return mover == root ? v : -v;
+```
 
-| | v3.1 linear |
-|---|---|
-| top-1 sibling agreement | 41.2% |
-| mean Spearman ρ over sibling groups | 0.586 |
-| holdout MAE (on parent positions) | 1230 |
-| median hand-tuned gap, best minus 2nd-best sibling | 1299 |
+The emitter did this instead, for every child:
+
+```java
+int mover = state.currentPlayer();                       // the PARENT's mover
+int ht = HandTunedEval.staticEval(child.toBoard(), mover, child.movesLeft(), s.neutralUsed);
+out.add(new Child(V3FeatureMiner.activeFeatures(child.toBoard(), mover), ht));
+```
+
+Two defects on those lines:
+
+1. **Frame.** Any action that ends a turn — a neutral placement, or the last action of a turn —
+   flips `currentPlayer()`. 105 525 of 223 893 rows (**47.1%**) are such children. They were
+   featurized and labelled from the parent's mover, a frame the runtime never produces.
+2. **Neutral bookkeeping.** The parent's `s.neutralUsed` was passed even for a neutral-placement
+   child, which has by definition just spent its neutral.
+
+### Why it destroyed playing strength
+
+In the parent's frame the hand-tuned eval hates ending your turn early — you give up your remaining
+actions:
+
+| parent-frame mean `ht` | turn-keeping children | turn-flipping children |
+|---|---|---|
+| | **+6 958** | **−14 108** |
+
+The best child is a turn-flipper in only **1.0%** of the 6 551 sibling groups. The buggy emitter
+labelled a flipper with that parent-frame value, so the net learned `f(flipper features) ≈ −14 108`.
+The runtime then negated it, yielding **+14 108** — so the engine ranked precisely the moves the
+hand-tuned eval calls worst as its best. Measured with the corrected `V3OrderingProbe` (400
+positions, 11 789 children), both shipped models order **worse than random**:
+
+| model, in the frame the engine actually uses | top-1 | mean ρ | ρ ≤ 0 | top-3 overlap |
+|---|---|---|---|---|
+| v3.1 linear (`NNUEv3Evaluator`) | 9.8% | −0.161 | 63.3% | 29.3% |
+| v3.5 net H=32, buggy-frame training | 14.5% | −0.298 | 84.0% | 14.8% |
+
+The net's top-3 overlap (14.8%) is barely above its top-1 (14.5%): its whole top-3 is flippers.
+This is a complete explanation of both gauntlet failures — v3.1's 7-17 and the net's 20.8% at
+depth 3.
+
+## The fix
+
+`V3SiblingDatasetEmitter` now emits each child in the runtime frame and carries the sign:
+
+```java
+int cp = child.currentPlayer();
+boolean[] nu = {child.neutralUsed(1), child.neutralUsed(2)};
+int ht = HandTunedEval.staticEval(child.toBoard(), cp, child.movesLeft(), nu);
+out.add(new Child(V3FeatureMiner.activeFeatures(child.toBoard(), cp), ht, cp == mover ? 1 : -1, ...));
+```
+
+Row schema is now
+`{"game_id": G, "pos_id": P, "active": [144 ids], "ht": S, "s": ±1, "ml": M}`. `active`/`ht` are in
+the **child's** frame — what the net is queried with — and `s` is `leafEval`'s negation, so the
+**parent** frame is `s * value`. Everything that ranks — the ListNet loss, top-1, Spearman — is
+computed on `s * value`. The MSE anchor is unaffected (squaring makes the sign irrelevant). `ml` is
+the child's `movesLeft`, metadata for the tempo experiment only; the shipped 1152 features cannot
+see it.
+
+`V3OrderingProbe` got the same correction. Its old `--- resolution` block quoted a hardcoded
+"v3 holdout MAE 1230" — measured on **parent positions** — against a 1299 gap measured between
+**children**. That ratio was meaningless and is gone; the probe now measures `median |v3 − ht|` on
+the same children it measures the gap on.
+
+One subtlety the fix has to get right: in the ListNet loss the standardisation offset no longer
+cancels. Softmax is invariant to a shift shared by the whole row, but a sibling group holds both
+signs, so `μ` must be folded back in — the logits are `s·(z + μ/σ)/(T/σ)`, i.e. `s·raw/T`.
 
 ## The pipeline
 
 ```bash
-# 1. dataset: one row per legal child, grouped by parent
 ./mvnw -q compile exec:java \
   -Dexec.mainClass=com.engine.nnue_trainer.train.V3SiblingDatasetEmitter \
   -Dexec.classpathScope=runtime -Dexec.args="/path/to/games.db /tmp/nnue_v3_siblings.jsonl"
 
-# 2. sweep H, then export the winner
 python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl \
-  --sweep 0 16 32 64 128 --epochs 40 --patience 6 --out nnue_v3_net.json
+  --sweep 0 16 32 64 128 --epochs 40 --patience 6
 ```
 
-`V3SiblingDatasetEmitter` mirrors `V3OrderingProbe`'s enumeration exactly: replay each 12x12 game
-through `GamesDbReplay`, rebuild every snapshot as a `GoState` with `movesLeft = 3`, take every
-`legalActions()` child, and score it with `HandTunedEval` **from the parent mover's frame**. Same
-frame for every sibling — a per-child perspective flip would make the group's ordering meaningless.
-Positions with fewer than 3 children are skipped: there is nothing to order.
-
 ```
-446 games -> 6551 sibling groups -> 223893 rows (median 29 children per group, max 424)
+446 games -> 6551 sibling groups -> 223893 rows (avg 34.2 children per group), 47.1% turn-flipping
 ```
 
-Each row is `{"game_id": G, "pos_id": P, "active": [144 feature ids], "ht": <hand-tuned score>}`.
-`game_id` rides along because the split has to be by game. Cross-check that the dataset is the same
-population the probe measured: the median best-minus-2nd sibling gap over the held-out groups is
-**1299**, the probe's number exactly.
+The corpus is unchanged by the fix — same games, same groups, same rows. Only the labels, the
+features on 47.1% of rows, and the ranking frame changed. The median best-minus-2nd sibling gap in
+the parent frame is still **1299**, so `T = 1300` remains the right ListNet temperature and the
+loss blend below was not re-tuned.
 
-## Architecture
+## Architecture and objective
 
-```
-eval(x) = w2 · relu(W1·x + b1) + b2
-```
-
-`x` is 0/1 over 1152 features with **exactly 144 active** (one state per cell), so `W1·x` is the sum
-of W1's columns over the active ids — implemented as an `nn.EmbeddingBag(mode="sum")`, never a dense
-1152-wide matmul. That is also exactly what the Java runtime does:
+Unchanged from the original design, and still correct:
 
 ```
-eval = Σ_h w2[h] * relu( Σ_{i ∈ active} w1[h][i] + b1[h] ) + b2
+eval(x) = w2 · relu(W1·x + b1) + b2          loss = 1.0 * ListNet(T=1300) + 10.0 * MSE
 ```
 
-Output is in raw hand-tuned score units: no scaling, no squashing. Training standardises the target
-(μ, σ from **train rows only**) for conditioning and folds the transform back into the exported
-`w2`/`b2`, so the shipped file needs no post-processing. `python/v3/train_net_test.py` pins that
-round-trip: the file's own arithmetic must reproduce the torch model's outputs.
+`x` is 0/1 over 1152 features with exactly 144 active, so `W1·x` is a sum of columns —
+`nn.EmbeddingBag(mode="sum")`, never a dense matmul. Output is raw hand-tuned units; the target
+standardisation is folded into the exported `w2`/`b2`. `python/v3/train_net_test.py` pins that
+round-trip.
 
-## The objective, and why ranking beats regression here
+## H sweep, corrected frame
 
-Primary term: **ListNet** (listwise softmax cross-entropy) over each sibling group.
+Three-way split **by game**: 268 train / 89 val / 89 test. Val early-stops (patience 6 on val
+top-1) and picks H; test is the only number reported. The seed sets both the split and the init.
 
-```
-loss = 1.0 * ListNet(pred/T, ht/T)  +  10.0 * MSE(pred, ht)      T = 1300 hand-tuned units
-```
+**Held-out TEST top-1:**
 
-Listwise rather than pairwise because the gate is *top-1 agreement*, and a softmax over the group is
-a smooth surrogate for exactly that. `T` is set near the median sibling gap (1299), so most of the
-target mass sits on the best one or two children and the gradient is spent where search makes its
-decision instead of on the thirty hopeless moves.
+| H | params | seed 0 | seed 1 | seed 2 | **mean** | val mean |
+|---|---|---|---|---|---|---|
+| **0 (linear)** | 1 153 | 71.6% | 78.5% | 69.6% | **73.2%** | 71.7% |
+| 16 | 18k | 68.1% | 75.3% | 68.7% | 70.7% | 69.8% |
+| 32 | 37k | 68.3% | 80.2% | 69.9% | 72.8% | 71.0% |
+| 64 | 74k | 69.1% | 77.5% | 69.3% | 72.0% | 70.7% |
+| 128 | 148k | 69.1% | 78.4% | 71.0% | 72.8% | 72.1% |
 
-The MSE term is a **unit anchor**, not a co-objective. ListNet is invariant to a per-group additive
-shift, so a pure ranking loss leaves the model's absolute level unconstrained — the between-group
-scale drifts and the leaf eval stops being comparable across the tree. The blend weight was chosen
-by measuring it (H = 32, 12 epochs, seed 0, held-out test):
+**The hidden layer buys nothing.** The linear H = 0 row is at the *top* of the test mean; the whole
+spread across H is 2.5 points against a between-seed spread of ~10 (seed 1's split is easier at
+every H, exactly as before). Selection on mean val top-1 picks H = 128 by 0.4 points over H = 0 —
+noise, and its test mean is 0.4 *below* H = 0.
 
-| MSE weight | top-1 | ρ mean | MAE | R² |
-|---|---|---|---|---|
-| 1 | 73.4% | 0.725 | 12017 | 0.374 |
-| **10** | **76.0%** | **0.778** | **5434** | **0.824** |
-| 100 | 65.6% | 0.751 | 4713 | 0.841 |
+Compare the pre-fix sweep, which reported H = 32 at 78.7% mean vs H = 0 at 74.0% and concluded the
+nonlinearity was worth 4.8 points. **That gap was an artifact of the broken frame.** It is gone.
 
-10 is not a compromise. It wins top-1 outright and costs only 0.017 R² against the 100 setting. At
-weight 1 the anchor is too weak and the level drifts (R² 0.374); at 100 the value term starts
-overriding the ordering and top-1 falls back below the gate.
+**Ships: H = 32, seed 0.** Not because it won — nothing won. The architecture is held constant
+against the prior H = 32 gauntlet so the gauntlet below isolates the *frame fix* rather than
+confounding it with a capacity change. Any of H = 0/32/64/128 would be an equally defensible pick
+from this table, which is itself the finding.
 
-**The control that isolates the objective.** Same architecture, same data, same split, same
-optimiser — ranking term switched off (`--rank-weight 0 --mse-weight 1`), i.e. pure value
-regression, the v3.1 objective:
+## Result vs the baselines
 
-| seed-0 test | top-1 | ρ mean | MAE | R² |
-|---|---|---|---|---|
-| H = 0, pure MSE | 57.9% | 0.715 | 6563 | 0.699 |
-| H = 32, pure MSE | 61.9% | 0.750 | 4347 | 0.861 |
-| H = 32, **ranking blend** | **76.0%** | 0.778 | 5434 | 0.824 |
+| model (held-out, corrected frame) | top-1 | ρ mean |
+|---|---|---|
+| v3.1 linear, as shipped, measured by the fixed probe | 9.8% | −0.161 |
+| v3.5 net H=32 trained in the buggy frame, fixed probe | 14.5% | −0.298 |
+| linear (H = 0) retrained on corrected data, 3-seed mean | 73.2% | 0.722 |
+| **v3.5 net H = 32 retrained on corrected data, 3-seed mean** | **72.8%** | 0.731 |
 
-The ranking loss buys **+14.1 points of top-1** for 0.037 of R². That is the whole thesis of the
-bead, measured rather than argued.
+Both "on record" baselines from the old document — linear 41.2% and net 76.0% — were measured in
+the broken frame and are not comparable to anything here. They are not the numbers to beat; they
+are not numbers at all.
 
-## H sweep
+## Gauntlet
 
-Data is small — 446 games, 6551 sibling groups — and 1152×H parameters overfit trivially, so the
-split is **three-way by game**: 268 games train / 89 val / 89 test. Val early-stops (patience 6 on
-val top-1) and picks H; **test is the only number reported**. Regularisation: AdamW weight decay
-1e-2, dropout 0.1 on the hidden layer.
+`V3EVAL=net MATCHUP=bar ./mvnw exec:java -Dexec.mainClass=...GauntletV3Run -Dexec.args="24 3,4 7"`
 
-The seed sets both the split and the init, so the three seeds are a repeated-holdout estimate. H = 0
-is the same architecture with no hidden layer — the linear model, trained on the same data with the
-same loss.
+| leaf eval | depth 3 | depth 4 |
+|---|---|---|
+| v3.1 linear (buggy-frame training) | 29.2% | 29.2% |
+| v3.5 net H=32 (buggy-frame training) | 20.8% | 41.7% |
+| **v3.5 net H=32 (corrected frame)** | **41.7%** (10-14-0) | **29.2%** (7-17-0) |
 
-**Held-out TEST top-1 (the gate metric):**
+Hand-tuned bar = 50%; the goal of a distillation is to reach it, not beat it.
 
-| H | params | seed 0 | seed 1 | seed 2 | **mean** |
+**The frame fix did not measurably improve playing strength.** Pooled over both depths (48 games
+each): corrected net 17-31 = **35.4%**, buggy-frame net 15-33 = 31.3%, linear 14-34 = 29.2%. With 24
+games per cell the standard error on a difference of two ~33% win rates is about **9.6 points**, so
+a 4-6 point spread is well inside noise. The two nets' per-depth numbers even swapped values
+(20.8/41.7 vs 41.7/29.2), which is what noise looks like.
+
+State it plainly: the bug was real, the offline correction is enormous — ordering went from ρ =
+−0.298 (worse than random, in the engine's own frame) to ρ = +0.756 and top-1 from 14.5% to 77.5% —
+and **none of that showed up as strength at this sample size**. This is now the fourth time an
+offline metric has failed to predict the gauntlet on this project. Anyone claiming a strength result
+here needs several hundred games per cell, not 24.
+
+## The tempo blind spot
+
+The 1152 features are `(row, col, cell-state)` indicators. They contain **no tempo term**, but
+`HandTunedEval` adds `movesLeft × 12` for the side to move, and after the frame fix children
+legitimately differ in `movesLeft`: 2 for a turn-keeping child, 3 for a fresh turn.
+
+Experiment (`--tempo`): append a 4-way `movesLeft` one-hot, 1152 → 1156 features, 145 active.
+
+**Held-out TEST top-1, same splits and seeds:**
+
+| features | H | seed 0 | seed 1 | seed 2 | **mean** |
 |---|---|---|---|---|---|
-| 0 (linear) | 1 153 | 71.6% | 79.6% | 70.7% | 74.0% |
-| 16 | 18k | 66.1% | 80.5% | 68.4% | 71.7% |
-| **32** | **37k** | **76.0%** | **84.7%** | **75.5%** | **78.7%** |
-| 64 | 74k | 76.6% | 84.0% | 75.9% | 78.8% |
-| 128 | 148k | 72.6% | 85.3% | 72.5% | 76.8% |
+| 1152 (shipped) | 0 | 71.6% | 78.5% | 69.6% | **73.2%** |
+| 1156 (+tempo) | 0 | 67.6% | 78.9% | 67.8% | 71.4% |
+| 1152 (shipped) | 32 | 68.3% | 80.2% | 69.9% | **72.8%** |
+| 1156 (+tempo) | 32 | 69.6% | 75.1% | 73.6% | 72.8% |
 
-**Held-out TEST secondary metrics, mean over the three seeds:**
+**No improvement.** At H = 32 the mean is identical (72.8% either way); at H = 0 the extra feature
+is 1.8 points *worse*. The per-seed numbers move around by up to 6 points in both directions, which
+is the split noise, not a signal. The blind spot is real — the feature set genuinely cannot see
+`movesLeft` — but handing the model that information does not move held-out top-1, so tempo is not
+what is limiting it. **Recommendation: do not bump the schema for this.**
 
-| H | ρ mean | MAE | R² | val top-1 (mean) | per-seed pick |
-|---|---|---|---|---|---|
-| 0 | 0.756 | 5326 | 0.825 | 72.7% | — |
-| 16 | 0.755 | 6345 | 0.775 | 70.0% | — |
-| **32** | **0.765** | **4861** | **0.864** | **77.9%** | seed 0 |
-| 64 | 0.775 | 4813 | 0.860 | 78.0% | seed 2 |
-| 128 | 0.767 | 4689 | 0.861 | 75.9% | seed 1 |
+**Not shipped, and it must not be shipped casually.** `NNUEv3Accumulator.FEATURES` is 1152 in the
+Java runtime and `NNUEv3NetEvaluator` rejects any other width, and the parity fixture is built for
+1152. Widening the schema needs a coordinated Java + fixture bump. `--tempo` also refuses `--out`
+for that reason.
 
-**Read this table honestly.** The between-seed spread (seed 1's split is ~9 points easier at every
-H) is larger than the between-H spread, so no single seed's ranking is trustworthy — which is why
-all three are shown. What survives averaging:
+There is also a **caveat that limits how much this experiment proves**: `GamesDbReplay` rebuilds
+every snapshot with `MOVES_LEFT = 3`, so in this corpus `movesLeft = 2` ⟺ turn-keeping and
+`movesLeft = 3` ⟺ turn-flipping, exactly. The one-hot is therefore a near-perfect "did the turn
+flip" indicator here, which is *not* what it would be in a real search where the parent can sit at
+any `movesLeft`. Any gain it shows is an upper bound.
 
-- **H = 32 and H = 64 are tied** (78.7% vs 78.8%, well inside the noise) and both beat H = 0 by
-  ~4.8 points and H = 128 by ~2 points.
-- **H = 128 overfits.** It wins seed 1 outright and loses the other two; 148k parameters on 6551
-  groups is past the useful point.
-- **H = 16 is genuinely bad**, not just noisy — below the *linear* row in two of three seeds. 16
-  ReLU units over 1152 inputs is narrow enough to lose units to saturation; it is not a smooth
-  interpolation between H = 0 and H = 32.
+## What this establishes
 
-**Ships: H = 32** (seed 0, the seed the artifact was exported from). H = 64 is statistically
-indistinguishable, so the tie breaks on the smaller model: fewer parameters on 446 games, and the
-Java-runtime bench puts H = 32 at 2.66x hand-tuned search speed against H = 64's 1.87x. Speed is not
-the binding constraint in that range — H = 64 would also have been affordable — but with the
-ordering metrics tied there is no reason to buy the extra variance.
+1. **The frame bug, not model capacity, was the binding constraint.** Two models that looked like
+   41.2% and 76.0% offline were in fact ordering below random in the engine's own frame.
+2. **The nonlinearity was never doing the work.** With correct labels, H = 0 through H = 128 are
+   indistinguishable, and the linear model tops the test mean. The +4.8-point "capacity win" in the
+   previous version of this document was measurement error.
+3. **Feature resolution is still the ceiling.** Absolute occupancy indicators cannot see
+   connectivity, liberties, or mobility — the things `HandTunedEval` actually computes and the
+   things that change when one stone is placed. That diagnosis from the original document survives;
+   it is now the *only* thing that survives.
 
-## Result vs the linear baseline
-
-The recorded baseline (41.2% / ρ 0.586 / MAE 1230 / R² 0.976) was measured with a *different fit on
-a different row set*: ridge on 6589 **parent** positions. To compare like with like, the same linear
-model is also fit here by closed-form ridge on the **sibling-children** rows, same split, λ swept
-(`--ridge`):
-
-| model (seed-0 test) | top-1 | ρ mean | MAE | MAE within-group | R² |
-|---|---|---|---|---|---|
-| v3.1 linear, on record (parent positions) | 41.2% | 0.586 | 1230 | — | 0.976 |
-| ridge λ=1 on sibling rows (best top-1) | 51.6% | 0.737 | 6939 | 3599 | 0.626 |
-| ridge λ=1000 on sibling rows (best R²) | 43.1% | 0.723 | 5275 | 3542 | 0.832 |
-| **v3.5 net, H = 32** | **76.0%** | **0.778** | 5434 | **3191** | 0.824 |
-
-**Gate: top-1 76.0% ≥ 70% — PASS**, with 6 points of margin on the seed the artifact came from and
-78.7% averaged over three splits.
-
-## The MAE target was mis-derived
-
-The bead set "MAE well under 400" by reasoning from 1230 to "~3x resolution on the 1299 sibling
-gap". Both numbers are real, but they come from different row sets, and putting them in a ratio is
-what makes the target wrong.
-
-- 1230 was measured on **parent positions** — real game states, a narrow, low-variance population.
-- 1299 is a gap between **siblings** — children, including every legal move, most of them absurd.
-
-On the sibling-children rows the *same shipped linear model* has MAE **5275–6939**, not 1230. So
-"MAE 400" was never 3x resolution on this distribution; it was a target roughly 13x below what the
-baseline architecture actually achieves here. The net's 5434 is in line with the ridge fits on the
-same rows, and its R² of 0.824 essentially matches the best ridge R² of 0.832.
-
-**The resolution argument, done on the right quantity.** Ordering is invariant to a per-group
-offset, so plain MAE is not the error that competes with the sibling gap — the error *after removing
-each group's mean residual* is. That is `MAE within-group` above: **3191 for the net, 3542–3599 for
-ridge**. The net is only ~10% better there, yet its top-1 is 24–33 points higher. The ordering gain
-therefore does **not** come from being a uniformly more accurate model; it comes from spending the
-accuracy at the **top of each sibling list**, which is where search decides and which neither MAE
-nor R² measures. That is precisely what a listwise loss at T ≈ the sibling gap optimises, and it is
-the reason the R²-based gate passed a model that lost 7-17.
-
-## What is limiting, ranked by evidence
-
-1. **Model capacity is NOT the binding constraint.** H = 128 (148k params) is worse on mean held-out
-   top-1 than H = 32 (37k). The sweep is already past the point where width helps.
-2. **Data volume is real but second-order.** 6551 groups from 446 games shows up as a ±9-point
-   between-split spread and a val/test gap of 1–3 points. More games would tighten the estimate;
-   nothing here suggests it would move the ceiling far.
-3. **Feature resolution is the ceiling.** The 1152 absolute `(row, col, cell-state)` indicators say
-   *what is on each square* and nothing about connectivity, group liberties, or mobility — which is
-   what `HandTunedEval` computes and what changes when one stone is placed. A sibling group differs
-   in one to three cells, so the model must infer the *delta* of a connectivity-sensitive function
-   from a three-cell diff. A hidden layer over absolute occupancy approximates some of that
-   interaction (H = 32 beats H = 0 by 4.8 points); it cannot represent it (H = 128 does not beat
-   H = 32). The next real gain is a feature that sees structure — adjacency pairs, group size,
-   liberty counts — not a wider net over these 1152.
-
-**What this does not establish.** Top-1 agreement with the hand-tuned eval is a proxy. It is a far
-better proxy than R² — it is the decision search actually makes — but 76% agreement is not a
-gauntlet win, and nothing here measures playing strength. The gauntlet is the Java-runtime half of
-this bead and is where the claim gets settled.
+Offline ordering agreement has now failed to predict strength three times. Treat the gauntlet, not
+top-1, as the result.
 
 ## Reproducing
 
 ```bash
-# dataset (needs games.db; ~4 min)
+# dataset (needs games.db; ~1 min)
 ./mvnw -q compile exec:java \
   -Dexec.mainClass=com.engine.nnue_trainer.train.V3SiblingDatasetEmitter \
   -Dexec.classpathScope=runtime -Dexec.args="/path/to/games.db /tmp/nnue_v3_siblings.jsonl"
 
-# H sweep + export (~45 min per seed on 4 CPU cores; the JSONL caches to a .npz on first load)
-python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl \
-  --sweep 0 16 32 64 128 --epochs 40 --patience 6 --out nnue_v3_net.json
-python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 16 32 64 128 --seed 1
-python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 16 32 64 128 --seed 2
-
-# the pure-regression control (the v3.1 objective on the v3.5 data)
-python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 32 --rank-weight 0 --mse-weight 1
-
-# the closed-form linear ridge baseline on the same rows and split
-python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --ridge
-
-# the MSE-blend table
-for w in 1 10 100; do
-  python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --hidden 32 --epochs 12 --mse-weight $w
+# H sweep, three seeds (~12 min per seed on 4 CPU cores; the JSONL caches to a .npz)
+for s in 0 1 2; do
+  python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 16 32 64 128 --seed $s
 done
 
-# tests (the committed artifact's schema is checked with numpy only, so CI needs no torch)
+# export the shipped artifact + its parity fixture
+python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --hidden 32 --seed 0 --out nnue_v3_net.json
+python3 scripts/gen_v3_net_fixture.py
+
+# the closed-form linear ridge control, and the pure-regression control
+python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --ridge
+python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 32 --rank-weight 0 --mse-weight 1
+
+# the tempo experiment (1156 features; cannot be exported)
+python3 -m python.v3.train_net /tmp/nnue_v3_siblings.jsonl --sweep 0 32 --tempo
+
+# ordering probe in the engine's frame, and the gauntlet
+V3EVAL=net ./mvnw -q exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3OrderingProbe \
+  -Dexec.classpathScope=runtime -Dexec.args="/path/to/games.db 400"
+V3EVAL=net MATCHUP=bar ./mvnw -q exec:java \
+  -Dexec.mainClass=com.engine.nnue_trainer.train.GauntletV3Run -Dexec.args="24 3,4 7"
+
+# tests
 python3 -m unittest discover -s python/v3 -p "*_test.py"
-./mvnw test -Dtest=V3SiblingDatasetEmitterTest
+./mvnw test
 ```

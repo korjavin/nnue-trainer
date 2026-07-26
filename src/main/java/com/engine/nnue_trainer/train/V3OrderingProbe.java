@@ -25,8 +25,12 @@ import java.util.List;
  * from games.db, score every legal child with the hand-tuned static eval and with eval_v3, then
  * report how well the two ORDERINGS agree.
  *
- * <p>All children of a given state share the same {@code movesLeft}, so the comparison is not
- * confounded by the tempo term that v3 has no feature for.
+ * <p>Children are scored in the RUNTIME frame — from the child's own {@code currentPlayer()}, then
+ * negated into the parent's frame when the action ended the turn — because that is precisely what
+ * {@code GoBotSearcher.leafEval} does. 47% of children flip the mover, so the older "score
+ * everything from the parent's mover" version measured a frame the engine never queries.
+ * Turn-advancing children therefore also carry a different {@code movesLeft} (3 vs 2), which the
+ * 1152 v3 features have no way to see — a known blind spot, not a bug in this probe.
  *
  * <p>{@code V3EVAL=net} runs the probe against {@code NNUEv3NetEvaluator} (path {@code
  * NNUEV3NET_WEIGHTS}) instead of the linear fit; default is the linear {@code NNUEv3Evaluator}.
@@ -57,6 +61,7 @@ public final class V3OrderingProbe {
 
     List<Double> spearmans = new ArrayList<>();
     List<Double> gaps = new ArrayList<>(); // hand-tuned best-minus-second across siblings
+    List<Double> errors = new ArrayList<>(); // |v3 - hand-tuned| on the SAME children
     int top1 = 0;
     int top3 = 0;
     int scored = 0;
@@ -95,18 +100,23 @@ public final class V3OrderingProbe {
             continue; // nothing to order
           }
           int mover = state.currentPlayer();
-          List<double[]> pairs = new ArrayList<>(); // {handTuned, v3}
+          List<double[]> pairs = new ArrayList<>(); // {handTuned, v3} in the PARENT frame
           for (Action a : legal) {
             GoState child = state.apply(a);
             if (child == null) {
               continue;
             }
-            // Score every child from the SAME frame (the mover's), so this measures ordering
-            // rather than perspective bookkeeping.
-            double ht =
-                HandTunedEval.staticEval(child.toBoard(), mover, child.movesLeft(), s.neutralUsed);
-            double vv = v3.evaluate(child.toBoard(), mover);
-            pairs.add(new double[] {ht, vv});
+            // RUNTIME FRAME, exactly as GoBotSearcher.leafEval does it: query from the child's own
+            // currentPlayer (with the child's own movesLeft/neutralUsed), then negate into the
+            // parent's frame when the action ended the turn. Scoring every child from the parent's
+            // mover instead measured a frame the engine never queries.
+            int cp = child.currentPlayer();
+            double sgn = cp == mover ? 1.0 : -1.0;
+            boolean[] nu = {child.neutralUsed(1), child.neutralUsed(2)};
+            double ht = HandTunedEval.staticEval(child.toBoard(), cp, child.movesLeft(), nu);
+            double vv = v3.evaluate(child.toBoard(), cp);
+            errors.add(Math.abs(vv - ht));
+            pairs.add(new double[] {sgn * ht, sgn * vv});
           }
           if (pairs.size() < 3) {
             continue;
@@ -146,11 +156,14 @@ public final class V3OrderingProbe {
     System.out.println();
     System.out.println(
         "--- resolution: is the model accurate enough to see the gap it must judge?");
+    // Both numbers come from THESE children. The old block quoted 1230, an MAE measured on PARENT
+    // positions, against a gap measured between CHILDREN — different populations, so the ratio was
+    // meaningless. This is the like-for-like version.
     System.out.printf("median hand-tuned gap (best - 2nd best sibling): %.1f%n", median(gaps));
-    System.out.printf("v3 holdout MAE (from bead d4a.6.1)             : 1230.0%n");
+    System.out.printf("median |v3 - hand-tuned| on the same children  : %.1f%n", median(errors));
     System.out.printf(
         "VERDICT: model error is %.1fx the gap it must resolve%n",
-        1230.0 / Math.max(1e-9, median(gaps)));
+        median(errors) / Math.max(1e-9, median(gaps)));
   }
 
   private static double bestMinusSecond(List<double[]> pairs) {
