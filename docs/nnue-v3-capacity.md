@@ -307,8 +307,8 @@ Fitter knobs (`python/v3/fit_capacity.py --help`):
 | flag | default | what it does |
 |---|---|---|
 | `--lambdas` | `0 1 10 100 1000 10000 100000` | ridge penalty sweep. **Load-bearing, not cosmetic**: each cell's 8 state columns sum to the intercept, so the design is rank-deficient 144 times over and λ picks a point on that degenerate direction. Too low → the fit chases noise; too high → everything shrinks to the corpus mean. Best held-out was λ = 100. |
-| `--top-n` | `500` | fit only the top-N features by discrimination. **Clamps** to however many cleared the support floor (332 on the current corpus), so an over-large N is not an error. Costs ~0.002 R² vs the full 1152. |
-| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. An empty train or holdout side is a hard error, not a silent one-game fallback. |
+| `--top-n` | `500` | fit only the top-N features by discrimination. **Clamps** to however many cleared the support floor (332 on the current corpus), so an over-large N is not an error. Must be positive (it is a slice bound — a negative N would silently take the *worst* features). Costs ~0.002 R² vs the full 1152. |
+| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. Must be in (0, 1), and an empty train or holdout side is a hard error, not a silent one-game fallback. An empty positions file is likewise a named error, not a numpy traceback. |
 | `--seed` | `0` | which games land in the holdout. Worth ±0.02 R² at 89 holdout games (0.93–0.98 over seeds 0–5) — quote a range, not a decimal. |
 | `--stats` | `nnue_v3_feature_stats.json` | where the discrimination ranking and support floor come from. Must be mined from the same DB as the JSONL. |
 | `--out` | `nnue_v3_weights.json` | the sweep's best-held-out (λ, feature set), **refit on all positions**. `--out ''` skips writing and leaves the sweep table as pure diagnostics. |

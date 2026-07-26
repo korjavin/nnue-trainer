@@ -174,7 +174,19 @@ def main(argv=None):
     p.add_argument("--out", default="nnue_v3_weights.json", help="'' to skip writing weights")
     args = p.parse_args(argv)
 
+    # Negative values are the dangerous typo here: both are used as slice bounds, so
+    # `--top-n -5` silently drops the WORST 5 features and `--holdout-frac -0.5` silently
+    # holds out the complement -- neither errors, and meta then records a split that never ran.
+    if not 0.0 < args.holdout_frac < 1.0:
+        raise SystemExit("--holdout-frac must be in (0, 1), got %g" % args.holdout_frac)
+    if args.top_n <= 0:
+        raise SystemExit("--top-n must be positive, got %d" % args.top_n)
+
     game_ids, y, active = load_positions(args.positions)
+    if len(y) == 0:
+        raise SystemExit(
+            "no positions in %s -- did V3FeatureMiner run with --emit-positions?" % args.positions
+        )
     train, holdout = split_by_game(game_ids, args.holdout_frac, args.seed)
     if not holdout.any() or not train.any():
         raise SystemExit(

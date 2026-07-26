@@ -28,7 +28,12 @@ jobs:
 
     # The ridge fitter is the only non-trivial math in the v3 capacity bead, and it also
     # validates the committed nnue_v3_weights.json artifact.
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Test the v3 capacity fitter
       run: |
-        pip install --quiet numpy
-        python3 -m unittest discover -s python/v3 -p "*_test.py"
+        python -m pip install --quiet 'numpy<3'
+        python -m unittest discover -s python/v3 -p "*_test.py"

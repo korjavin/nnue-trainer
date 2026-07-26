@@ -255,6 +255,21 @@ class MainTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main([positions, "--stats", stats, "--out", ""])
 
+    def test_out_of_range_knobs_are_rejected(self):
+        # Both are slice bounds, so a negative one silently inverts the selection.
+        with tempfile.TemporaryDirectory() as d:
+            positions, stats, _, _, _, _ = self._corpus(d, n_games=10)
+            for bad in (["--holdout-frac", "-0.5"], ["--holdout-frac", "1.0"], ["--top-n", "-5"]):
+                with self.assertRaises(SystemExit):
+                    main([positions, "--stats", stats, "--out", ""] + bad)
+
+    def test_empty_positions_file_is_an_error_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            positions = os.path.join(d, "empty.jsonl")
+            open(positions, "w").close()
+            with self.assertRaises(SystemExit):
+                main([positions, "--out", ""])
+
 
 if __name__ == "__main__":
     unittest.main()
