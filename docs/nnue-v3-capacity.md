@@ -180,7 +180,7 @@ Regenerate:
 ```
 ./mvnw -q compile exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3FeatureMiner \
   -Dexec.classpathScope=runtime -Dexec.args="--emit-positions /tmp/nnue_v3_positions.jsonl"
-python3 -m python.v3.fit_capacity /tmp/nnue_v3_positions.jsonl   # -> nnue_v3_weights.json
+python3 -m python.v3.fit_capacity /tmp/nnue_v3_positions.jsonl --out nnue_v3_weights.json
 ```
 
 ### The λ sweep, top-332 vs full-1152
