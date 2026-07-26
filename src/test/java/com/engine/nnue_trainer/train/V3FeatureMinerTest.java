@@ -284,9 +284,22 @@ public class V3FeatureMinerTest {
         Files.readString(plain), Files.readString(withRows), "the flag must not move aggregates");
 
     List<String> rows = Files.readAllLines(jsonl);
-    long positions =
-        new ObjectMapper().readTree(plain.toFile()).path("meta").path("positions").asLong();
+    JsonNode meta = new ObjectMapper().readTree(plain.toFile()).path("meta");
+    long positions = meta.path("positions").asLong();
     assertEquals(positions, rows.size(), "one row per accumulated position");
+    // The eval column is the regression target of the whole capacity fit, and nothing else here
+    // reads it: a sign flip or a different movesLeft/tempo frame than the one stats.add saw would
+    // leave every other assertion green and produce an inverted warm start. Tie it to the
+    // aggregate's own baseline sum, which is computed from the same evals.
+    long evalSum = 0;
+    for (String r : rows) {
+      evalSum += new ObjectMapper().readTree(r).path("eval").asLong();
+    }
+    assertEquals(
+        meta.path("baseline_mean_eval").asDouble() * positions,
+        evalSum,
+        1e-6,
+        "emitted evals must be the evals the aggregate accumulated");
     // Both games are identical, so plies run 0..2 twice, once per game_id. The uuids must survive
     // verbatim: the ridge fit splits on them, so two games sharing an id would be one game to it.
     JsonNode last = new ObjectMapper().readTree(rows.get(rows.size() - 1));

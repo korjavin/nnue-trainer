@@ -201,11 +201,13 @@ class WeightsJsonTest(unittest.TestCase):
     def test_meta_records_what_the_split_needs_to_be_reproduced(self):
         meta = self._fit()["meta"]
         self.assertEqual(meta["holdout_frac"], 0.2)
-        self.assertEqual(meta["games_total"], 10)
+        self.assertEqual(meta["games_used"], 10)
         self.assertEqual(meta["positions_total"], 80)
 
-    @unittest.skipUnless(os.path.exists(COMMITTED_WEIGHTS), "no committed weights artifact")
     def test_committed_artifact_indices_are_in_range(self):
+        # Not skipUnless: the artifact is committed, so its absence IS the failure. A skip here
+        # meant a deleted/renamed/moved weights file left CI green on the one step that checks it.
+        self.assertTrue(os.path.exists(COMMITTED_WEIGHTS), COMMITTED_WEIGHTS)
         doc = json.load(open(COMMITTED_WEIGHTS))
         keys = [int(k) for k in doc["weights"]]
         self.assertTrue(all(0 <= k < N_FEATURES for k in keys))

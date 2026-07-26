@@ -99,6 +99,14 @@ public final class GamesDbReplay {
           for (int p = 1; p <= 2; p++) {
             neutralUsed[p - 1] = state.neutralUsed(p);
           }
+          if (state.gameOver()) {
+            // Stop snapshotting once a base falls. A recorded turn AFTER game over is rejected by
+            // applyTurn only if it carries moves — Go's omitempty drops an empty slice, so a
+            // {"player":N} turn with no moves would otherwise add a snapshot of a decided board,
+            // and HandTunedEval scores that ±MATE_SCORE/2 (5e8) against a corpus that spans ±3e4.
+            // One such row silently dominates the least-squares fit and every mean_eval.
+            break;
+          }
         }
       }
       return new Replay(snaps, null);

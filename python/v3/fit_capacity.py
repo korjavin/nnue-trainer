@@ -146,7 +146,11 @@ def weights_json(fit, feature_ids, game_ids, train, holdout, seed, holdout_frac)
             "split_seed": seed,
             "holdout_frac": holdout_frac,
             "fit_on": "all",  # weights use every game; the metrics below do not
-            "games_total": len(np.unique(game_ids)),
+            # games_USED, not games_total: nnue_v3_feature_stats.json counts every row in the
+            # games table as games_total (502) and the replayable subset as games_used (446).
+            # The positions file only ever contains the latter, so it must not claim the former's
+            # name -- the obvious provenance cross-check between the two artifacts reads this key.
+            "games_used": len(np.unique(game_ids)),
             "positions_total": len(game_ids),
             "games_train": len(np.unique(game_ids[train])),
             "games_holdout": len(np.unique(game_ids[holdout])),
@@ -171,7 +175,10 @@ def main(argv=None):
     p.add_argument("--holdout-frac", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--lambdas", type=float, nargs="+", default=list(DEFAULT_LAMBDAS))
-    p.add_argument("--out", default="nnue_v3_weights.json", help="'' to skip writing weights")
+    # Defaults to NOT writing: the documented methodology is a lambda/seed sweep, and a default of
+    # nnue_v3_weights.json would let any exploratory `--seed 3` run silently replace the committed
+    # warm start that aov/1uz initialize from. Writing it is an explicit `--out`.
+    p.add_argument("--out", default="", help="path to write weights to; empty = sweep only")
     args = p.parse_args(argv)
 
     # Negative values are the dangerous typo here: both are used as slice bounds, so

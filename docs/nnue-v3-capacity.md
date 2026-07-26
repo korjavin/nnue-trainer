@@ -252,6 +252,13 @@ That is exactly why:
 ### `nnue_v3_weights.json`
 
 The warm start for `nnue-trainer-aov` (engine leaf) and `nnue-trainer-1uz` (net initialization).
+Caveat on the number itself: λ and the feature set are picked by maximising `r2_holdout` over the
+14 sweep candidates, so the reported 0.976 is a selection-optimistic estimate, not a clean
+out-of-sample one (that is why it sits *above* `r2_train`). The seed sweep bounds the optimism —
+0.93–0.98 across seeds 0–5, and λ = 100 wins 5 of 6 — so the ">0.85 = enough capacity" verdict
+survives it comfortably. Quote the range, not the decimal. A three-way train/validate/holdout split
+would give an unbiased number if a later bead needs one.
+
 The sweep picks (λ, feature set) on the holdout — currently λ = 100, full 1152 features — and the
 fitter then **refits that model on every position** before writing the file (`"fit_on": "all"`). The
 holdout's job is to measure and to choose λ; withholding a fifth of a 446-game corpus from the
@@ -262,7 +269,7 @@ there is no held-out number for the shipped weights by construction.
 ```
 {"meta": {"lambda": 100.0, "top_n": 1152, "n_features_total": 1152, "fit_on": "all",
           "split_seed": 0, "holdout_frac": 0.2,
-          "games_total": 446, "games_train": 357, "games_holdout": 89,
+          "games_used": 446, "games_train": 357, "games_holdout": 89,
           "positions_total": 6589, "positions_train": 5300, "positions_holdout": 1289,
           "r2_holdout": 0.97564, "r2_train": 0.96339, "corr_holdout": 0.98790,
           "mae_holdout": 1229.82, "bias": 9912.07},
@@ -270,7 +277,10 @@ there is no held-out number for the shipped weights by construction.
 ```
 
 `eval_v3(board) = bias + Σ_{f active} weights[f]` over the 144 active indices, STM-relative, same
-units as the hand-tuned static eval. Weights range [-5099, +3954], mean |w| = 320. Note the bias:
+units as the hand-tuned static eval. **`weights` holds one key per *selected* feature, not per
+feature** — `meta.top_n` says how many, `meta.n_features_total` how many exist. The full-1152 set
+won here so the current file is dense, but a top-N winner writes only those keys, so a consumer
+must read a missing index as `0.0` (which is exactly its fitted contribution), never as an error. Weights range [-5099, +3954], mean |w| = 320. Note the bias:
 +9912 against a mean label of -4255, because the 144 EMPTY-state weights sum to -12277 — the
 intercept and the per-cell weights are only identifiable together (the dummy-variable degeneracy),
 so a consumer must apply bias and weights as a pair; neither is meaningful alone.
@@ -293,8 +303,10 @@ java -cp "target/classes:$(cat target/classpath.txt)" \
   com.engine.nnue_trainer.train.V3FeatureMiner /home/iv/games.db nnue_v3_feature_stats.json \
   --emit-positions /tmp/nnue_v3_positions.jsonl
 
-# 2. fit. Sweeps lambda, fits both top-N and full-1152, writes nnue_v3_weights.json.
-python3 python/v3/fit_capacity.py /tmp/nnue_v3_positions.jsonl
+# 2. fit. Sweeps lambda, fits both top-N and full-1152. --out is required to write the artifact:
+#    without it the run is a pure diagnostic, so a --seed/--lambdas sweep cannot clobber the
+#    committed warm start.
+python3 python/v3/fit_capacity.py /tmp/nnue_v3_positions.jsonl --out nnue_v3_weights.json
 ```
 
 One JSONL row per replayed position: `{"game_id": "<uuid>", "ply": P, "eval": E, "active": [144
@@ -311,7 +323,7 @@ Fitter knobs (`python/v3/fit_capacity.py --help`):
 | `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. Must be in (0, 1), and an empty train or holdout side is a hard error, not a silent one-game fallback. An empty positions file is likewise a named error, not a numpy traceback. |
 | `--seed` | `0` | which games land in the holdout. Worth ±0.02 R² at 89 holdout games (0.93–0.98 over seeds 0–5) — quote a range, not a decimal. |
 | `--stats` | `nnue_v3_feature_stats.json` | where the discrimination ranking and support floor come from. Must be mined from the same DB as the JSONL. |
-| `--out` | `nnue_v3_weights.json` | the sweep's best-held-out (λ, feature set), **refit on all positions**. `--out ''` skips writing and leaves the sweep table as pure diagnostics. |
+| `--out` | *(empty — writes nothing)* | where to write the sweep's best-held-out (λ, feature set), **refit on all positions**. Opt-in on purpose: the documented methodology is a λ/seed sweep, and a default of `nnue_v3_weights.json` would let any exploratory run silently replace the committed warm start. |
 
 Tests: `python3 -m unittest discover -s python/v3 -p "*_test.py"` (fitter) and `./mvnw test`
 (miner, stats-artifact invariants, HTML splice, eval sign convention). Run `./mvnw spotless:apply`
