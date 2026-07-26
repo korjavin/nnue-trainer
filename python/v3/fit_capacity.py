@@ -39,21 +39,36 @@ def load_positions(path):
             game_ids.append(row["game_id"])
             evals.append(row["eval"])
             active.append(row["active"])
-    return (
-        np.array(game_ids),
-        np.array(evals, dtype=np.float64),
-        np.array(active, dtype=np.int32),
-    )
+    idx = np.array(active, dtype=np.int32)
+    # Range-check HERE, once, for every caller: `design` indexes col_of by these, and numpy reads a
+    # NEGATIVE index from the end -- feature -1 would silently alias feature 1151 and bind a weight
+    # to the wrong cell. Only an out-of-range POSITIVE index raises on its own.
+    if idx.size and (idx.min() < 0 or idx.max() >= N_FEATURES):
+        raise SystemExit(
+            "feature index out of range in %s: [%d, %d] not within [0, %d)"
+            % (path, idx.min(), idx.max(), N_FEATURES)
+        )
+    return np.array(game_ids), np.array(evals, dtype=np.float64), idx
 
 
-def ranked_features(stats_path, top_n=None):
+def ranked_features(stats_path, top_n=None, n_positions=None):
     """Feature ids above the support floor, best discrimination first.
 
     Clamps to however many features actually cleared the floor -- top_n larger
     than the ranked set is not an error, it just means "all of them".
+
+    n_positions cross-checks provenance: the ranking is only meaningful for the corpus it was
+    mined from, so re-mining the JSONL without re-mining the stats would otherwise silently
+    select the wrong top-N set. Both artifacts already count their positions.
     """
     with open(stats_path) as f:
         stats = json.load(f)
+    mined = stats.get("meta", {}).get("positions")
+    if n_positions is not None and mined is not None and mined != n_positions:
+        raise SystemExit(
+            "%s was mined from %d positions but the JSONL has %d -- re-mine both from the same DB"
+            % (stats_path, mined, n_positions)
+        )
     ranked = sorted((f for f in stats["features"] if f["rank"] >= 0), key=lambda f: f["rank"])
     if top_n is not None:
         ranked = ranked[:top_n]
@@ -118,8 +133,12 @@ def evaluate(active, y, feature_ids, train, holdout, lam):
         "n_features": len(feature_ids),
         "r2_holdout": r2(y[holdout], pred[holdout]),
         "r2_train": r2(y[train], pred[train]),
+        # NaN, not 1.0: a one-position holdout has no correlation to report, and this value is
+        # written into nnue_v3_weights.json's meta and quoted by the report.
         "corr_holdout": (
-            float(np.corrcoef(y[holdout], pred[holdout])[0, 1]) if len(y[holdout]) > 1 else 1.0
+            float(np.corrcoef(y[holdout], pred[holdout])[0, 1])
+            if len(y[holdout]) > 1
+            else float("nan")
         ),
         "mae_holdout": float(np.mean(np.abs(resid))),
         "resid_p10": float(np.percentile(resid, 10)),
@@ -188,6 +207,10 @@ def main(argv=None):
         raise SystemExit("--holdout-frac must be in (0, 1), got %g" % args.holdout_frac)
     if args.top_n <= 0:
         raise SystemExit("--top-n must be positive, got %d" % args.top_n)
+    # A negative lambda SUBTRACTS from the diagonal of an already 144-fold rank-deficient XtX --
+    # lstsq still returns something, just an arbitrary point on the degenerate direction.
+    if any(lam < 0.0 for lam in args.lambdas):
+        raise SystemExit("--lambdas must be non-negative, got %s" % args.lambdas)
 
     game_ids, y, active = load_positions(args.positions)
     if len(y) == 0:
@@ -196,12 +219,22 @@ def main(argv=None):
         )
     train, holdout = split_by_game(game_ids, args.holdout_frac, args.seed)
     if not holdout.any() or not train.any():
+        # Name the real cause: the split is on WHOLE games and rounds, so the failure is
+        # `round(frac * games) == 0` (or `== games`), which a 2-game corpus hits at the default
+        # 0.2. Deliberately not a silent one-game fallback -- see the --holdout-frac row in
+        # docs/nnue-v3-capacity.md.
         raise SystemExit(
-            "empty split: %d train / %d holdout positions over %d games -- "
-            "--holdout-frac %g needs a corpus with at least 2 games"
-            % (train.sum(), holdout.sum(), len(np.unique(game_ids)), args.holdout_frac)
+            "empty split: %d train / %d holdout positions -- "
+            "--holdout-frac %g rounds to %d of %d whole games"
+            % (
+                train.sum(),
+                holdout.sum(),
+                args.holdout_frac,
+                int(round(args.holdout_frac * len(np.unique(game_ids)))),
+                len(np.unique(game_ids)),
+            )
         )
-    top = ranked_features(args.stats, args.top_n)
+    top = ranked_features(args.stats, args.top_n, len(y))
     full = np.arange(N_FEATURES, dtype=np.int32)
     print(
         f"positions {len(y)} ({int(train.sum())} train / {int(holdout.sum())} holdout), "
@@ -223,7 +256,11 @@ def main(argv=None):
                 f"{m['resid_p10']:>9.1f} {m['resid_p90']:>9.1f} "
                 f"{m['resid_abs_p99']:>9.1f} {m['resid_abs_max']:>9.1f}"
             )
-            if best is None or m["r2_holdout"] > best[0]["r2_holdout"]:
+            # isfinite before the compare: NaN loses every `>` test, so seeding `best` with a
+            # degenerate first candidate would pin it there and ship it as the winner.
+            if np.isfinite(m["r2_holdout"]) and (
+                best is None or m["r2_holdout"] > best[0]["r2_holdout"]
+            ):
                 best = (m, ids)
     if args.out and best is not None:
         # The holdout's job is to MEASURE and to pick lambda; the shipped warm start then

@@ -113,6 +113,12 @@ class SplitByGameTest(unittest.TestCase):
         self.assertEqual(len(np.unique(ids[holdout])), 1)
         self.assertFalse(set(ids[train].tolist()) & set(ids[holdout].tolist()))
 
+    def test_a_frac_that_rounds_to_zero_games_holds_out_nothing(self):
+        # No silent one-game fallback: round(0.2 * 2) == 0, and main() turns that into a named
+        # error rather than quietly reshaping the split the caller asked for.
+        _, holdout = split_by_game(np.repeat([0, 1], 4), 0.2, seed=0)
+        self.assertFalse(holdout.any())
+
     def test_single_game_corpus_keeps_everything_in_train(self):
         train, holdout = split_by_game(np.zeros(5, dtype=np.int64), 0.2, seed=0)
         self.assertTrue(np.all(train))
@@ -170,6 +176,16 @@ class LoadPositionsTest(unittest.TestCase):
             np.testing.assert_array_equal(y, [-12.0, 30.0])
             np.testing.assert_array_equal(active, [[1, 2], [3, 4]])
 
+    def test_negative_feature_index_is_rejected(self):
+        # numpy would read -1 as feature 1151 and bind the weight to the wrong cell; only an
+        # out-of-range POSITIVE index raises on its own.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p.jsonl")
+            with open(path, "w") as f:
+                f.write(json.dumps({"game_id": 1, "ply": 0, "eval": 0, "active": [0, -1]}) + "\n")
+            with self.assertRaises(SystemExit):
+                load_positions(path)
+
 
 class WeightsJsonTest(unittest.TestCase):
     def _fit(self):
@@ -203,6 +219,27 @@ class WeightsJsonTest(unittest.TestCase):
         self.assertEqual(meta["holdout_frac"], 0.2)
         self.assertEqual(meta["games_used"], 10)
         self.assertEqual(meta["positions_total"], 80)
+
+    def test_weight_keys_are_global_feature_ids_not_column_positions(self):
+        # Every other test here uses arange ids, under which "global id" and "column position" are
+        # indistinguishable -- so only a NON-CONTIGUOUS id set can catch a regression to positional
+        # keys, which would bind every weight of a top-N artifact to the wrong cell, silently.
+        ids = np.array([1147, 2, 800], dtype=np.int32)
+        active = np.array([[1147, 2], [800, 2]], dtype=np.int32)
+        y = np.array([10.0, -10.0, 5.0, -5.0])
+        game_ids = np.array([0, 0, 1, 1])
+        active = np.vstack([active, active])
+        train = np.array([True, True, False, False])
+        doc = weights_json(
+            evaluate(active, y, ids, train, ~train, lam=1.0),
+            ids,
+            game_ids,
+            train,
+            ~train,
+            0,
+            0.5,
+        )
+        self.assertEqual(sorted(int(k) for k in doc["weights"]), [2, 800, 1147])
 
     def test_committed_artifact_indices_are_in_range(self):
         # Not skipUnless: the artifact is committed, so its absence IS the failure. A skip here
@@ -261,9 +298,27 @@ class MainTest(unittest.TestCase):
         # Both are slice bounds, so a negative one silently inverts the selection.
         with tempfile.TemporaryDirectory() as d:
             positions, stats, _, _, _, _ = self._corpus(d, n_games=10)
-            for bad in (["--holdout-frac", "-0.5"], ["--holdout-frac", "1.0"], ["--top-n", "-5"]):
+            bads = (
+                ["--holdout-frac", "-0.5"],
+                ["--holdout-frac", "1.0"],
+                ["--top-n", "-5"],
+                # A negative lambda SUBTRACTS from the diagonal of a rank-deficient XtX.
+                ["--lambdas", "-1.0"],
+            )
+            for bad in bads:
                 with self.assertRaises(SystemExit):
                     main([positions, "--stats", stats, "--out", ""] + bad)
+
+    def test_stats_mined_from_a_different_corpus_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            positions, stats, _, _, _, _ = self._corpus(d, n_games=10)
+            with open(stats) as f:
+                doc = json.load(f)
+            doc["meta"] = {"positions": 999}
+            with open(stats, "w") as f:
+                json.dump(doc, f)
+            with self.assertRaises(SystemExit):
+                main([positions, "--stats", stats, "--out", ""])
 
     def test_empty_positions_file_is_an_error_not_a_crash(self):
         with tempfile.TemporaryDirectory() as d:

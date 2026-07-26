@@ -286,9 +286,9 @@ intercept and the per-cell weights are only identifiable together (the dummy-var
 so a consumer must apply bias and weights as a pair; neither is meaningful alone.
 
 Sanity check on the start position: the model scores it -266 where the hand-tuned eval scores +36 —
-a ~300 miss on a label that spans ±30000. (The train-only fit missed it by ~2400, because seed 0's
-holdout took 89 games' worth of opening positions out of the fit; the refit on all games is why the
-shipped artifact does better here.)
+a ~300 miss on a label that spans ±30000. (The train-only fit at the same λ scores it -316, so
+dropping seed 0's 89 holdout games moves this position by ~50, not by an order of magnitude: the
+miss is the degenerate-direction offset, not a shortage of opening positions.)
 
 ## Regenerating the capacity number
 
@@ -320,7 +320,7 @@ Fitter knobs (`python/v3/fit_capacity.py --help`):
 |---|---|---|
 | `--lambdas` | `0 1 10 100 1000 10000 100000` | ridge penalty sweep. **Load-bearing, not cosmetic**: each cell's 8 state columns sum to the intercept, so the design is rank-deficient 144 times over and λ picks a point on that degenerate direction. Too low → the fit chases noise; too high → everything shrinks to the corpus mean. Best held-out was λ = 100. |
 | `--top-n` | `500` | fit only the top-N features by discrimination. **Clamps** to however many cleared the support floor (332 on the current corpus), so an over-large N is not an error. Must be positive (it is a slice bound — a negative N would silently take the *worst* features). Costs ~0.002 R² vs the full 1152. |
-| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. Must be in (0, 1), and an empty train or holdout side is a hard error, not a silent one-game fallback. An empty positions file is likewise a named error, not a numpy traceback. |
+| `--holdout-frac` | `0.2` | fraction of **whole games** held out. Never split by position — positions inside one game share nearly all features and leak. Must be in (0, 1); the fraction is *rounded to whole games*, so on a tiny corpus it can round to 0 held out — that is a hard error naming the rounding, not a silent one-game fallback. An empty positions file is likewise a named error, not a numpy traceback. |
 | `--seed` | `0` | which games land in the holdout. Worth ±0.02 R² at 89 holdout games (0.93–0.98 over seeds 0–5) — quote a range, not a decimal. |
 | `--stats` | `nnue_v3_feature_stats.json` | where the discrimination ranking and support floor come from. Must be mined from the same DB as the JSONL. |
 | `--out` | *(empty — writes nothing)* | where to write the sweep's best-held-out (λ, feature set), **refit on all positions**. Opt-in on purpose: the documented methodology is a λ/seed sweep, and a default of `nnue_v3_weights.json` would let any exploratory run silently replace the committed warm start. |

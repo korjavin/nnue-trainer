@@ -74,6 +74,7 @@ public final class GamesDbReplay {
       Board board = initialBoard(rows, cols);
       boolean[] neutralUsed = new boolean[2];
       List<Snapshot> snaps = new ArrayList<>();
+      boolean gameOver = false;
 
       for (JsonNode turn : turns) {
         JsonNode playerNode = field(turn, "player");
@@ -85,9 +86,20 @@ public final class GamesDbReplay {
           return new Replay(null, "multiplayer");
         }
 
+        JsonNode moves = field(turn, "moves");
+        if (gameOver) {
+          // Turns recorded AFTER a base fell. An EMPTY one is just Go's omitempty tail and is
+          // skipped; one carrying moves is a turn that cannot exist under the rules, and stays a
+          // rejection -- that skip count is the signal docs/nnue-v3-gate.md asks the reader to
+          // trust when the rules port regresses.
+          if (moves != null && moves.isArray() && moves.size() > 0) {
+            return new Replay(null, "illegal_move");
+          }
+          continue;
+        }
+
         snaps.add(new Snapshot(board, player, neutralUsed.clone()));
 
-        JsonNode moves = field(turn, "moves");
         if (moves != null && moves.isArray()) {
           GoState state = applyTurn(board, player, moves, neutralUsed);
           if (state == null) {
@@ -99,14 +111,12 @@ public final class GamesDbReplay {
           for (int p = 1; p <= 2; p++) {
             neutralUsed[p - 1] = state.neutralUsed(p);
           }
-          if (state.gameOver()) {
-            // Stop snapshotting once a base falls. A recorded turn AFTER game over is rejected by
-            // applyTurn only if it carries moves — Go's omitempty drops an empty slice, so a
-            // {"player":N} turn with no moves would otherwise add a snapshot of a decided board,
-            // and HandTunedEval scores that ±MATE_SCORE/2 (5e8) against a corpus that spans ±3e4.
-            // One such row silently dominates the least-squares fit and every mean_eval.
-            break;
-          }
+          // Stop snapshotting once a base falls: a snapshot of a decided board is scored
+          // ±MATE_SCORE/2 (5e8) by HandTunedEval against a corpus that spans ±3e4, and one such
+          // row silently dominates the least-squares fit and every mean_eval. Go's omitempty drops
+          // an empty move slice, so a trailing {"player":N} turn reaches here as a no-op turn that
+          // applyTurn never sees and therefore never rejects.
+          gameOver = state.gameOver();
         }
       }
       return new Replay(snaps, null);

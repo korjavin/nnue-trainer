@@ -128,6 +128,46 @@ public class GamesDbReplayTest {
     assertEquals(CellKind.NORMAL, last.getCell(0, 2).kind);
   }
 
+  /**
+   * A 1x4 board — p1 base (0,0), p2 base (0,3), two cells between them. p1 takes both in one turn,
+   * which fills the board: p1's only neighbour is now p2's BASE, which is neither empty nor
+   * capturable, so p1 is stuck, eliminated, and the game is over two actions into a three-action
+   * turn.
+   */
+  private static JsonNode gameEndingTurnThen(String trailing) {
+    return turns(
+        "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1},"
+            + "{\"type\":\"place\",\"row\":0,\"col\":2}]}"
+            + trailing
+            + "]");
+  }
+
+  /**
+   * Snapshotting stops when a base falls. HandTunedEval scores a decided board ±MATE_SCORE/2 (5e8)
+   * against a corpus spanning ±3e4, so one such row would dominate the least-squares fit and every
+   * mean_eval. Go's omitempty drops an empty move slice, so the trailing {@code {"player":2}} turn
+   * is what the real recorder writes.
+   */
+  @Test
+  public void testStopsSnapshottingOnceABaseFalls() {
+    GamesDbReplay.Replay r = GamesDbReplay.replay(1, 4, gameEndingTurnThen(",{\"player\":2}"));
+
+    assertNull(r.skipReason);
+    assertEquals(1, r.snapshots.size(), "the decided board must not become a sample");
+  }
+
+  /** ...but a post-game-over turn that carries MOVES is still a rules violation, not a tail. */
+  @Test
+  public void testSkipMovesRecordedAfterGameOver() {
+    GamesDbReplay.Replay r =
+        GamesDbReplay.replay(
+            1,
+            4,
+            gameEndingTurnThen(",{\"player\":2,\"moves\":[{\"type\":\"attack\",\"col\":2}]}"));
+
+    assertEquals("illegal_move", r.skipReason);
+  }
+
   @Test
   public void testSkipMissingPlayer() {
     JsonNode t = turns("[{\"turn\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]}]");

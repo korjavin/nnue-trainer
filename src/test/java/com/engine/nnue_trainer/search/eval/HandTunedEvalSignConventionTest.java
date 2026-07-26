@@ -58,6 +58,29 @@ public class HandTunedEvalSignConventionTest {
     }
   }
 
+  /**
+   * The other half of the antisymmetry story, and the reason {@link
+   * com.engine.nnue_trainer.train.GamesDbReplay} stops snapshotting once a base falls: with a base
+   * captured the identity above STOPS holding, because the eliminated player is scored as a flat
+   * {@code -MATE_SCORE/2} rather than through the {@code raw(p) - raw(opponent)} difference. Those
+   * positions are 5e8-magnitude outliers against a corpus that spans ±3e4, which is exactly why the
+   * probe's "0 antisymmetry violations" only means anything over the positions the replay emits.
+   */
+  @Test
+  public void aCapturedBaseBreaksAntisymmetryAndScoresMate() {
+    Board board = startPosition();
+    // Player 2's base corner is now a player 1 cell — p2 is eliminated.
+    board.setCell(BOARD - 1, BOARD - 1, new Cell(1, CellKind.FORTIFIED));
+    board.setCell(BOARD - 2, BOARD - 2, new Cell(1, CellKind.NORMAL));
+
+    int loser = HandTunedEval.staticEval(board, 2, 1, 3, null);
+    int winner = HandTunedEval.staticEval(board, 1, 1, 3, null);
+    assertEquals(-1_000_000_000 / 2, loser, "eliminated player is scored -MATE_SCORE/2");
+    assertTrue(
+        winner != -loser,
+        "antisymmetry must NOT hold once a base falls, got " + winner + " vs " + loser);
+  }
+
   @Test
   public void symmetricStartPositionFavoursTheMover() {
     Board board = startPosition();
