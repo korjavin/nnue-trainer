@@ -214,13 +214,40 @@ public class GameLoopHandler {
   // EVAL=HANDTUNED / unset keeps the hand-tuned leaf (the GoBot clone). Mirrors SearchEngine's EVAL
   // flag detection. Configured once at class load so every static GoBot entry point picks it up.
   static {
-    if (gobotLeafEvalFor(
-            System.getProperty("SEARCH", System.getenv("SEARCH")),
-            System.getProperty("EVAL", System.getenv("EVAL")))
-        == GoBotSearcher.LeafEval.NNUE) {
+    String searchFlag = System.getProperty("SEARCH", System.getenv("SEARCH"));
+    String evalFlag = System.getProperty("EVAL", System.getenv("EVAL"));
+    if (gobotLeafEvalFor(searchFlag, evalFlag) == GoBotSearcher.LeafEval.NNUE) {
       GoBotSearcher.configureDefaultLeafEval(
           GoBotSearcher.LeafEval.NNUE, com.engine.nnue_trainer.nnue.NNUEModel.createDefault());
     }
+    String warning = unwiredEvalWarning(searchFlag, evalFlag);
+    if (warning != null) {
+      System.err.println(warning);
+    }
+  }
+
+  /**
+   * Warning text when {@code EVAL} names a leaf this handler does not wire (v2, v3, typos) while
+   * the GoBot search is active, else {@code null}. Silence there would run the hand-tuned leaf
+   * while a harness reports the results as that eval's — see {@code docs/nnue-v3-runtime.md}.
+   */
+  static String unwiredEvalWarning(String searchFlag, String evalFlag) {
+    if (evalFlag == null || evalFlag.isBlank() || "HANDTUNED".equalsIgnoreCase(evalFlag)) {
+      return null;
+    }
+    // Same default-to-GOBOT rule as gobotSearchFromEnv().
+    boolean gobot =
+        searchFlag == null || searchFlag.isBlank() || "GOBOT".equalsIgnoreCase(searchFlag);
+    // Ask the same resolver the static block uses, so "wired" can never drift from what is actually
+    // configured — notably EVAL=NNUE with SEARCH unset, which runs GoBot with a hand-tuned leaf.
+    if (!gobot || gobotLeafEvalFor(searchFlag, evalFlag) == GoBotSearcher.LeafEval.NNUE) {
+      return null;
+    }
+    return "WARNING: EVAL="
+        + evalFlag
+        + " is not wired into the GoBot leaf (only an explicit SEARCH=GOBOT with EVAL=NNUE is);"
+        + " the leaf stays hand-tuned. Use SEARCH=NEGAMAX for the SearchEngine EVAL flags, or"
+        + " configure the leaf programmatically.";
   }
 
   /** Pure flag resolution: NNUE leaf only when {@code SEARCH=GOBOT} and {@code EVAL=NNUE}. */

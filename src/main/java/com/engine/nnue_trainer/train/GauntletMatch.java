@@ -9,6 +9,7 @@ import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
+import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -90,8 +91,8 @@ public final class GauntletMatch {
 
   /**
    * Generalized match. Each side is one of: {@code null} (hand-tuned bar), an {@link NNUEModel} (v1
-   * leaf), or an {@link NNUEv2Evaluator} (v2 leaf). Same GoBot search both sides — only the leaf
-   * eval differs.
+   * leaf), an {@link NNUEv2Evaluator} (v2 leaf), or an {@link NNUEv3Evaluator} (v3 leaf). Same
+   * GoBot search both sides — only the leaf eval differs.
    */
   public static Result play(Object sideA, Object sideB, Config config) {
     // Color balance (and exact cancellation of identical nets) requires games to come in
@@ -167,6 +168,9 @@ public final class GauntletMatch {
     } else if (side instanceof NNUEv2Evaluator) {
       GoBotSearcher.configureDefaultLeafEvalV2(
           GoBotSearcher.LeafEval.NNUEV2, (NNUEv2Evaluator) side);
+    } else if (side instanceof NNUEv3Evaluator) {
+      GoBotSearcher.configureDefaultLeafEvalV3(
+          GoBotSearcher.LeafEval.NNUEV3, (NNUEv3Evaluator) side);
     } else {
       GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, (NNUEModel) side);
     }
