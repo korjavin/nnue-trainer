@@ -12,11 +12,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** Accumulation + discrimination-ranking math of the v3 feature miner. */
 public class V3FeatureMinerTest {
+
+  @TempDir Path tempDir;
 
   private static Board board12() {
     return new Board(V3FeatureMiner.BOARD, V3FeatureMiner.BOARD);
@@ -196,6 +202,82 @@ public class V3FeatureMinerTest {
           perCellSupport[i],
           "cell (" + i / V3FeatureMiner.BOARD + "," + i % V3FeatureMiner.BOARD + ") support sum");
     }
+  }
+
+  /**
+   * Row shape for the v3.1 ridge fit: exactly one feature per cell, so 144 in-range indices that
+   * never collide on a cell. A row that violates this silently makes the design matrix wrong.
+   */
+  @Test
+  public void testEmittedPositionRowShape() throws Exception {
+    Board b = board12();
+    b.setCell(3, 4, new Cell(1, CellKind.NORMAL));
+    b.setCell(5, 6, new Cell(2, CellKind.BASE));
+
+    JsonNode row =
+        new ObjectMapper()
+            .readTree(
+                V3FeatureMiner.positionRow(77L, 4, -1234, V3FeatureMiner.activeFeatures(b, 1)));
+
+    assertEquals(77L, row.path("game_id").asLong());
+    assertEquals(4, row.path("ply").asInt());
+    assertEquals(-1234, row.path("eval").asInt());
+
+    JsonNode active = row.path("active");
+    int cells = V3FeatureMiner.BOARD * V3FeatureMiner.BOARD;
+    assertEquals(cells, active.size(), "one active feature per cell");
+    boolean[] cellSeen = new boolean[cells];
+    for (JsonNode i : active) {
+      int index = i.asInt();
+      assertTrue(
+          index >= 0 && index < cells * V3FeatureMiner.STATES, "index out of range: " + index);
+      assertFalse(cellSeen[index / V3FeatureMiner.STATES], "two active states for one cell");
+      cellSeen[index / V3FeatureMiner.STATES] = true;
+    }
+
+    // The two placed stones map to the STM-normalized state of their own cell.
+    assertEquals(
+        V3FeatureMiner.idx(3, 4, PatternContract.NORMAL_SELF), active.get(3 * 12 + 4).asInt());
+    assertEquals(
+        V3FeatureMiner.idx(5, 6, PatternContract.BASE_OPPONENT), active.get(5 * 12 + 6).asInt());
+  }
+
+  /** {@code --emit-positions} is a pure addition: the aggregate artifact must not move at all. */
+  @Test
+  public void testEmitPositionsDoesNotAlterAggregateStats() throws Exception {
+    Path db = tempDir.resolve("games.db");
+    String pgn =
+        "[{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":1}]},"
+            + "{\"player\":2,\"moves\":[{\"type\":\"place\",\"row\":11,\"col\":10}]},"
+            + "{\"player\":1,\"moves\":[{\"type\":\"place\",\"row\":0,\"col\":2}]}]";
+    try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db);
+        Statement statement = connection.createStatement()) {
+      statement.execute(
+          "CREATE TABLE games (id INTEGER PRIMARY KEY, rows INTEGER, cols INTEGER, "
+              + "termination TEXT, pgn_content TEXT)");
+      for (int id = 1; id <= 2; id++) {
+        statement.execute("INSERT INTO games VALUES (" + id + ", 12, 12, 'resign', '" + pgn + "')");
+      }
+    }
+
+    Path plain = tempDir.resolve("plain.json");
+    Path withRows = tempDir.resolve("with_rows.json");
+    Path jsonl = tempDir.resolve("positions.jsonl");
+    V3FeatureMiner.main(new String[] {db.toString(), plain.toString()});
+    V3FeatureMiner.main(
+        new String[] {db.toString(), withRows.toString(), "--emit-positions", jsonl.toString()});
+
+    assertEquals(
+        Files.readString(plain), Files.readString(withRows), "the flag must not move aggregates");
+
+    List<String> rows = Files.readAllLines(jsonl);
+    long positions =
+        new ObjectMapper().readTree(plain.toFile()).path("meta").path("positions").asLong();
+    assertEquals(positions, rows.size(), "one row per accumulated position");
+    // Both games are identical, so plies run 0..2 twice, once per game_id.
+    JsonNode last = new ObjectMapper().readTree(rows.get(rows.size() - 1));
+    assertEquals(2, last.path("game_id").asInt());
+    assertEquals(2, last.path("ply").asInt());
   }
 
   @Test
