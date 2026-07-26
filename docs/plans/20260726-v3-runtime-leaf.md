@@ -116,19 +116,22 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 2: NNUEv3Evaluator — load weights, evaluate
 
-- [ ] create `src/main/java/com/engine/nnue_trainer/v3/NNUEv3Evaluator.java` with a
+- [x] create `src/main/java/com/engine/nnue_trainer/v3/NNUEv3Evaluator.java` with a
       `DEFAULT_WEIGHTS = Path.of("nnue_v3_weights.json")` constant, a static `load(Path)`, and an
       instance `evaluate(Board board, int stm)` returning the score in **hand-tuned eval units**
-- [ ] load into a flat `double[1152]` (or `float[]`) indexed by feature id, plus the `bias`; a
+      (returns `double`; the leaf rounds to its `long` frame in Task 4)
+- [x] load into a flat `double[1152]` (or `float[]`) indexed by feature id, plus the `bias`; a
       missing index means weight 0
-- [ ] **validate on load** rather than deferring to an AIOOBE mid-search (the lesson from
+- [x] **validate on load** rather than deferring to an AIOOBE mid-search (the lesson from
       `PatternDictionary.load`): reject a missing/!object `weights` or `meta`, a non-finite weight
-      or bias, and any index outside `[0, n_features_total)`
-- [ ] evaluate as `bias + Σ weight[idx]` over the accumulator's active indices — no scaling, no
+      or bias, and any index outside `[0, n_features_total)` (➕ also rejects
+      `n_features_total != 1152` — a file fitted over a different feature space would otherwise load
+      clean and evaluate nonsense — and non-integer feature-id keys)
+- [x] evaluate as `bias + Σ weight[idx]` over the accumulator's active indices — no scaling, no
       squashing, no clamping beyond what the leaf needs for mate bounds
-- [ ] write tests: a known small weights file evaluates to a hand-computed score; malformed inputs
+- [x] write tests: a known small weights file evaluates to a hand-computed score; malformed inputs
       (missing key, wrong type, NaN weight, out-of-range index) each throw on load
-- [ ] run tests - must pass before next task
+- [x] run tests - must pass before next task
 
 ### Task 3: Cross-language parity — Java must reproduce the Python fit
 
