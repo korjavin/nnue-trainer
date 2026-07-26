@@ -173,14 +173,19 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 5: Benchmark NPS against hand-tuned
 
-- [ ] measure nodes/sec of the GoBot search with `LeafEval.NNUEV3` against `HAND_TUNED` on a fixed
-      set of positions, and record the ratio in `docs/nnue-v3-runtime.md`
-- [ ] state plainly whether full recompute is fast enough for the live 60k-node budget, since that
+- [x] measure nodes/sec of the GoBot search with `LeafEval.NNUEV3` against `HAND_TUNED` on a fixed
+      set of positions, and record the ratio in `docs/nnue-v3-runtime.md` (`NNUEv3BenchmarkTest`, the
+      8 parity-fixture corpus boards at the live 60k-node budget; both leaves expand the same 300k
+      nodes so the wall-clock ratio is a straight NPS comparison: **4.9x faster than hand-tuned**,
+      278,810 vs 56,689 nps; ~1.26M single evals/s)
+- [x] state plainly whether full recompute is fast enough for the live 60k-node budget, since that
       is what decides whether incremental updates are ever needed (they are explicitly out of scope
-      here)
-- [ ] keep the benchmark off the default test path if it is slow (tag/skip it like the existing v2
-      benchmark test)
-- [ ] run tests - must pass before next task
+      here) — yes with wide margin: ~215 ms per 60k-node search vs ~1,060 ms hand-tuned; the v3 leaf
+      is *cheaper* than the eval it replaces (array reads beat flood fills), so incremental updates
+      would optimize the fastest part of the search
+- [x] keep the benchmark off the default test path if it is slow (tag/skip it like the existing v2
+      benchmark test) — `assumeTrue(NNUEV3_BENCH != null)`, skipped in the default run
+- [x] run tests - must pass before next task (`./mvnw test`: 219 run, 0 failures, 3 skipped)
 
 ### Task 6: Verify acceptance criteria
 
