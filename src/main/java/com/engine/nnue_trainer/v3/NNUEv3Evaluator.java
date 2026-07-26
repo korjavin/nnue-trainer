@@ -21,7 +21,7 @@ import java.util.Map;
  * <p>Everything is validated at load: a bad weights file must fail here, once, and not as an AIOOBE
  * or a silent NaN somewhere deep in a search.
  */
-public final class NNUEv3Evaluator {
+public final class NNUEv3Evaluator implements V3Eval {
 
   public static final Path DEFAULT_WEIGHTS = Path.of("nnue_v3_weights.json");
 
@@ -38,6 +38,7 @@ public final class NNUEv3Evaluator {
   }
 
   /** Leaf value from {@code stm}'s perspective, in hand-tuned eval units. */
+  @Override
   public double evaluate(Board board, int stm) {
     double sum = bias;
     for (int f : NNUEv3Accumulator.activeFeatures(board, stm)) {

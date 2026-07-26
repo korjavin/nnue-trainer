@@ -11,7 +11,7 @@ import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
-import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
+import com.engine.nnue_trainer.v3.V3Eval;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -89,7 +89,7 @@ public final class GoBotSearcher {
     final LeafEval mode;
     final NNUEModel model;
     final NNUEv2Evaluator v2;
-    final NNUEv3Evaluator v3;
+    final V3Eval v3;
 
     LeafConfig(LeafEval mode, NNUEModel model) {
       this(mode, model, null, null);
@@ -99,7 +99,7 @@ public final class GoBotSearcher {
       this(mode, model, v2, null);
     }
 
-    LeafConfig(LeafEval mode, NNUEModel model, NNUEv2Evaluator v2, NNUEv3Evaluator v3) {
+    LeafConfig(LeafEval mode, NNUEModel model, NNUEv2Evaluator v2, V3Eval v3) {
       this.mode = mode;
       this.model = model;
       this.v2 = v2;
@@ -118,7 +118,7 @@ public final class GoBotSearcher {
   LeafEval leafMode = LeafEval.HAND_TUNED;
   NNUEModel nnueModel;
   NNUEv2Evaluator nnueV2;
-  NNUEv3Evaluator nnueV3;
+  V3Eval nnueV3;
   long nodes;
   long evaluations;
   long nodeLimit; // 0 == unlimited
@@ -156,7 +156,7 @@ public final class GoBotSearcher {
    * As above, for the NNUE v3 leaf ({@code mode} is normally {@link LeafEval#NNUEV3}). Distinct
    * name (not an overload) for the same reason as the v2 variant.
    */
-  public static LeafConfig configureDefaultLeafEvalV3(LeafEval mode, NNUEv3Evaluator v3) {
+  public static LeafConfig configureDefaultLeafEvalV3(LeafEval mode, V3Eval v3) {
     LeafConfig prev = defaultLeaf;
     defaultLeaf = new LeafConfig(mode, null, null, v3);
     return prev;
@@ -612,7 +612,7 @@ public final class GoBotSearcher {
   // --- scoring helpers (port of terminalScore / evaluate / activeCount) ---
 
   /** v3 is 12x12-only; other sizes fall back to the hand-tuned leaf rather than throwing. */
-  private static boolean v3Usable(Board board, NNUEv3Evaluator v3) {
+  private static boolean v3Usable(Board board, V3Eval v3) {
     return v3 != null
         && board.rows == NNUEv3Accumulator.BOARD
         && board.cols == NNUEv3Accumulator.BOARD;
@@ -658,7 +658,7 @@ public final class GoBotSearcher {
     // own stones. The clean 2-player gauntlet/test bench never hits maxN, so this is fine.
     NNUEModel model = leafMode == LeafEval.NNUE ? nnueModel : null;
     NNUEv2Evaluator v2 = leafMode == LeafEval.NNUEV2 ? nnueV2 : null;
-    NNUEv3Evaluator v3 = leafMode == LeafEval.NNUEV3 && v3Usable(board, nnueV3) ? nnueV3 : null;
+    V3Eval v3 = leafMode == LeafEval.NNUEV3 && v3Usable(board, nnueV3) ? nnueV3 : null;
     for (int p = 1; p <= 4; p++) {
       if (v3 != null) {
         all[p - 1] = nnueV3Leaf(board, p, v3);
@@ -699,9 +699,9 @@ public final class GoBotSearcher {
   /**
    * NNUE v3 leaf value oriented to {@code player}. The evaluator already emits hand-tuned eval
    * units, so this only rounds to the search's {@code long} frame and clamps strictly inside {@code
-   * ±MATE_SCORE} — deliberately no scale knob (see {@link NNUEv3Evaluator}).
+   * ±MATE_SCORE} — deliberately no scale knob (see {@link V3Eval}).
    */
-  static long nnueV3Leaf(Board board, int player, NNUEv3Evaluator v3) {
+  static long nnueV3Leaf(Board board, int player, V3Eval v3) {
     long score = Math.round(v3.evaluate(board, player));
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, score));
   }

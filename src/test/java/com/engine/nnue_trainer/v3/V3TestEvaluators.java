@@ -45,4 +45,24 @@ public final class V3TestEvaluators {
     }
     return new NNUEv3Evaluator(w, 0.0);
   }
+
+  /** {@link #constant} for the net: one hidden unit biased to +1 (passes ReLU), scaled by value. */
+  public static NNUEv3NetEvaluator constantNet(double value) {
+    return new NNUEv3NetEvaluator(
+        new double[1][NNUEv3Accumulator.FEATURES], new double[] {1.0}, new double[] {value}, 0.0);
+  }
+
+  /**
+   * {@link #selfStones} for the net: one hidden unit summing the mover's NORMAL stones. The count
+   * is never negative, so ReLU is transparent and the value is exactly that count.
+   */
+  public static NNUEv3NetEvaluator selfStonesNet() {
+    double[][] w1 = new double[1][NNUEv3Accumulator.FEATURES];
+    for (int r = 0; r < NNUEv3Accumulator.BOARD; r++) {
+      for (int c = 0; c < NNUEv3Accumulator.BOARD; c++) {
+        w1[0][NNUEv3Accumulator.idx(r, c, PatternContract.NORMAL_SELF)] = 1.0;
+      }
+    }
+    return new NNUEv3NetEvaluator(w1, new double[] {0.0}, new double[] {1.0}, 0.0);
+  }
 }

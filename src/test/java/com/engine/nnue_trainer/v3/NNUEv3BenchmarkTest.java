@@ -11,18 +11,24 @@ import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Task 5: NPS of the {@code LeafEval.NNUEV3} leaf against {@code HAND_TUNED}, on the real corpus
- * boards from the parity fixture, at the live 60k-node budget.
+ * Task 5: NPS of the v3 leaves — linear {@link NNUEv3Evaluator} and hidden-layer {@link
+ * NNUEv3NetEvaluator} — against {@code HAND_TUNED}, on the real corpus boards from the parity
+ * fixture, at the live 60k-node budget.
  *
- * <p>Opt-in: set {@code NNUEV3_BENCH=1} to run (it burns ~10s of wall clock and its numbers are
+ * <p>Opt-in: set {@code NNUEV3_BENCH=1} to run (it burns ~30s of wall clock and its numbers are
  * machine-specific, so it stays off the default test path). Results are recorded in {@code
- * docs/nnue-v3-runtime.md}.
+ * docs/nnue-v3-runtime.md} and {@code docs/nnue-v3-net-runtime.md}.
+ *
+ * <p>The net's weights come from {@code NNUEV3NET_WEIGHTS} (default {@code nnue_v3_net.json}); if
+ * that file is absent the bench falls back to the committed synthetic net so the harness still
+ * works — with a loud note, because hidden size drives the cost.
  */
 public class NNUEv3BenchmarkTest {
 
@@ -37,26 +43,57 @@ public class NNUEv3BenchmarkTest {
     assumeTrue(System.getenv("NNUEV3_BENCH") != null, "set NNUEV3_BENCH=1 to run the benchmark");
 
     NNUEv3Evaluator ev = NNUEv3Evaluator.load(NNUEv3Evaluator.DEFAULT_WEIGHTS);
+    NNUEv3NetEvaluator net = loadNet();
     List<Board> boards = fixtureBoards();
 
     System.out.println("=== NNUE v3 leaf benchmark (full recompute, 144 features/eval) ===");
-    evalThroughput(ev, boards.get(0));
+    evalThroughput("v3-linear", ev, boards.get(0));
+    evalThroughput("v3-net H=" + net.hidden(), net, boards.get(0));
 
     Run hand = searchAll(boards, null);
     Run v3 = searchAll(boards, ev);
+    Run v3net = searchAll(boards, net);
 
     System.out.printf(
-        "search %d boards @ %,d-node budget — hand-tuned: %,10.0f nps (%,d nodes / %d ms) | "
-            + "v3: %,10.0f nps (%,d nodes / %d ms)%n",
-        boards.size(), NODE_BUDGET, hand.nps(), hand.nodes, hand.ms, v3.nps(), v3.nodes, v3.ms);
+        "search %d boards @ %,d-node budget%n  hand-tuned: %,10.0f nps (%,d nodes / %d ms)%n"
+            + "  v3-linear : %,10.0f nps (%,d nodes / %d ms)%n"
+            + "  v3-net    : %,10.0f nps (%,d nodes / %d ms)%n",
+        boards.size(),
+        NODE_BUDGET,
+        hand.nps(),
+        hand.nodes,
+        hand.ms,
+        v3.nps(),
+        v3.nodes,
+        v3.ms,
+        v3net.nps(),
+        v3net.nodes,
+        v3net.ms);
     System.out.printf(
-        "v3/hand-tuned NPS ratio: %.2fx — %,d-node budget takes %.0f ms with the v3 leaf%n",
-        v3.nps() / hand.nps(), NODE_BUDGET, NODE_BUDGET / v3.nps() * 1000);
+        "ratios vs hand-tuned: linear %.2fx, net %.2fx (net/linear %.2fx) — %,d nodes takes"
+            + " %.0f ms with the net leaf%n",
+        v3.nps() / hand.nps(),
+        v3net.nps() / hand.nps(),
+        v3net.nps() / v3.nps(),
+        NODE_BUDGET,
+        NODE_BUDGET / v3net.nps() * 1000);
 
-    assertTrue(v3.nodes > 0, "benchmark must actually search");
+    assertTrue(v3net.nodes > 0, "benchmark must actually search");
   }
 
-  private static void evalThroughput(NNUEv3Evaluator ev, Board b) {
+  /** Real net weights when present, else the committed synthetic stub (hidden size differs!). */
+  private static NNUEv3NetEvaluator loadNet() throws Exception {
+    Path real =
+        Path.of(V3Eval.sysval("NNUEV3NET_WEIGHTS", NNUEv3NetEvaluator.DEFAULT_WEIGHTS.toString()));
+    if (Files.exists(real)) {
+      return NNUEv3NetEvaluator.load(real);
+    }
+    Path synth = Path.of("src", "test", "resources", "v3", "net_synth_weights.json");
+    System.out.printf("NOTE: %s absent — benching the SYNTHETIC net %s instead%n", real, synth);
+    return NNUEv3NetEvaluator.load(synth);
+  }
+
+  private static void evalThroughput(String label, V3Eval ev, Board b) {
     for (int i = 0; i < 2000; i++) {
       ev.evaluate(b, 1);
     }
@@ -68,8 +105,8 @@ public class NNUEv3BenchmarkTest {
     }
     long ns = System.nanoTime() - t0;
     System.out.printf(
-        "eval/s 12x12: %,12.0f  (%.4f ms/eval)  sink=%.1f%n",
-        iters / (ns / 1e9), ns / 1e6 / iters, sink);
+        "%-14s eval/s 12x12: %,12.0f  (%.4f ms/eval)  sink=%.1f%n",
+        label, iters / (ns / 1e9), ns / 1e6 / iters, sink);
   }
 
   private record Run(long nodes, long ms) {
@@ -79,7 +116,7 @@ public class NNUEv3BenchmarkTest {
   }
 
   /** Total nodes and wall time over every board, with the v3 leaf when {@code ev != null}. */
-  private static Run searchAll(List<Board> boards, NNUEv3Evaluator ev) {
+  private static Run searchAll(List<Board> boards, V3Eval ev) {
     GoBotSearcher.LeafConfig prev =
         ev == null
             ? GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.HAND_TUNED, null)

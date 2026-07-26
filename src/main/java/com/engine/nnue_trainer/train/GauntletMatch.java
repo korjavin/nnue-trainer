@@ -9,7 +9,7 @@ import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
 import com.engine.nnue_trainer.search.gobot.GoState;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
-import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
+import com.engine.nnue_trainer.v3.V3Eval;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -91,7 +91,7 @@ public final class GauntletMatch {
 
   /**
    * Generalized match. Each side is one of: {@code null} (hand-tuned bar), an {@link NNUEModel} (v1
-   * leaf), an {@link NNUEv2Evaluator} (v2 leaf), or an {@link NNUEv3Evaluator} (v3 leaf). Same
+   * leaf), an {@link NNUEv2Evaluator} (v2 leaf), or a {@link V3Eval} (v3 leaf, linear or net). Same
    * GoBot search both sides — only the leaf eval differs.
    */
   public static Result play(Object sideA, Object sideB, Config config) {
@@ -168,9 +168,10 @@ public final class GauntletMatch {
     } else if (side instanceof NNUEv2Evaluator) {
       GoBotSearcher.configureDefaultLeafEvalV2(
           GoBotSearcher.LeafEval.NNUEV2, (NNUEv2Evaluator) side);
-    } else if (side instanceof NNUEv3Evaluator) {
-      GoBotSearcher.configureDefaultLeafEvalV3(
-          GoBotSearcher.LeafEval.NNUEV3, (NNUEv3Evaluator) side);
+    } else if (side instanceof V3Eval) {
+      // Both the linear NNUEv3Evaluator and the hidden-layer NNUEv3NetEvaluator: same leaf, same
+      // hand-tuned units.
+      GoBotSearcher.configureDefaultLeafEvalV3(GoBotSearcher.LeafEval.NNUEV3, (V3Eval) side);
     } else {
       GoBotSearcher.configureDefaultLeafEval(GoBotSearcher.LeafEval.NNUE, (NNUEModel) side);
     }
