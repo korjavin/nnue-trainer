@@ -1,0 +1,1746 @@
+{
+ "fixtures": [
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -265.8919665117446,
+   "label_eval": 36,
+   "name": "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1@0/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 0,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 2,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 3,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 4,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 5,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": 31052.29853996601,
+   "label_eval": 31641,
+   "name": "20448f2c-2b3e-4b22-b535-da66726cd7eb@823/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": 5061.112978405576,
+   "label_eval": 5384,
+   "name": "3d13cac6-e7a4-492f-a46a-f02b60b716a7@1647/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": -22645.33891322762,
+   "label_eval": -23602,
+   "name": "5ccb30d9-9979-4328-9e9a-7c523a9b399c@2471/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": -15477.375977215823,
+   "label_eval": -14969,
+   "name": "80ff4408-e172-4c48-8673-e60d9fe8b1cf@3295/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 10,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 11
+    },
+    {
+     "c": 10,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 11
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": 27288.37994137955,
+   "label_eval": 29682,
+   "name": "99e66dd2-1d46-4637-9006-3c9878dafefb@4118/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -103.28088852847941,
+   "label_eval": 36,
+   "name": "bb713176-a87c-4322-bcfc-f79f7f444db5@4941/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": 40.14882238419159,
+   "label_eval": 228,
+   "name": "da4a8bb9-6993-472c-896d-f613f22453ad@5767/stm1",
+   "stm": 1
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -4463.609294154046,
+   "label_eval": null,
+   "name": "00e60d2e-4a2d-41c6-993f-7fc8c71f35b1@0/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 0,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 2,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 3,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 4,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 5,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": -26536.72932885395,
+   "label_eval": null,
+   "name": "20448f2c-2b3e-4b22-b535-da66726cd7eb@823/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -9561.978842105862,
+   "label_eval": null,
+   "name": "3d13cac6-e7a4-492f-a46a-f02b60b716a7@1647/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": 10476.99487683296,
+   "label_eval": null,
+   "name": "5ccb30d9-9979-4328-9e9a-7c523a9b399c@2471/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 11
+    }
+   ],
+   "expected": 6906.966643027373,
+   "label_eval": null,
+   "name": "80ff4408-e172-4c48-8673-e60d9fe8b1cf@3295/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 4
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 6
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 7,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 9,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 10,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 11
+    },
+    {
+     "c": 10,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 11
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -25650.86887998644,
+   "label_eval": null,
+   "name": "99e66dd2-1d46-4637-9006-3c9878dafefb@4118/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -5629.908289751887,
+   "label_eval": null,
+   "name": "bb713176-a87c-4322-bcfc-f79f7f444db5@4941/stm2",
+   "stm": 2
+  },
+  {
+   "cells": [
+    {
+     "c": 0,
+     "kind": "BASE",
+     "owner": 1,
+     "r": 0
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 1
+    },
+    {
+     "c": 1,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 2,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 2
+    },
+    {
+     "c": 3,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 3
+    },
+    {
+     "c": 4,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 4
+    },
+    {
+     "c": 5,
+     "kind": "NORMAL",
+     "owner": 1,
+     "r": 5
+    },
+    {
+     "c": 6,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 8,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 6
+    },
+    {
+     "c": 7,
+     "kind": "FORTIFIED",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 7
+    },
+    {
+     "c": 8,
+     "kind": "FORTIFIED",
+     "owner": 1,
+     "r": 8
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 8
+    },
+    {
+     "c": 9,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 9
+    },
+    {
+     "c": 10,
+     "kind": "NORMAL",
+     "owner": 2,
+     "r": 10
+    },
+    {
+     "c": 11,
+     "kind": "BASE",
+     "owner": 2,
+     "r": 11
+    }
+   ],
+   "expected": -7899.269656335477,
+   "label_eval": null,
+   "name": "da4a8bb9-6993-472c-896d-f613f22453ad@5767/stm2",
+   "stm": 2
+  }
+ ],
+ "meta": {
+  "bias": 9912.065339375862,
+  "n_features": 1152,
+  "positions": "nnue_v3_positions.jsonl",
+  "weights": "nnue_v3_weights.json"
+ }
+}

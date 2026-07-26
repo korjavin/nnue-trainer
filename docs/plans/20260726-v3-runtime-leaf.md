@@ -135,16 +135,23 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 3: Cross-language parity — Java must reproduce the Python fit
 
-- [ ] add a generator (e.g. `python/v3/gen_v3_eval_fixture.py`) that takes a handful of real 12x12
+- [x] add a generator (e.g. `python/v3/gen_v3_eval_fixture.py`) that takes a handful of real 12x12
       boards, computes `eval_v3` with the same arithmetic the fitter uses, and writes
-      `src/test/resources/v3/eval_parity_fixture.json` (board, stm, expected score)
-- [ ] write the Java parity test asserting `NNUEv3Evaluator.evaluate` matches each fixture entry
-      within a tight float tolerance
-- [ ] prefer boards drawn from the real corpus over synthetic ones — the point is to catch a
-      perspective or index mismatch on positions the model will actually see
-- [ ] this is the test that proves the runtime reproduces the fitted model; if it disagrees, the
+      `src/test/resources/v3/eval_parity_fixture.json` (board, stm, expected score) — predictions go
+      through `fit_capacity.design(...)[:, :-1] @ w + bias`, the fitter's own line, not a re-derived sum
+- [x] write the Java parity test asserting `NNUEv3Evaluator.evaluate` matches each fixture entry
+      within a tight float tolerance (`V3EvalParityTest`, tol 1e-5 on scores up to ~3e4)
+- [x] prefer boards drawn from the real corpus over synthetic ones — the point is to catch a
+      perspective or index mismatch on positions the model will actually see (8 distinct boards
+      strided over the mined positions JSONL; the generator skips repeats so the shared opening
+      position is not sampled eight times, and asserts the board reconstruction round-trips)
+- [x] this is the test that proves the runtime reproduces the fitted model; if it disagrees, the
       index mapping or the perspective normalization is wrong and nothing downstream is meaningful
-- [ ] run tests - must pass before next task
+      (each board is asserted from BOTH stm=1 and stm=2, so a self/opponent mix-up cannot pass)
+- [x] ➕ `python/v3/gen_v3_eval_fixture_test.py`: recomputes every committed fixture score from
+      `nnue_v3_weights.json`, so a refit that leaves the fixture stale fails in CI's Python job
+      rather than as a mystery Java parity failure
+- [x] run tests - must pass before next task (`./mvnw test` BUILD SUCCESS; 37 Python tests OK)
 
 ### Task 4: Wire the GoBot leaf and the EVAL=NNUEV3 env hook
 
