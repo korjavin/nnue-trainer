@@ -38,19 +38,35 @@ public class PatternDictionary {
   public static PatternDictionary load(InputStream in) throws IOException {
     JsonNode root = new ObjectMapper().readTree(in);
 
-    Map<String, Integer> map = new HashMap<>();
-    JsonNode patterns = root.get("pattern_to_id");
-    for (Iterator<Map.Entry<String, JsonNode>> it = patterns.fields(); it.hasNext(); ) {
-      Map.Entry<String, JsonNode> e = it.next();
-      map.put(e.getKey(), e.getValue().asInt());
+    JsonNode patterns = root.path("pattern_to_id");
+    JsonNode meta = root.path("metadata");
+    if (!patterns.isObject() || !meta.isObject()) {
+      throw new IOException("dictionary needs an object pattern_to_id and metadata");
     }
 
-    JsonNode meta = root.get("metadata");
+    Map<String, Integer> map = new HashMap<>();
+    int maxId = -1;
+    for (Iterator<Map.Entry<String, JsonNode>> it = patterns.fields(); it.hasNext(); ) {
+      Map.Entry<String, JsonNode> e = it.next();
+      int id = e.getValue().asInt();
+      map.put(e.getKey(), id);
+      maxId = Math.max(maxId, id);
+    }
+
+    // Ids index straight into the weight matrix, whose length is validated against numPatterns.
+    // A metadata/map disagreement would pass construction and then throw AIOOBE mid-evaluation.
+    int numPatterns = meta.path("num_patterns").asInt(-1);
+    if (numPatterns != map.size() || maxId != numPatterns - 1) {
+      throw new IOException(
+          "dictionary metadata says num_patterns="
+              + numPatterns
+              + " but pattern_to_id holds "
+              + map.size()
+              + " entries with max id "
+              + maxId);
+    }
     return new PatternDictionary(
-        map,
-        meta.get("num_patterns").asInt(),
-        meta.get("min_count").asInt(),
-        meta.get("version").asInt());
+        map, numPatterns, meta.path("min_count").asInt(), meta.path("version").asInt());
   }
 
   /**

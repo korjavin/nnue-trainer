@@ -67,6 +67,31 @@ public class GoStateTest {
   }
 
   @Test
+  public void aDestroyedBaseNeverWinsOnTerritory() {
+    // p2's base is gone (inactive) but its cells stay on the board and outnumber p1's; p1 is alive
+    // yet stuck (walled in by fortified cells nobody can take). Base destruction stays decisive.
+    Board b = new Board(3, 3);
+    b.setCell(0, 0, new Cell(1, CellKind.BASE));
+    b.setCell(0, 1, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(1, 0, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(1, 1, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(0, 2, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(1, 2, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(2, 0, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(2, 1, new Cell(2, CellKind.FORTIFIED));
+    b.setCell(2, 2, new Cell(2, CellKind.FORTIFIED));
+    assertEquals(1, outcome(b), "an eliminated player's territory must not win the game");
+  }
+
+  @Test
+  public void boardSnapshotHelperMatchesTheInstanceRule() {
+    Board b = basesOnly(5, 5);
+    assertEquals(
+        GoState.fromBoard(b, 1, GoState.ACTIONS_PER_TURN, new boolean[2]).outcomeWinner(),
+        GoState.outcomeWinner(b, 1));
+  }
+
+  @Test
   public void destroyedBaseMakesTheSurvivorWin() {
     // p2 has no base (eliminated); p1 base intact with room to move → p1 wins.
     Board b = new Board(5, 5);

@@ -45,4 +45,25 @@ class GoBotSelfPlayTest {
         result.distinctGameRatio >= 0.0 && result.distinctGameRatio <= 1.0,
         "distinct ratio is a fraction");
   }
+
+  @Test
+  void turnCappedGamesAreLabeledByTerritoryNotDefaultedToDraw() {
+    // A game that exits on the ply cap never reaches gameOver(), so the winner used to hard-code 0
+    // and every ply of every capped game was labeled a draw. Territory decides it instead — the
+    // same rule the negamax path uses.
+    SelfPlayGenerator.Config config = gobotConfig();
+    config.labelMode = SelfPlayGenerator.LabelMode.OUTCOME; // target IS the outcome, no TD blend
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+
+    assertFalse(result.dataset.isEmpty(), "capped GoBot self-play must produce records");
+    boolean anyDecisive = false;
+    for (SelfPlayGenerator.TrainingRecord rec : result.dataset) {
+      if (rec.target != 0f) {
+        anyDecisive = true;
+        break;
+      }
+    }
+    assertTrue(anyDecisive, "turn-capped games must carry a territory outcome, not all-draw");
+  }
 }

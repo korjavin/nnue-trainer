@@ -162,6 +162,119 @@ class SelfPlayGeneratorTest {
   }
 
   @Test
+  void negamaxPathHonorsDedup() {
+    // config.dedup was only honored on the GoBot path: the default NEGAMAX path added every record
+    // and used the hash for distinctGameRatio only, so a deterministic run exported the same game
+    // numGames times.
+    // Every game opens on the same start board with the same side to move, so numGames >= 2
+    // guarantees at least one exact-duplicate position. Assertions stay WITHIN a run: the engine's
+    // transposition table persists across games, so two runs are not comparable.
+    SelfPlayGenerator.Config on = new SelfPlayGenerator.Config();
+    on.numGames = 2;
+    on.maxTurns = 4;
+    on.searchDepth = 1;
+    on.rawOutPath = "unused-but-enables-raw-collection.jsonl";
+    SelfPlayGenerator.GenerationResult deduped = SelfPlayGenerator.generate(on, null);
+
+    assertTrue(
+        deduped.dataset.size() < deduped.totalPositionsSeen,
+        "dedup must drop the repeated start position (dataset "
+            + deduped.dataset.size()
+            + " vs seen "
+            + deduped.totalPositionsSeen
+            + ")");
+    java.util.Set<String> seen = new java.util.HashSet<>();
+    for (SelfPlayGenerator.TrainingRecord rec : deduped.dataset) {
+      assertTrue(seen.add(java.util.Arrays.toString(rec.features)), "no duplicates after dedup");
+    }
+    // The raw JSONL export is the path gen_v2_corpus.sh uses, so it must honor the flag too.
+    assertTrue(
+        deduped.rawPositions.size() < deduped.totalPositionsSeen,
+        "raw corpus export must honor dedup as well");
+
+    SelfPlayGenerator.Config off = new SelfPlayGenerator.Config();
+    off.numGames = on.numGames;
+    off.maxTurns = on.maxTurns;
+    off.searchDepth = 1;
+    off.rawOutPath = on.rawOutPath;
+    off.dedup = false;
+    SelfPlayGenerator.GenerationResult raw = SelfPlayGenerator.generate(off, null);
+    assertEquals(
+        raw.totalPositionsSeen, raw.dataset.size(), "dedup=false keeps every position seen");
+    assertEquals(
+        raw.totalPositionsSeen, raw.rawPositions.size(), "dedup=false keeps every raw position");
+  }
+
+  @Test
+  void selfPlayTransitionsFollowTheCanonicalRules() {
+    // The negamax loop applied moves with SearchEngine.applyAction, which erases cells that lose
+    // base-connectivity — the real rules keep them (and FORTIFY a captured cell). Erasure is
+    // observable as a cell going back to EMPTY, which canonical play can never do.
+    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
+    config.rows = 7;
+    config.cols = 7;
+    config.numGames = 1; // ONE game: consecutive raw positions are then consecutive plies
+    config.maxTurns = 40;
+    config.seed = 3;
+    config.epsilon = 1.0; // random play: reaches captures and cut-off chains
+    config.exploreTurns = 1000;
+    config.dedup = false; // keep every snapshot: the invariant is per consecutive pair
+    config.rawOutPath = "unused-but-enables-raw-collection.jsonl";
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+
+    boolean sawFortified = false;
+    SelfPlayGenerator.RawPosition prev = null;
+    for (SelfPlayGenerator.RawPosition p : result.rawPositions) {
+      for (int r = 0; r < p.rows; r++) {
+        for (int c = 0; c < p.cols; c++) {
+          sawFortified |= "FORTIFIED".equals(p.cells[r][c].kind);
+          if (prev != null && "EMPTY".equals(p.cells[r][c].kind)) {
+            assertEquals(
+                "EMPTY",
+                prev.cells[r][c].kind,
+                "cell (" + r + "," + c + ") was emptied — the rules never erase an occupied cell");
+          }
+        }
+      }
+      prev = p;
+    }
+    assertTrue(sawFortified, "captures must FORTIFY, so FORTIFIED cells must appear in the corpus");
+  }
+
+  @Test
+  void generatedPositionsRespectThePerGameNeutralBudget() {
+    // One PlaceNeutralsAction per player per GAME (GoState.legalActions / GameLoopHandler), and it
+    // converts exactly two own cells → at most 4 NEUTRAL cells can ever exist. The generator used
+    // to re-arm the budget every turn, emitting boards with up to 18 neutrals into the raw corpus.
+    SelfPlayGenerator.Config config = new SelfPlayGenerator.Config();
+    config.rows = 7;
+    config.cols = 7;
+    config.numGames = 3;
+    config.maxTurns = 40;
+    config.seed = 42;
+    config.epsilon = 1.0; // pure random play: actually exercises the neutral actions
+    config.exploreTurns = 1000;
+    config.rawOutPath = "unused-but-enables-raw-collection.jsonl";
+
+    SelfPlayGenerator.GenerationResult result = SelfPlayGenerator.generate(config, null);
+
+    int maxNeutrals = 0;
+    for (SelfPlayGenerator.RawPosition p : result.rawPositions) {
+      int neutrals = 0;
+      for (SelfPlayGenerator.RawCell[] row : p.cells) {
+        for (SelfPlayGenerator.RawCell cell : row) {
+          if ("NEUTRAL".equals(cell.kind)) {
+            neutrals++;
+          }
+        }
+      }
+      maxNeutrals = Math.max(maxNeutrals, neutrals);
+    }
+    assertTrue(maxNeutrals <= 4, "at most 2 neutral pairs per game, saw " + maxNeutrals);
+  }
+
+  @Test
   void territoryFilledPositionIsLabeledDecisiveNotDraw() {
     // A full both-bases-alive board (nobody can move) with p1 owning the majority: the generator's
     // canonical winner (fromBoard().outcomeWinner(), same call canonicalWinner makes) must pick p1,

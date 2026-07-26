@@ -34,6 +34,26 @@ public class GoBotExplorationTest {
     return r;
   }
 
+  /**
+   * A scout fail-low score is an upper bound pinned to the alpha in force when that child was
+   * searched, and alpha rises with sibling order — softmaxing those numbers weights move ORDER, not
+   * move quality, so they must not enter the candidate set at all.
+   */
+  @Test
+  public void inexactAlternativesAreNeverSampled() {
+    GoResult r = new GoResult(new MoveAction(new Pos(0, 0)));
+    r.score = 100;
+    r.depth = 3;
+    r.searchComplete = true;
+    Action bound = new MoveAction(new Pos(1, 1));
+    r.alternatives = new ArrayList<>(List.of(new RootMove(bound, 99, false)));
+
+    GoBotExploration ex = new GoBotExploration(true, 5.0, new Random(7));
+    for (int i = 0; i < 200; i++) {
+      assertSame(r.action, ex.sampleMove(r), "bound-scored alternative must never be picked");
+    }
+  }
+
   @Test
   public void disabledReturnsArgmax() {
     GoResult r = result(100, 90, 80);
@@ -78,6 +98,52 @@ public class GoBotExplorationTest {
       }
     }
     assertTrue(pickedNonBest, "hot temperature must eventually pick an alternative");
+  }
+
+  @Test
+  public void handTunedScaleScoresStillExplore() {
+    // Real root scores from a 12x12 midgame with the challenger's DEFAULT hand-tuned leaf: an order
+    // of magnitude above the NNUE band, so a fixed NNUE_SCALE softmax returned argmax ~96% of the
+    // time and CHALLENGER_EXPLORE did nothing past the opening.
+    GoResult r = result(14214, 11978, 11978, 10057, 10057);
+    GoBotExploration ex = new GoBotExploration(true, 0.6, new Random(3));
+    int nonBest = 0;
+    for (int i = 0; i < 200; i++) {
+      if (ex.sampleMove(r) != r.action) {
+        nonBest++;
+      }
+    }
+    assertTrue(
+        nonBest >= 50, "hand-tuned-scale scores must still explore, got " + nonBest + "/200");
+  }
+
+  @Test
+  public void neverSamplesAwayAForcedWin() {
+    // Root scores carry terminal distances (±(MATE_SCORE - ply)), not just leaf estimates. Scaling
+    // the softmax by the raw best-worst band turned a mate-in-1 next to losing alternatives into a
+    // ~2e9-wide band, i.e. near-uniform sampling: the win was thrown away ~44% of the time.
+    int mate = (int) GoBotSearcher.MATE_SCORE - 1;
+    GoResult forcedWin = result(mate, -mate, -mate, -mate, -mate);
+    GoBotExploration ex = new GoBotExploration(true, 0.6, new Random(7));
+    for (int i = 0; i < 500; i++) {
+      assertSame(forcedWin.action, ex.sampleMove(forcedWin), "a proven win must always be played");
+    }
+
+    // A single mate-magnitude blunder among ordinary candidates must not widen the band either.
+    GoResult withLosingAlt = result(14214, 11978, -mate);
+    int nonBest = 0;
+    int matePicks = 0;
+    for (int i = 0; i < 500; i++) {
+      Action pick = ex.sampleMove(withLosingAlt);
+      if (pick != withLosingAlt.action) {
+        nonBest++;
+        if (pick.equals(withLosingAlt.alternatives.get(1).action)) {
+          matePicks++;
+        }
+      }
+    }
+    assertEquals(0, matePicks, "a losing-mate alternative must never be sampled");
+    assertTrue(nonBest > 0, "the ordinary alternative must still be explored");
   }
 
   @Test
