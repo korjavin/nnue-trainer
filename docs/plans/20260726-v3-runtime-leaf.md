@@ -221,10 +221,17 @@ Environment: Java 17 + Maven (`./mvnw`), Jackson, numpy available. **No new depe
 
 ### Task 7: [Final] Update documentation
 
-- [ ] write `docs/nnue-v3-runtime.md`: how to enable (`EVAL=NNUEV3`), where the weights come from,
-      the NPS result, the 12x12 restriction and the fallback behavior
-- [ ] state explicitly that v3 needs no score scale and why (fit against hand-tuned units), so the
-      v2 `NNUEV2_SCALE` precedent is not cargo-culted forward
+- [x] write `docs/nnue-v3-runtime.md`: how to enable (`EVAL=NNUEV3` / `NNUEV3_WEIGHTS` override /
+      `configureDefaultLeafEvalV3` for the GoBot leaf), where the weights come from (the `#94` ridge
+      fit, its `meta` provenance, the `load` validation rules and the fixture-regeneration command),
+      the NPS result, the 12x12 restriction and both fallback paths
+- [x] state explicitly that v3 needs no score scale and why (fit against hand-tuned units), so the
+      v2 `NNUEV2_SCALE` precedent is not cargo-culted forward — the doc names `d4a.4.1`'s WDL-mapping
+      sweep as the reason v2 needed one and says a v3 scale would mean refitting, not tuning
+- [x] ➕ documented a discovered gap rather than widening scope: `GameLoopHandler`'s static leaf hook
+      recognizes only `EVAL=NNUE` (v1), so `EVAL=NNUEV3` does *not* switch the live bot's GoBot leaf
+      (the v2 leaf has the same programmatic-only status). Wiring it there is a `d4a.6.2`-gated
+      decision, not part of this bead.
 
 ## Technical Details
 
