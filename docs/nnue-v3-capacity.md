@@ -80,3 +80,81 @@ in rows 10–11. Nonempty-cell support in rows 10–11 grew by ~58% and ~67% whi
 grew by 95%, so the ranking near the floor is sensitive to which games happen to be in the dump.
 Any conclusion drawn from a single feature's rank is fragile; conclusions drawn from the ranking's
 broad shape are not.
+
+## Task 2 — why `baseline_mean_eval` is strongly negative
+
+`baseline_mean_eval = -4255.25` (was -4603.23 at the gate). Discrimination is
+`|mean_eval_f - baseline|`, so a skew here is worth understanding before any of it is read as a
+feature property. Regenerate with:
+
+```
+./mvnw -q compile exec:java -Dexec.mainClass=com.engine.nnue_trainer.train.V3EvalBaselineProbe \
+  -Dexec.classpathScope=runtime          # default db: /home/iv/games.db, read-only, writes nothing
+```
+
+### Distribution, not just the mean
+
+| slice | n | mean | median | p10 | p90 | min | max |
+|---|---|---|---|---|---|---|---|
+| all positions | 6589 | **-4255.25** | -4847 | -28431 | 29682 | -31317 | 42424 |
+| ply 0–9 | 4396 | -5736.70 | -4847 | -22984 | 5384 | -31090 | 30535 |
+| ply 10–19 | 2023 | -1379.98 | -7116 | -29053 | 31641 | -31317 | 35968 |
+| ply 20–29 | 110 | -583.56 | -9835 | -26488 | 31536 | -29742 | 36210 |
+| ply 30–39 | 46 | +429.83 | -5225 | -24755 | 28475 | -30748 | 42424 |
+| ply 40–49 | 14 | +1203.29 | -802 | -17216 | 17555 | -18439 | 22876 |
+| stm = p1 | 3356 | -5012.26 | +36 | -28799 | 8445 | -30561 | 42424 |
+| stm = p2 | 3233 | -3469.43 | -10064 | -23602 | 29953 | -31317 | 36210 |
+
+46.0% of positions score positive, so the label is not one-sided — it is wide (±30k) and its
+*mean* sits below zero. The mean is the wrong summary for this distribution and the report quotes
+the quantiles from here on.
+
+### The three candidate causes, checked
+
+1. **Sign convention — ruled out.** Two active players make the utility `raw(p) − raw(opponent)`,
+   so it must be exactly antisymmetric in the scored player at a fixed tempo frame. Measured over
+   all 6589 positions: **0 violations** of `eval(stm) == −eval(other)`. At ply 0 (the symmetric
+   start board, all 446 games) the eval is **+36 for whoever is to move** — the mover's
+   `movesLeft × W_MOVES_LEFT_TEMPO` bonus, and the only asymmetry on an empty board. Both
+   properties are now pinned by `HandTunedEvalSignConventionTest`.
+2. **`movesLeft = 3` — not the cause, and it is the *least* negative choice.** Mean eval under the
+   other assumptions: `movesLeft=0 → -5578.50`, `1 → -5423.84`, `2 → -4839.54`, `3 → -4255.25`.
+   The fixed fresh-turn assumption moves the baseline by ~1300 and in the direction that *reduces*
+   the negativity; it cannot produce it.
+3. **A term that penalizes the side to move — there is none.** Scoring the same player but handing
+   the tempo frame to the opponent gives mean `-5471.84` against `-4255.25`. The entire mass of
+   mover-keyed terms (the tempo bonus and the `threatTempo` multiplier on the threat penalties) is
+   therefore **+1216.59 in the mover's favour**. Every eval term keyed to the side to move helps it.
+
+### What it actually is: one turn of tempo
+
+A v3 position is *the board before a turn*, scored from that turn's player — so every sampled
+position is scored from the side that has **not yet played**, immediately after the opponent spent
+up to three actions. Measured:
+
+- The mover holds **7.77 stones on average against the opponent's 9.39** (a 1.62-stone deficit); in
+  55.4% of positions it has strictly fewer.
+- The same player's score before vs after taking its turn (`−(eval[p] + eval[p+1])`) swings by
+  **+11084.84 on average**, over 6143 turn pairs. Half of one turn is ≈ 5542, and the observed
+  baseline is -4255 — i.e. the baseline is, to within game-length effects, exactly *minus half the
+  value of a turn*.
+
+**Finding, stated plainly:** the negative baseline is real and structural, and it is a property of
+the position set, not of the eval. It is the turn-parity artifact of the snapshot definition. There
+is no bug to fix, and shifting the labels would not be a fix either — the same skew would be present
+in any dataset built this way, including the one the runtime leaf will see.
+
+### What it implies for the discrimination ranking
+
+- **A constant offset does not move the ranking at all.** Discrimination is
+  `|mean_eval_f − baseline|`, and a constant `c` added to every position's eval shifts `mean_eval_f`
+  and `baseline` by the same `c`. The ranking the owner approved is invariant to the size of the
+  skew.
+- **The residual ply-dependence is the part that does leak.** The skew is not constant: it runs
+  -5737 in the opening and turns positive by ply 30. A feature that only occurs late therefore has a
+  less-negative `mean_eval` partly because of *when* it occurs, not because of *what* it is. So
+  discrimination is partly a "how late does this feature appear" signal. That is the honest reading
+  of the ranking, and it lines up with Task 0's ranking-stability finding — the features that churn
+  near the floor are exactly the rows 10–11 cells that only occur in long games.
+- Nothing here changes the ridge fit: the intercept absorbs the constant part, and the ply-linked
+  part is exactly the kind of structure the 144 active features are being asked to reproduce.
