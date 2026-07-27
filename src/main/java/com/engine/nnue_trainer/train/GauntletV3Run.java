@@ -1,7 +1,7 @@
 package com.engine.nnue_trainer.train;
 
 import com.engine.nnue_trainer.nnue.NNUEModel;
-import com.engine.nnue_trainer.v3.NNUEv3Evaluator;
+import com.engine.nnue_trainer.v3.V3Eval;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -21,7 +21,8 @@ import java.nio.file.Path;
  * the goal of a distillation; that is bead d4a.6.4 (re-fit on deep-search/outcome labels).
  *
  * <p>Run: {@code java -cp target/classes com.engine.nnue_trainer.train.GauntletV3Run [games]
- * [depthCsv] [seed] [nodes] [nodeLimit]} with {@code NNUEV3_WEIGHTS} optionally pointing elsewhere.
+ * [depthCsv] [seed] [nodes] [nodeLimit]} with {@code NNUEV3_WEIGHTS} optionally pointing elsewhere,
+ * or {@code V3EVAL=net} (+ {@code NNUEV3NET_WEIGHTS}) to gauntlet the hidden-layer net instead.
  * Defaults: 24 games, depths 3,4, seed 7. {@code MATCHUP} filters: {@code bar} (vs hand-tuned
  * only), {@code v1} (vs v1 only), {@code both} (default).
  */
@@ -38,11 +39,13 @@ public final class GauntletV3Run {
     boolean nodeMode = args.length > 3 && "nodes".equalsIgnoreCase(args[3]);
     long nodeLimit = args.length > 4 ? Long.parseLong(args[4]) : 60_000L;
 
-    Path w = Path.of(sysval("NNUEV3_WEIGHTS", NNUEv3Evaluator.DEFAULT_WEIGHTS.toString()));
-    System.out.printf("Loading v3 evaluator: weights=%s%n", w);
+    // V3EVAL=net gauntlets the hidden-layer net instead of the linear fit; same search, same
+    // opponents, same seeds, so the two runs are directly comparable.
     long t0 = System.currentTimeMillis();
-    NNUEv3Evaluator v3 = NNUEv3Evaluator.load(w);
-    System.out.printf("v3 loaded in %.2fs%n", (System.currentTimeMillis() - t0) / 1000.0);
+    V3Eval v3 = V3Eval.fromEnv();
+    System.out.printf(
+        "v3 leaf: %s loaded in %.2fs%n",
+        v3.getClass().getSimpleName(), (System.currentTimeMillis() - t0) / 1000.0);
 
     NNUEModel v1 = null;
     if (Files.exists(V1_WEIGHTS)) {

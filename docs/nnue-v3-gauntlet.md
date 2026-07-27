@@ -68,3 +68,22 @@ floor. That is exactly why 0.976 R² produces 29% play.
 
 The 5x speed headroom is an asset here: a hidden layer can be afforded and the leaf would still be
 competitive with hand-tuned on speed.
+
+## Running either model
+
+Both tools take `V3EVAL` so linear-vs-net is one flag apart and otherwise identical (same corpus,
+same seeds, same opponents, same metrics):
+
+```bash
+# linear fit (default) — nnue_v3_weights.json, override with NNUEV3_WEIGHTS
+java -cp target/classes com.engine.nnue_trainer.train.V3OrderingProbe /home/iv/games.db 500
+java -cp target/classes com.engine.nnue_trainer.train.GauntletV3Run 24 3,4 7
+
+# hidden-layer net — nnue_v3_net.json, override with NNUEV3NET_WEIGHTS
+V3EVAL=net java -cp target/classes com.engine.nnue_trainer.train.V3OrderingProbe /home/iv/games.db 500
+V3EVAL=net java -cp target/classes com.engine.nnue_trainer.train.GauntletV3Run 24 3,4 7
+```
+
+Each prints which evaluator it loaded. Per the diagnosis above, run the **ordering probe first**:
+if top-1 sibling agreement has not moved well past 41.2%, the gauntlet is not worth the wall clock.
+See `docs/nnue-v3-net-runtime.md` for the net runtime.
