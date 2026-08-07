@@ -19,11 +19,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 /**
- * In challenger mode this is a TIMER-driven challenger: on a fixed cadence, when the bot is not
- * itself in a game, it picks a random eligible online player and sends a challenge. The reactive
- * path (challenge on user-list update, 10s-throttled) is kept as an immediate first attempt, but
- * the timer is the real driver so the bot never gets stuck when updates stop or a challenge is
- * declined.
+ * In challenger mode this is a TIMER-driven challenger: on a fixed cadence (default 300s), when the
+ * bot is not itself in a game, it picks a random eligible online player and sends a challenge.
+ * User-list updates only refresh the cached player list — the timer is the sole send driver, so the
+ * bot never gets stuck when updates stop or a challenge is declined, and a busy lobby streaming
+ * users_update messages cannot make it spam challenges faster than the interval.
  */
 public class HandshakeHandler {
 
@@ -38,8 +38,6 @@ public class HandshakeHandler {
   // Written on the message worker thread, read on the scheduler thread.
   private volatile List<UsersUpdateMessage.User> onlineUsers = List.of();
   private volatile String selfId;
-
-  private long lastChallengeTime = 0;
 
   /** Production constructor: no in-game info (never in game), env-derived config. */
   public HandshakeHandler(MessageSender messageSender) {
@@ -142,18 +140,10 @@ public class HandshakeHandler {
   }
 
   private void handleUsersUpdate(UsersUpdateMessage usersUpdateMessage) {
+    // Cache only — the periodic timer is the sole challenge driver. A reactive send here (even
+    // 10s-throttled) let a chatty lobby drive challenge spam far above the intended cadence.
     List<UsersUpdateMessage.User> users = usersUpdateMessage.getUsers();
     onlineUsers = users == null ? List.of() : users;
-
-    if (!challengerMode) {
-      return;
-    }
-    long currentTime = System.currentTimeMillis();
-    if (currentTime - lastChallengeTime < 10000) {
-      return; // Reactive path throttled to at most once every 10 seconds; timer is the real driver.
-    }
-    lastChallengeTime = currentTime;
-    attemptChallenge();
   }
 
   /** The scheduled task body. */
