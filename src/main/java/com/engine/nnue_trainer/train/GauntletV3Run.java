@@ -115,7 +115,8 @@ public final class GauntletV3Run {
       cfg.fixedDepth = depth;
       cfg.nodeLimit = 0;
     }
-    String mode = timeMode ? ("time=" + limit + "ms") : nodeMode ? ("nodes=" + limit) : ("depth=" + depth);
+    String mode =
+        timeMode ? ("time=" + limit + "ms") : nodeMode ? ("nodes=" + limit) : ("depth=" + depth);
     long t = System.currentTimeMillis();
     GauntletMatch.Result r = GauntletMatch.play(a, b, cfg);
     double secs = (System.currentTimeMillis() - t) / 1000.0;

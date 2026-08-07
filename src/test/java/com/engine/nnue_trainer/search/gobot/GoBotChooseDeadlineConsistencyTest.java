@@ -65,7 +65,8 @@ public class GoBotChooseDeadlineConsistencyTest {
     long[] budgets = {0, 1, 2, 5};
     for (GoState state : states) {
       for (long budget : budgets) {
-        GoResult live = GoBotSearcher.chooseWithDeadline(state, System.currentTimeMillis() + budget);
+        GoResult live =
+            GoBotSearcher.chooseWithDeadline(state, System.currentTimeMillis() + budget);
         assertNotNull(live);
         assertNotNull(live.action, "choose returned no action at budget " + budget);
         if (live.depth == 0) {
@@ -131,7 +132,8 @@ public class GoBotChooseDeadlineConsistencyTest {
         board.setCell(
             r,
             c,
-            new Cell(cellNode.get("owner").asInt(), CellKind.valueOf(cellNode.get("kind").asText())));
+            new Cell(
+                cellNode.get("owner").asInt(), CellKind.valueOf(cellNode.get("kind").asText())));
       }
     }
     return board;

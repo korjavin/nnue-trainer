@@ -56,8 +56,7 @@ public final class NNUEv3NetEvaluator implements V3Eval {
               + w2.length);
     }
     int width = hidden > 0 ? w1[0].length : NNUEv3Accumulator.FEATURES;
-    if (width != NNUEv3Accumulator.FEATURES
-        && width != NNUEv3Accumulator.FEATURES + TEMPO_SLOTS) {
+    if (width != NNUEv3Accumulator.FEATURES && width != NNUEv3Accumulator.FEATURES + TEMPO_SLOTS) {
       throw new IllegalArgumentException(
           "v3 net: w1 rows must have "
               + NNUEv3Accumulator.FEATURES

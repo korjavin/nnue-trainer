@@ -102,7 +102,8 @@ public final class V3DeepLabelEmitter {
         }
         gamesUsed++;
         for (GamesDbReplay.Snapshot s : replay.snapshots) {
-          GoState state = GoState.fromBoard(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
+          GoState state =
+              GoState.fromBoard(s.board, s.stm, GamesDbReplay.MOVES_LEFT, s.neutralUsed);
           List<com.engine.nnue_trainer.board.Action> legal = state.legalActions();
           if (legal.size() < V3SiblingDatasetEmitter.MIN_CHILDREN) {
             continue;
@@ -143,6 +144,13 @@ public final class V3DeepLabelEmitter {
     double secs = (System.currentTimeMillis() - t0) / 1000.0;
     System.out.printf(
         "shard %d/%d: games %d, groups %d, rows %d, depth %d, %.1fs (%.1f ms/row)%n",
-        shardIdx, shardCount, gamesUsed, posId, rows, depth, secs, rows == 0 ? 0 : 1000.0 * secs / rows);
+        shardIdx,
+        shardCount,
+        gamesUsed,
+        posId,
+        rows,
+        depth,
+        secs,
+        rows == 0 ? 0 : 1000.0 * secs / rows);
   }
 }
