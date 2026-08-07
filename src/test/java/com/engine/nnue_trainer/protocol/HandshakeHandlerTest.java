@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -67,33 +66,15 @@ public class HandshakeHandlerTest {
   }
 
   @Test
-  public void testHandleUsersUpdateMessageChallengesGoBot() {
+  public void testUsersUpdateNeverSendsDirectly() {
+    // Cadence guard: user-list updates only cache the list. Even a flood of updates must not
+    // produce a single challenge — only the periodic timer tick sends (nnue-trainer-0ui spam).
     String usersUpdateJson =
         "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
-    handshakeHandler.handleMessage(usersUpdateJson);
-
-    ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-    verify(messageSender, times(1)).send(messageCaptor.capture());
-
-    String sentMessage = messageCaptor.getValue();
-    assertTrue(sentMessage.contains("\"type\":\"challenge\""));
-    assertTrue(sentMessage.contains("\"targetUserId\":\"user-1\""));
-    assertTrue(sentMessage.contains("\"rows\":12"));
-    assertTrue(sentMessage.contains("\"cols\":12"));
-  }
-
-  @Test
-  public void testHandleUsersUpdateMessageRateLimits() {
-    String usersUpdateJson =
-        "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}";
-
-    // First message should trigger challenge
-    handshakeHandler.handleMessage(usersUpdateJson);
-    verify(messageSender, times(1)).send(anyString());
-
-    // Second message immediately after should be rate limited
-    handshakeHandler.handleMessage(usersUpdateJson);
-    verify(messageSender, times(1)).send(anyString()); // Still only 1 invocation
+    for (int i = 0; i < 5; i++) {
+      handshakeHandler.handleMessage(usersUpdateJson);
+    }
+    verify(messageSender, never()).send(anyString());
   }
 
   @Test
@@ -150,32 +131,33 @@ public class HandshakeHandlerTest {
     verify(scheduler)
         .scheduleAtFixedRate(taskCaptor.capture(), anyLong(), eq(300L), eq(TimeUnit.SECONDS));
 
-    // Cache one eligible user (reactive fire happens here); reset then run the timer task.
+    // Cache one eligible user, then run the timer task: exactly one challenge per tick.
     handler.handleMessage(
         "{\"type\":\"users_update\",\"users\":[{\"userId\":\"user-1\",\"username\":\"GoBot\",\"inGame\":false}]}");
-    clearInvocations(messageSender);
 
     taskCaptor.getValue().run();
 
     ArgumentCaptor<String> msg = ArgumentCaptor.forClass(String.class);
     verify(messageSender, times(1)).send(msg.capture());
     assertTrue(msg.getValue().contains("\"targetUserId\":\"user-1\""));
+
+    // A declined/ignored challenge never wedges the loop: the next tick just challenges again.
+    taskCaptor.getValue().run();
+    verify(messageSender, times(2)).send(anyString());
   }
 
   @Test
   public void testRandomEligiblePick() {
-    AtomicBoolean inGame = new AtomicBoolean(true); // suppress reactive fire while seeding
     HandshakeHandler handler =
         new HandshakeHandler(
             messageSender,
-            inGame::get,
+            () -> false,
             mock(ScheduledExecutorService.class),
             new Random(42),
             true,
             300);
 
     handler.handleMessage(THREE_USERS);
-    inGame.set(false);
 
     // Independently seeded Random predicts the pick — no magic constant.
     List<String> ids = List.of("a", "b", "c");
@@ -230,7 +212,6 @@ public class HandshakeHandlerTest {
         "{\"type\":\"users_update\",\"users\":["
             + "{\"userId\":\"self\",\"username\":\"Me\",\"inGame\":false},"
             + "{\"userId\":\"other\",\"username\":\"Them\",\"inGame\":false}]}");
-    clearInvocations(messageSender);
     handler.challengeTick();
 
     ArgumentCaptor<String> msg = ArgumentCaptor.forClass(String.class);
