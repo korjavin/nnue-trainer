@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NNUE Trainer for the Virus Game</title>
+<style>
+  :root {
+    --bg: #fdfdfc; --fg: #1a1d21; --muted: #5c646e; --card: #f1f2f4;
+    --accent: #2563eb; --good: #15803d; --bad: #b91c1c; --border: #d8dce1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e6e8ea; --muted: #9aa3ad; --card: #1e2328;
+      --accent: #60a5fa; --good: #4ade80; --bad: #f87171; --border: #30363d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .4rem; }
+  h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
+  p, li { color: var(--fg); }
+  .sub { color: var(--muted); margin: 0 0 1.8rem; }
+  a { color: var(--accent); }
+  code {
+    background: var(--card); border-radius: 4px; padding: .1em .35em;
+    font-size: .88em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: 1.2rem 0; }
+  .card {
+    display: block; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.1rem; text-decoration: none; color: var(--fg);
+  }
+  .card:hover { border-color: var(--accent); }
+  .card strong { color: var(--accent); display: block; margin-bottom: .3rem; }
+  .card span { color: var(--muted); font-size: .92rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
+  th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .win { color: var(--good); font-weight: 600; }
+  .loss { color: var(--bad); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+  .timeline { border-left: 3px solid var(--border); padding-left: 1.2rem; margin: 1.2rem 0; }
+  .timeline h3 { margin-top: 1.2rem; }
+  .timeline p { margin: .3rem 0 1rem; color: var(--muted); }
+  footer { margin-top: 3.5rem; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--border); padding-top: 1.2rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>NNUE Trainer for the Virus Game</h1>
+  <p class="sub">A running experiment in teaching a neural evaluator to out-play a hand-written one
+  — with every success <em>and failure</em> measured and written down.</p>
+
+  <h2>The hypothesis</h2>
+  <p>The <a href="https://vs.wandergeek.org">Virus game</a> is a 12×12 territory game where each
+  turn grants three actions. Our bot plays live on the server, driven by a classic alpha-beta
+  search whose <em>leaf evaluation</em> is a hand-tuned function ported from an earlier Go bot.
+  The hypothesis of this project:</p>
+  <p style="background: var(--card); border-left: 4px solid var(--accent); padding: .8rem 1rem; border-radius: 6px;">
+  A small neural network, trained on the bot's own games, can replace the hand-tuned evaluation
+  — first <strong>matching</strong> it (distillation), then <strong>exceeding</strong> it by
+  learning from deep search results that no static function can encode.</p>
+
+  <h2>What is NNUE?</h2>
+  <p>NNUE ("efficiently updatable neural network") is the technique that made neural evaluation
+  practical inside alpha-beta search engines like Stockfish. The trick is architectural
+  discipline:</p>
+  <ul>
+    <li><strong>Sparse binary features.</strong> A position is encoded as a set of active feature
+    ids — here, one per board cell: <code>(row, col, cell-state)</code>, 144 active out of 1152
+    possible, always from the side-to-move's perspective.</li>
+    <li><strong>A shallow net.</strong> One hidden layer. The first layer is never a dense matrix
+    multiply — it's a sum of 144 weight <em>columns</em>, cheap enough to run at hundreds of
+    thousands of leaf evaluations per second inside the search.</li>
+    <li><strong>Training on search-shaped data.</strong> The evaluation's only job is to
+    <em>order the children of one position</em> so search prunes correctly. Our training loss is
+    a ranking loss over sibling moves, not just regression.</li>
+  </ul>
+
+  <h2>Automatic features — see them yourself</h2>
+  <p>Features and their weights are mined and fitted automatically from replayed real games.
+  Because every feature is an absolute board coordinate with a state, the learned model is fully
+  inspectable — you can render it and check whether it learned anything a player would
+  recognize:</p>
+  <div class="cards">
+    <a class="card" href="nnue-v3-feature-preview.html">
+      <strong>v3 feature preview →</strong>
+      <span>The current feature set: absolute (row, col, state) features ranked by
+      <em>eval-discrimination</em>, with per-feature stats and board renderings. This gate ran
+      before any model was built.</span>
+    </a>
+    <a class="card" href="games-db-features.html">
+      <strong>v2 feature autopsy →</strong>
+      <span>The visualization that killed v2: frequency-mined 5×5 local patterns turned out to be
+      trivial non-discriminating shapes. Kept as the cautionary exhibit.</span>
+    </a>
+  </div>
+
+  <h2>The story so far</h2>
+  <div class="timeline">
+    <h3>v1 — whole-board baseline</h3>
+    <p>A simple whole-board net. Weak, but it later beat v2 21–3 — the first hint that
+    <em>position-aware, board-scale</em> features matter more than clever locality.</p>
+    <h3>v2 — local 5×5 patterns (failed, instructively)</h3>
+    <p>Sparse counted 5×5 pattern features, frequency-promoted dictionary, board-size independent.
+    Lost the gauntlet <span class="loss">0–24</span> against the hand-tuned eval despite excellent
+    offline metrics. Root cause (see the autopsy above): frequency selects <em>common</em>
+    features, and common ≠ informative.</p>
+    <h3>v3 — whole-board, position-aware, eval-distilled (current)</h3>
+    <p>Fix 12×12. One feature per (cell, state). Select by eval-discrimination, never frequency.
+    First distill the hand-tuned static eval (capacity proof: held-out R² ≈ 0.93–0.98), then swap
+    labels to deep-search values to try to exceed it.</p>
+  </div>
+
+  <h2>Where v3 stands (honest numbers)</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Measurement</th><th>Result</th><th>Meaning</th></tr>
+    <tr>
+      <td>Offline move-ordering agreement (top-1)</td>
+      <td class="win">86.6%</td>
+      <td>The net picks the hand-tuned eval's best move in ~7 of 8 positions — best ever measured
+      here.</td>
+    </tr>
+    <tr>
+      <td>Gauntlet vs hand-tuned, fixed depth 3</td>
+      <td class="loss">24.3% ± 2.1</td>
+      <td>400 games, disjoint openings. Playing strength has <em>not</em> followed the offline
+      gains.</td>
+    </tr>
+    <tr>
+      <td>Head-to-head vs previous v3 net</td>
+      <td>52.0% ± 2.5</td>
+      <td>A statistical tie — 2.6× more training data moved every offline metric and zero
+      strength.</td>
+    </tr>
+  </table>
+  </div>
+  <p>That gap — offline metrics repeatedly improving while the gauntlet refuses to move — is the
+  project's central finding so far. The current working theory: the model's error
+  (≈2.2× the typical gap between a position's best and second-best move) and its blindness to
+  <em>tempo</em> (remaining actions this turn) let search steer into exactly the positions where
+  the eval is wrong. Two fixes are in flight: tempo-aware features, and labels taken from deep
+  search instead of the static eval.</p>
+
+  <h2>Method notes</h2>
+  <ul>
+    <li><strong>Every strength claim needs games.</strong> Small gauntlets lie: at 24 games the
+    standard error is ±10 points. We run 400+ games with disjoint opening seeds.</li>
+    <li><strong>Cross-language parity is pinned.</strong> The net trains in PyTorch and runs in
+    Java; a committed fixture asserts both produce identical scores on real positions.</li>
+    <li><strong>Frames matter.</strong> The costliest bug so far: training labels computed from
+    the wrong player's perspective on 47% of positions — invisible offline, catastrophic in
+    play.</li>
+  </ul>
+
+  <footer>
+    <a href="https://github.com/korjavin/nnue-trainer">Source on GitHub</a> ·
+    Java engine + PyTorch trainer · results current as of Aug 2026
+  </footer>
+</main>
+</body>
+</html>
