@@ -348,10 +348,21 @@ public final class GoBotSearcher {
     return searchWithDeadline(state, System.currentTimeMillis() + PRODUCTION_BUDGET_MILLIS);
   }
 
+  /** Soft deadline (plan item 5): don't start iteration d+1 past this share of the budget. */
+  static final int SOFT_DEADLINE_PERCENT = 55;
+
   /**
    * Instance {@link #chooseWithDeadline}. On an enhanced searcher this is the persistent entry
    * point: the TT survives between calls (generation-aged, not cleared), so each move starts warm
    * from the previous move's principal subtree.
+   *
+   * <p>Enhanced time management (plan item 5): a new iteration costs roughly EBF times the last
+   * one, so past {@link #SOFT_DEADLINE_PERCENT} of the budget it would almost surely be cut —
+   * don't start it. And when the deadline does abort an iteration whose PV child (child 0, the
+   * previous best) completed, the aborted iteration's best fully-searched root move is salvaged
+   * instead of discarded ({@link GoResult#salvaged}) — root best-move updates only ever happen on
+   * exact re-searched scores (the root alpha equals the running best), so a fail-low bound can
+   * never displace the PV move.
    */
   public GoResult searchWithDeadline(GoState state, long deadlineMillis) {
     GoResult book = GoOpeningBook.openingBookResult(state);
@@ -362,13 +373,27 @@ public final class GoBotSearcher {
     if (fallback == null) {
       return null;
     }
+    long startMillis = System.currentTimeMillis();
+    long budget = deadlineMillis - startMillis;
     beginSearch(state, deadlineMillis, 0);
     GoResult best = new GoResult(fallback);
     for (int depth = 1; depth <= MAX_DEPTH; depth++) {
+      if (enhanced
+          && depth > 1
+          && budget > 0
+          && (System.currentTimeMillis() - startMillis) * 100 > budget * SOFT_DEADLINE_PERCENT) {
+        break; // soft deadline: recover the half-budget a doomed iteration would waste
+      }
       GoResult result;
       try {
         result = atDepth(state, depth);
       } catch (SearchIncomplete e) {
+        if (enhanced && partialRoot != null && partialRoot.action != null) {
+          partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
+          partialRoot.nodes = nodes;
+          partialRoot.evaluations = evaluations;
+          best = partialRoot;
+        }
         break;
       }
       best = result;
@@ -453,7 +478,13 @@ public final class GoBotSearcher {
 
   // --- search core ---
 
+  // Plan item 5: when a deadline abort lands mid-root-loop but the PV child completed, the best
+  // fully-searched root move of the aborted iteration (set just before the rethrow in atDepth) —
+  // consumed only by searchWithDeadline, ignored by the node-budget paths. Package for tests.
+  GoResult partialRoot;
+
   GoResult atDepth(GoState state, int depth) {
+    partialRoot = null;
     long key = state.hash();
     boolean hasRoot;
     Action rootTTMove;
@@ -481,34 +512,49 @@ public final class GoBotSearcher {
     List<RootMove> roots = new ArrayList<>(children.size());
     long alpha = -INF_SCORE;
     long beta = INF_SCORE;
-    for (int i = 0; i < children.size(); i++) {
-      Child child = children.get(i);
-      long score;
-      // A scout that fails low yields a bound, not a value — flagged so consumers that rank or
-      // sample over the scores can skip it (see RootMove).
-      boolean exact = true;
-      if (multi) {
-        long[] values = maxN(child.state, depth - 1, 1);
-        score = values[root - 1];
-      } else if (i == 0) {
-        score = minimax(child.state, depth - 1, alpha, beta, 1);
-      } else {
-        // Null-window scout; re-search full window on a fail that lands inside.
-        score = minimax(child.state, depth - 1, alpha, alpha + 1, 1);
-        if (score > alpha && score < beta) {
+    try {
+      for (int i = 0; i < children.size(); i++) {
+        Child child = children.get(i);
+        long score;
+        // A scout that fails low yields a bound, not a value — flagged so consumers that rank or
+        // sample over the scores can skip it (see RootMove).
+        boolean exact = true;
+        if (multi) {
+          long[] values = maxN(child.state, depth - 1, 1);
+          score = values[root - 1];
+        } else if (i == 0) {
           score = minimax(child.state, depth - 1, alpha, beta, 1);
         } else {
-          exact = false;
+          // Null-window scout; re-search full window on a fail that lands inside.
+          score = minimax(child.state, depth - 1, alpha, alpha + 1, 1);
+          if (score > alpha && score < beta) {
+            score = minimax(child.state, depth - 1, alpha, beta, 1);
+          } else {
+            exact = false;
+          }
+        }
+        roots.add(new RootMove(child.action, (int) score, exact));
+        if (score > bestScore) {
+          best.action = child.action;
+          bestScore = score;
+        }
+        if (!multi && score > alpha) {
+          alpha = score;
         }
       }
-      roots.add(new RootMove(child.action, (int) score, exact));
-      if (score > bestScore) {
-        best.action = child.action;
-        bestScore = score;
+    } catch (SearchIncomplete e) {
+      if (enhanced && !roots.isEmpty()) {
+        // Child 0 — the previous iteration's PV, TT-ordered first — completed, so the running
+        // best is at least as well-searched as the previous answer. Root best-move updates only
+        // happen on exact scores (root alpha == running best, so any improvement was re-searched
+        // full-window), which keeps a fail-low bound from ever displacing the PV move.
+        GoResult partial = new GoResult(best.action);
+        partial.score = (int) bestScore;
+        partial.salvaged = true;
+        partial.alternatives = topAlternatives(roots, best.action);
+        partialRoot = partial;
       }
-      if (!multi && score > alpha) {
-        alpha = score;
-      }
+      throw e;
     }
     best.score = (int) bestScore;
     storeEntry(state, key, depth, 0, FLAG_EXACT, best.action, bestScore);

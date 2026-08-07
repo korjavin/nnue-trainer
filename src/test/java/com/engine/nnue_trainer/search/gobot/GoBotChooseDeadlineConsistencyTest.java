@@ -53,6 +53,13 @@ public class GoBotChooseDeadlineConsistencyTest {
       GoResult live = GoBotSearcher.chooseWithDeadline(state, System.currentTimeMillis() + 800);
       assertNotNull(live);
       assertNotNull(live.action, "choose returned no action");
+      if (live.salvaged) {
+        // Plan item 5: the aborted iteration's completed root moves were salvaged — the move is
+        // deeper-searched than the completed-depth oracle, so equality is not the contract; the
+        // move must simply be legal.
+        assertTrue(state.legalActions().contains(live.action), "salvaged action must be legal");
+        continue;
+      }
       assertTrue(live.depth >= 1, "800ms budget should complete at least depth 1");
       GoResult oracle = enhancedOracle(state, live.depth);
       assertNotNull(oracle);
@@ -79,6 +86,12 @@ public class GoBotChooseDeadlineConsistencyTest {
         GoResult live = GoBotSearcher.chooseWithDeadline(state, System.currentTimeMillis() + budget);
         assertNotNull(live);
         assertNotNull(live.action, "choose returned no action at budget " + budget);
+        if (live.salvaged) {
+          assertTrue(
+              state.legalActions().contains(live.action),
+              "salvaged action must be legal at budget " + budget);
+          continue;
+        }
         if (live.depth == 0) {
           // Fallback path: no iteration completed. The action must at least be legal.
           assertTrue(
