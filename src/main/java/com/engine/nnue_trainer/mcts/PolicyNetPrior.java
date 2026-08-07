@@ -151,36 +151,70 @@ public final class PolicyNetPrior implements PolicyPrior {
     return new Heads(move, pairU);
   }
 
-  /** 3x3 same-padding conv + ReLU: input [in][12][12] flat, weights [out][in*9] flat. */
+  private static final int PADDED = BOARD + 2;
+
+  /**
+   * 3x3 same-padding conv + ReLU: input [in][12][12] flat, weights [out][in*9] flat. Zero-pads to
+   * 14x14, gathers each output cell's 3x3xin patch once (im2col), then runs stride-1 dot products
+   * of length in*9 — the layout that lets the JIT vectorize, which is what keeps prior evaluation
+   * cheap enough to sit inside MCTS expansion.
+   */
   private double[] conv3x3Relu(double[] input, int inChannels, double[] w, double[] b) {
+    double[] padded = new double[inChannels * PADDED * PADDED];
+    for (int ic = 0; ic < inChannels; ic++) {
+      for (int r = 0; r < BOARD; r++) {
+        System.arraycopy(
+            input,
+            ic * CELLS + r * BOARD,
+            padded,
+            ic * PADDED * PADDED + (r + 1) * PADDED + 1,
+            BOARD);
+      }
+    }
+    // Patch matrix, cell-major: patches[cell * k + (ic*9 + kr*3 + kc)] — the exact layout of a
+    // weight row, so the conv below is CELLS x out plain dot products.
+    int k = inChannels * 9;
+    double[] patches = new double[CELLS * k];
+    for (int r = 0; r < BOARD; r++) {
+      for (int c = 0; c < BOARD; c++) {
+        int cellBase = (r * BOARD + c) * k;
+        for (int ic = 0; ic < inChannels; ic++) {
+          int pBase = ic * PADDED * PADDED;
+          int dst = cellBase + ic * 9;
+          for (int kr = 0; kr < 3; kr++) {
+            int src = pBase + (r + kr) * PADDED + c;
+            patches[dst + kr * 3] = padded[src];
+            patches[dst + kr * 3 + 1] = padded[src + 1];
+            patches[dst + kr * 3 + 2] = padded[src + 2];
+          }
+        }
+      }
+    }
     int out = b.length;
     double[] result = new double[out * CELLS];
     for (int o = 0; o < out; o++) {
-      int wBase = o * inChannels * 9;
-      for (int r = 0; r < BOARD; r++) {
-        for (int c = 0; c < BOARD; c++) {
-          double acc = b[o];
-          for (int ic = 0; ic < inChannels; ic++) {
-            int wc = wBase + ic * 9;
-            int icBase = ic * CELLS;
-            for (int kr = -1; kr <= 1; kr++) {
-              int rr = r + kr;
-              if (rr < 0 || rr >= BOARD) {
-                continue;
-              }
-              int rowBase = icBase + rr * BOARD;
-              int kBase = wc + (kr + 1) * 3;
-              for (int kc = -1; kc <= 1; kc++) {
-                int cc = c + kc;
-                if (cc < 0 || cc >= BOARD) {
-                  continue;
-                }
-                acc += w[kBase + kc + 1] * input[rowBase + cc];
-              }
-            }
-          }
-          result[o * CELLS + r * BOARD + c] = acc > 0 ? acc : 0;
+      int wBase = o * k;
+      int oBase = o * CELLS;
+      for (int cell = 0; cell < CELLS; cell++) {
+        int pBase = cell * k;
+        // Four accumulators break the FMA dependency chain (~3x on scalar FP).
+        // ponytail: float + jdk.incubator.vector is the next rung if Phase 2 needs more.
+        double a0 = 0;
+        double a1 = 0;
+        double a2 = 0;
+        double a3 = 0;
+        int i = 0;
+        for (; i + 4 <= k; i += 4) {
+          a0 += w[wBase + i] * patches[pBase + i];
+          a1 += w[wBase + i + 1] * patches[pBase + i + 1];
+          a2 += w[wBase + i + 2] * patches[pBase + i + 2];
+          a3 += w[wBase + i + 3] * patches[pBase + i + 3];
         }
+        double acc = b[o] + a0 + a1 + a2 + a3;
+        for (; i < k; i++) {
+          acc += w[wBase + i] * patches[pBase + i];
+        }
+        result[oBase + cell] = acc > 0 ? acc : 0;
       }
     }
     return result;

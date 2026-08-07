@@ -82,4 +82,29 @@ class PolicyNetPriorParityTest {
     }
     assertEquals(1.0, sum, 1e-5, "softmax over legal actions normalizes");
   }
+
+  /** End-to-end: the searcher runs on the trained prior (and prints its sims/s). */
+  @Test
+  void mctsRunsOnTrainedPrior() throws Exception {
+    assertTrue(Files.exists(WEIGHTS), "trained weights artifact missing: " + WEIGHTS);
+    Board board = new Board(12, 12);
+    board.setCell(0, 0, new Cell(1, CellKind.BASE));
+    board.setCell(11, 11, new Cell(2, CellKind.BASE));
+    board.setCell(0, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(1, 1, new Cell(1, CellKind.NORMAL));
+    board.setCell(10, 10, new Cell(2, CellKind.NORMAL));
+    GoState state = GoState.fromBoard(board, 1, 3, new boolean[2]);
+
+    MctsSearcher.Config cfg = new MctsSearcher.Config();
+    cfg.prior = PolicyNetPrior.load(WEIGHTS);
+    new MctsSearcher(state, cfg).runSims(300); // JIT warmup — measure steady state
+    MctsSearcher s = new MctsSearcher(state, cfg);
+    long t0 = System.nanoTime();
+    s.runSims(500);
+    double secs = (System.nanoTime() - t0) / 1e9;
+    assertTrue(state.legalActions().contains(s.bestAction()), "net-prior search picks legally");
+    System.out.printf(
+        "MCTS net-prior smoke: %d sims in %.3fs (%.0f sims/s)%n",
+        s.simsRun(), secs, s.simsRun() / secs);
+  }
 }
