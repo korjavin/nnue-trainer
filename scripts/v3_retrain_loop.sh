@@ -168,6 +168,12 @@ run_stage() {
 stage_fetch() {
   echo ">> fetching games from: $GAMES_SRC"
   case "$GAMES_SRC" in
+    http://*|https://*)
+      # Server exposes the sqlite DB statically; the WAL sidecar holds the newest games
+      # (DB alone checkpoints rarely and can be days stale). Name must be exactly $DB-wal.
+      curl -fsSL "$GAMES_SRC" -o "$DB.tmp"
+      curl -fsSL "$GAMES_SRC-wal" -o "$DB.tmp-wal" || true
+      ;;
     *:*) scp "$GAMES_SRC" "$DB.tmp" ;;    # remote prod dump over scp
     *)   cp "$GAMES_SRC" "$DB.tmp" ;;     # local sibling checkout (import_games.py's source)
   esac
