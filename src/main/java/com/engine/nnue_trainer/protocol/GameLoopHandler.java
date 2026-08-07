@@ -360,14 +360,18 @@ public class GameLoopHandler {
     }
     // Build the live GoState through the same tested seam GoStateFromSnapshotTest asserts against
     // (handleSnapshot pins snapshot.currentPlayer == myPlayerIndex).
-    // Live search uses the DETERMINISTIC, parity-verified node-budget entry by default: the
-    // time-based choose() had a wall-clock-deadline move-selection bug (bd 0dj.7) that lost 0-10
-    // vs GoBot, while chooseNodeBudget(60k) wins 6-0. Overridable via env for experiments.
+    // Live search uses the DETERMINISTIC, parity-verified node-budget entry by default. The 0-10
+    // choose() loss investigated as bd 0dj.7 was NOT a move-selection bug — choose(deadline)
+    // returns exactly the chooseDepth move of the last fully completed iteration (see
+    // GoBotChooseDeadlineConsistencyTest) — but a compute asymmetry: 1s wall clock buys ~15-20k
+    // nodes on a training-loaded box, while chooseNodeBudget(60k) silently spends 3-6s/move, so
+    // time mode plays 1-2 plies shallower. Node budget stays the default: deterministic and not
+    // starved by machine load. Overridable via env for experiments.
     GoState gs = goStateFromSnapshot(snapshot);
     GoResult r;
     String fd = System.getenv("GOBOT_FIXED_DEPTH");
     String nl = System.getenv("GOBOT_NODE_LIMIT");
-    String tm = System.getenv("GOBOT_TIME_MODE"); // opt back into the (buggy) time-based choose()
+    String tm = System.getenv("GOBOT_TIME_MODE"); // opt into wall-clock choose() (load-sensitive)
     if (fd != null && !fd.isBlank()) {
       r = GoBotSearcher.chooseDepth(gs, Integer.parseInt(fd.trim()));
     } else if (tm != null && !tm.isBlank()) {
