@@ -1,6 +1,8 @@
 package com.engine.nnue_trainer.train;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
@@ -69,5 +71,39 @@ class GauntletMatchTest {
         GauntletMatch.play(V3TestEvaluators.selfStonesNet(), null, fastConfig());
 
     assertEquals(fastConfig().games, r.wins + r.losses + r.draws, "every game counted once: " + r);
+  }
+
+  /**
+   * The two color-flipped games of a pair must share an opening seed (identical nets cancel
+   * exactly), while distinct pairs must not.
+   */
+  @Test
+  void colorPairsShareASeedDistinctPairsDoNot() {
+    long pair0GameA = GauntletMatch.deriveGameSeed(7L, 0);
+    long pair0GameB = GauntletMatch.deriveGameSeed(7L, 1);
+    long pair1GameA = GauntletMatch.deriveGameSeed(7L, 2);
+    long pair1GameB = GauntletMatch.deriveGameSeed(7L, 3);
+
+    assertEquals(pair0GameA, pair0GameB, "games 0 and 1 are one color-flipped pair");
+    assertEquals(pair1GameA, pair1GameB, "games 2 and 3 are one color-flipped pair");
+    assertNotEquals(pair0GameA, pair1GameA, "distinct pairs must explore distinct openings");
+  }
+
+  /**
+   * Runs with nearby config seeds must not replay each other's openings — with the old additive
+   * derivation, seeds 7 and 11 shared most pairs and pooled results were not independent samples.
+   */
+  @Test
+  void nearbySeedsYieldDisjointOpeningSets() {
+    java.util.Set<Long> all = new java.util.HashSet<>();
+    int perRun = 50;
+    for (long seed = 1; seed <= 8; seed++) {
+      for (int game = 0; game < perRun * 2; game += 2) { // one seed per pair
+        assertTrue(
+            all.add(GauntletMatch.deriveGameSeed(seed, game)),
+            "seed " + seed + " game " + game + " collided with another run's opening");
+      }
+    }
+    assertEquals(8 * perRun, all.size(), "8 runs x 50 pairs, all distinct");
   }
 }

@@ -71,9 +71,11 @@ public final class GauntletMatch {
     // from the same start position is byte-identical and N games collapse to just 2 distinct games
     // (one per color) — GAUNTLET_GAMES and PROMOTE_MARGIN granularity would then be a fiction. A
     // seeded epsilon-greedy opening (mirrors SelfPlayGenerator) branches each game pair into a
-    // distinct-but-reproducible line. The seed advances per color-pair, so identical weights still
-    // cancel exactly (the two colors replay the same opening), while a real challenger produces
-    // `games` genuinely different games.
+    // distinct-but-reproducible line. Per-pair seeds are derived by hashing (seed, pair index)
+    // through a 64-bit mixer, so identical weights still cancel exactly (the two colors replay the
+    // same opening), a real challenger produces `games` genuinely different games, and runs with
+    // different seeds — even nearby ones like 7 and 8 — play disjoint opening sets, so pooled
+    // results are independent samples. Seeds need no spacing.
     public long seed = 1L;
     public double epsilon = 0.15;
     public int exploreTurns = 8;
@@ -116,7 +118,7 @@ public final class GauntletMatch {
       boolean aIsP1 = (game % 2 == 0);
       // Same opening seed for the two colors of a pair → identical weights cancel exactly, while
       // distinct pairs (game/2) explore distinct openings.
-      long gameSeed = config.seed + (game / 2);
+      long gameSeed = deriveGameSeed(config.seed, game);
       int winner = playGame(modelA, modelB, aIsP1, gameSeed, config);
       if (winner == 0) {
         draws++;
@@ -127,6 +129,23 @@ public final class GauntletMatch {
       }
     }
     return new Result(wins, losses, draws);
+  }
+
+  /**
+   * Opening seed for game index {@code game}: the two color-flipped games of a pair (2k and 2k+1)
+   * share a seed so identical nets cancel exactly, and (seed, pair) is hashed through a 64-bit
+   * mixer so different run seeds — additive-close ones included — yield statistically independent
+   * opening sets. Package-visible for tests.
+   */
+  static long deriveGameSeed(long seed, int game) {
+    return mix64(seed ^ (0x9E3779B97F4A7C15L * ((game / 2) + 1)));
+  }
+
+  /** SplitMix64 finalizer — a bijective 64-bit mixer with full avalanche. */
+  private static long mix64(long z) {
+    z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+    z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+    return z ^ (z >>> 31);
   }
 
   private static int playGame(
