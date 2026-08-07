@@ -115,6 +115,17 @@ public final class GoBotSearcher {
   final int root;
   final boolean multi;
   final Map<Long, TableEntry> table;
+
+  /**
+   * Strength-path switch (plan: parity constraint). True for the live/gauntlet entry points
+   * ({@code chooseNodeBudget}/{@code chooseWithDeadline} and the instance {@code search*}
+   * methods): packed array TT with depth-sufficient cross-ply probing, persistence across moves.
+   * False for the {@code chooseDepth} parity oracle, which keeps GoBot's exact HashMap TT and
+   * ply-exact probe so GoBotSearchParityTest stays byte-identical.
+   */
+  final boolean enhanced;
+
+  final GoTranspositionTable tt; // enhanced minimax only; maxN + parity path keep `table`
   LeafEval leafMode = LeafEval.HAND_TUNED;
   NNUEModel nnueModel;
   NNUEv2Evaluator nnueV2;
@@ -124,11 +135,19 @@ public final class GoBotSearcher {
   long nodeLimit; // 0 == unlimited
   long deadlineMillis; // 0 == no wall-clock deadline
   long fastPathCuts; // diagnostics: cut-nodes that never materialized their sibling list
+  long ttProbes; // diagnostics: enhanced-TT probes
+  long ttHits; // diagnostics: enhanced-TT hits (any depth)
 
   GoBotSearcher(int root, boolean multi) {
+    this(root, multi, false);
+  }
+
+  GoBotSearcher(int root, boolean multi, boolean enhanced) {
     this.root = root;
     this.multi = multi;
+    this.enhanced = enhanced;
     this.table = new HashMap<>();
+    this.tt = enhanced ? new GoTranspositionTable() : null;
   }
 
   /**
@@ -177,19 +196,43 @@ public final class GoBotSearcher {
 
   /** Port of GoBot's {@code newSearcher}: {@code multi} iff more than two players are active. */
   public static GoBotSearcher newSearcher(GoState state) {
+    return newSearcher(state, false);
+  }
+
+  /**
+   * A persistent, enhanced searcher rooted at {@code state.currentPlayer()}. Keep it for the whole
+   * game and call {@link #searchNodeBudget}/{@link #searchWithDeadline} each move — the packed TT
+   * carries the previous move's most-searched subtree into every new search. One instance per
+   * side: root-relative scores are only valid while the root player matches the mover.
+   */
+  public static GoBotSearcher newEnhancedSearcher(GoState state) {
+    return newSearcher(state, true);
+  }
+
+  static GoBotSearcher newSearcher(GoState state, boolean enhanced) {
     int activeCount = 0;
     for (int player = 1; player <= 4; player++) {
       if (state.active(player)) {
         activeCount++;
       }
     }
-    GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2);
+    GoBotSearcher s = new GoBotSearcher(state.currentPlayer(), activeCount > 2, enhanced);
     LeafConfig cfg = defaultLeaf;
     s.leafMode = cfg.mode;
     s.nnueModel = cfg.model;
     s.nnueV2 = cfg.v2;
     s.nnueV3 = cfg.v3;
     return s;
+  }
+
+  /** The player this searcher evaluates for (fixed at creation; see persistence contract). */
+  public int rootPlayer() {
+    return root;
+  }
+
+  /** Enhanced-TT presence probe for tests/diagnostics. */
+  boolean ttHasEntry(GoState state) {
+    return enhanced && tt.probe(state.hash()) != 0L;
   }
 
   /** TT probe: the stored entry for this position hash, or {@code null} on a miss. */
@@ -268,13 +311,43 @@ public final class GoBotSearcher {
    * {@code null} only when the position has no legal action.
    *
    * <p>Contract (bd 0dj.7, enforced by {@code GoBotChooseDeadlineConsistencyTest}): the returned
-   * move is exactly the {@link #chooseDepth} move at the deepest FULLY COMPLETED iteration — a
-   * deadline abort mid-iteration throws {@link SearchIncomplete} out of {@link #atDepth} before
-   * anything is committed, so a partially searched iteration can never override the last complete
-   * one. If not even depth 1 completes, the {@code preservingFallback} action is returned with
-   * {@code depth == 0}.
+   * move is exactly the move of the deepest FULLY COMPLETED iteration of the same (enhanced)
+   * iterative deepening — a deadline abort mid-iteration throws {@link SearchIncomplete} out of
+   * {@link #atDepth} before anything is committed, so a partially searched iteration can never
+   * override the last complete one. If not even depth 1 completes, the {@code preservingFallback}
+   * action is returned with {@code depth == 0}. This is the strength path (enhanced TT); the
+   * GoBot-exact behavior remains on {@link #chooseDepth}.
    */
   public static GoResult chooseWithDeadline(GoState state, long deadlineMillis) {
+    return newSearcher(state, true).searchWithDeadline(state, deadlineMillis);
+  }
+
+  /**
+   * Port of GoBot's {@code chooseNodeBudget}: deterministic iterative deepening bounded by a node
+   * limit rather than a wall-clock deadline. Returns {@code null} when the position has no legal
+   * action or {@code limit == 0}. This is the strength path — enhanced (packed TT, cross-ply
+   * probing); the byte-exact GoBot behavior lives on in the package-visible 3-arg overload with
+   * {@code enhanced == false} (used by GoBotNodeBudgetParityTest).
+   */
+  public static GoResult chooseNodeBudget(GoState state, long limit) {
+    return chooseNodeBudget(state, limit, true);
+  }
+
+  static GoResult chooseNodeBudget(GoState state, long limit, boolean enhanced) {
+    return newSearcher(state, enhanced).searchNodeBudget(state, limit);
+  }
+
+  /** Instance {@link #choose}: production budget on a persistent (usually enhanced) searcher. */
+  public GoResult search(GoState state) {
+    return searchWithDeadline(state, System.currentTimeMillis() + PRODUCTION_BUDGET_MILLIS);
+  }
+
+  /**
+   * Instance {@link #chooseWithDeadline}. On an enhanced searcher this is the persistent entry
+   * point: the TT survives between calls (generation-aged, not cleared), so each move starts warm
+   * from the previous move's principal subtree.
+   */
+  public GoResult searchWithDeadline(GoState state, long deadlineMillis) {
     GoResult book = GoOpeningBook.openingBookResult(state);
     if (book != null) {
       return book;
@@ -283,30 +356,25 @@ public final class GoBotSearcher {
     if (fallback == null) {
       return null;
     }
+    beginSearch(state, deadlineMillis, 0);
     GoResult best = new GoResult(fallback);
-    GoBotSearcher s = newSearcher(state);
-    s.deadlineMillis = deadlineMillis;
     for (int depth = 1; depth <= MAX_DEPTH; depth++) {
       GoResult result;
       try {
-        result = s.atDepth(state, depth);
+        result = atDepth(state, depth);
       } catch (SearchIncomplete e) {
         break;
       }
       best = result;
       best.depth = depth;
-      best.nodes = s.nodes;
-      best.evaluations = s.evaluations;
+      best.nodes = nodes;
+      best.evaluations = evaluations;
     }
     return best;
   }
 
-  /**
-   * Port of GoBot's {@code chooseNodeBudget}: deterministic iterative deepening bounded by a node
-   * limit rather than a wall-clock deadline. Returns {@code null} when the position has no legal
-   * action or {@code limit == 0}.
-   */
-  public static GoResult chooseNodeBudget(GoState state, long limit) {
+  /** Instance {@link #chooseNodeBudget(GoState, long)}; see {@link #searchWithDeadline}. */
+  public GoResult searchNodeBudget(GoState state, long limit) {
     GoResult book = GoOpeningBook.openingBookResult(state);
     if (book != null) {
       return book;
@@ -315,33 +383,59 @@ public final class GoBotSearcher {
     if (fallback == null || limit == 0) {
       return null;
     }
+    beginSearch(state, 0, limit);
     GoResult best = new GoResult(fallback);
-    GoBotSearcher s = newSearcher(state);
-    s.nodeLimit = limit;
-    for (int depth = 1; depth <= MAX_DEPTH && s.nodes < limit; depth++) {
+    for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
       GoResult result;
       try {
-        result = s.atDepth(state, depth);
+        result = atDepth(state, depth);
       } catch (SearchIncomplete e) {
         break;
       }
       best = result;
       best.depth = depth;
     }
-    best.nodes = s.nodes;
-    best.evaluations = s.evaluations;
-    best.budgetExhausted = s.nodes >= limit;
+    best.nodes = nodes;
+    best.evaluations = evaluations;
+    best.budgetExhausted = nodes >= limit;
     best.searchComplete = best.depth == MAX_DEPTH;
     return best;
+  }
+
+  /** Per-call reset: budgets and counters are per move; the enhanced TT persists, aged. */
+  private void beginSearch(GoState state, long deadline, long limit) {
+    if (state.currentPlayer() != root) {
+      throw new IllegalArgumentException(
+          "searcher rooted at player " + root + " asked to move for " + state.currentPlayer());
+    }
+    this.deadlineMillis = deadline;
+    this.nodeLimit = limit;
+    this.nodes = 0;
+    this.evaluations = 0;
+    if (enhanced) {
+      tt.bumpGeneration();
+    }
   }
 
   // --- search core ---
 
   GoResult atDepth(GoState state, int depth) {
     long key = state.hash();
-    TableEntry rootEntry = probe(key);
-    boolean hasRoot = rootEntry != null;
-    List<Child> children = orderedChildren(state, hasRoot ? rootEntry.bestAction : null, hasRoot);
+    boolean hasRoot;
+    Action rootTTMove;
+    if (enhanced) {
+      long e = tt.probe(key);
+      hasRoot = e != 0L;
+      rootTTMove =
+          hasRoot
+              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              : null;
+    } else {
+      TableEntry rootEntry = probe(key);
+      hasRoot = rootEntry != null;
+      rootTTMove = hasRoot ? rootEntry.bestAction : null;
+    }
+    List<Child> children = orderedChildren(state, rootTTMove, hasRoot);
     if (children.isEmpty()) {
       return new GoResult();
     }
@@ -383,9 +477,27 @@ public final class GoBotSearcher {
       }
     }
     best.score = (int) bestScore;
-    store(key, TableEntry.single(depth, 0, FLAG_EXACT, best.action, (int) bestScore));
+    storeEntry(state, key, depth, 0, FLAG_EXACT, best.action, bestScore);
     best.alternatives = topAlternatives(roots, best.action);
     return best;
+  }
+
+  /** Store dispatch: packed array TT (enhanced, mate scores ply-rebased) or GoBot's HashMap. */
+  private void storeEntry(
+      GoState state, long key, int depth, int ply, int flag, Action bestAction, long best) {
+    if (enhanced) {
+      tt.store(
+          key,
+          Math.min(depth, 63),
+          flag,
+          GoTranspositionTable.toStoredScore(best, ply),
+          bestAction == null
+              ? 0
+              : GoTranspositionTable.encodeAction(
+                  bestAction, state.cols(), state.rows() * state.cols()));
+    } else {
+      store(key, TableEntry.single(depth, ply, flag, bestAction, (int) best));
+    }
   }
 
   private long minimax(GoState state, int depth, long alpha, long beta, int ply) {
@@ -401,29 +513,72 @@ public final class GoBotSearcher {
       return leafEval(state);
     }
     long key = state.hash();
-    TableEntry entry = probe(key);
-    boolean hit = entry != null;
-    if (hit && entry.depth >= depth && entry.ply == ply) {
-      switch (entry.flag) {
-        case FLAG_EXACT:
-          return entry.values[0];
-        case FLAG_LOWER:
-          if (entry.values[0] >= beta) {
-            return entry.values[0];
+    boolean hit;
+    Action ttMove;
+    if (enhanced) {
+      // Enhanced probe (plan item 2): depth-sufficient, ply-free — a transposition reached at a
+      // different distance from the root (or persisted from a previous move's search) is usable.
+      // Mate scores are stored node-relative and rebased to this node's ply on the way out.
+      ttProbes++;
+      long e = tt.probe(key);
+      hit = e != 0L;
+      ttMove =
+          hit
+              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              : null;
+      if (hit) {
+        ttHits++;
+        if (GoTranspositionTable.depthOf(e) >= depth) {
+          long val = GoTranspositionTable.fromStoredScore(GoTranspositionTable.scoreOf(e), ply);
+          switch (GoTranspositionTable.flagOf(e)) {
+            case FLAG_EXACT:
+              return val;
+            case FLAG_LOWER:
+              if (val >= beta) {
+                return val;
+              }
+              alpha = Math.max(alpha, val);
+              break;
+            case FLAG_UPPER:
+              if (val <= alpha) {
+                return val;
+              }
+              beta = Math.min(beta, val);
+              break;
+            default:
+              break;
           }
-          alpha = Math.max(alpha, entry.values[0]);
-          break;
-        case FLAG_UPPER:
-          if (entry.values[0] <= alpha) {
-            return entry.values[0];
+          if (alpha >= beta) {
+            return val;
           }
-          beta = Math.min(beta, entry.values[0]);
-          break;
-        default:
-          break;
+        }
       }
-      if (alpha >= beta) {
-        return entry.values[0];
+    } else {
+      TableEntry entry = probe(key);
+      hit = entry != null;
+      ttMove = hit ? entry.bestAction : null;
+      if (hit && entry.depth >= depth && entry.ply == ply) {
+        switch (entry.flag) {
+          case FLAG_EXACT:
+            return entry.values[0];
+          case FLAG_LOWER:
+            if (entry.values[0] >= beta) {
+              return entry.values[0];
+            }
+            alpha = Math.max(alpha, entry.values[0]);
+            break;
+          case FLAG_UPPER:
+            if (entry.values[0] <= alpha) {
+              return entry.values[0];
+            }
+            beta = Math.min(beta, entry.values[0]);
+            break;
+          default:
+            break;
+        }
+        if (alpha >= beta) {
+          return entry.values[0];
+        }
       }
     }
     long alphaOrig = alpha;
@@ -438,7 +593,6 @@ public final class GoBotSearcher {
     // Move-identical to the unstaged search: the TT move's +10M ordering bonus already guarantees
     // it is child 0, generation consumes no node/eval counters, and the minimax call sequence is
     // unchanged — GoBotSearchParityTest/GoBotNodeBudgetParityTest pin this byte-exactly.
-    Action ttMove = hit ? entry.bestAction : null;
     boolean searchedTTFirst = false;
     if (ttMove instanceof MoveAction && ttMoveTargetPlausible(state, (MoveAction) ttMove)) {
       searchedTTFirst = true;
@@ -462,7 +616,7 @@ public final class GoBotSearcher {
         } else if (best >= betaOrig) {
           cutFlag = FLAG_LOWER;
         }
-        store(key, TableEntry.single(depth, ply, cutFlag, bestAction, (int) best));
+        storeEntry(state, key, depth, ply, cutFlag, bestAction, best);
         return best;
       }
     }
@@ -519,10 +673,12 @@ public final class GoBotSearcher {
     } else if (best >= betaOrig) {
       flag = FLAG_LOWER;
     }
-    store(key, TableEntry.single(depth, ply, flag, bestAction, (int) best));
+    storeEntry(state, key, depth, ply, flag, bestAction, best);
     return best;
   }
 
+  // ponytail: maxN keeps the HashMap TT and ply-exact probe — it only runs in 3+-player games,
+  // which the 1v1 strength paths never reach; enhancing it would be untested dead weight.
   private long[] maxN(GoState state, int depth, int ply) {
     if (!running()) {
       throw new SearchIncomplete();

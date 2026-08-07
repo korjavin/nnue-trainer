@@ -19,11 +19,14 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Contract test for bd nnue-trainer-0dj.7: the wall-clock live entry point {@link
- * GoBotSearcher#chooseWithDeadline} must return exactly the move the deterministic parity oracle
- * {@link GoBotSearcher#chooseDepth} returns at the deepest FULLY COMPLETED iteration — a partially
- * searched (deadline-aborted) iteration must never leak into the returned move. Positions come from
- * the same mid-game fixture the node-budget parity oracle uses; opening-book positions are skipped
- * because the book answers before iterative deepening runs.
+ * GoBotSearcher#chooseWithDeadline} must return exactly the move its own deterministic iterative
+ * deepening produces at the deepest FULLY COMPLETED iteration — a partially searched
+ * (deadline-aborted) iteration must never leak into the returned move. Since plan item 2 the live
+ * path is ENHANCED (packed TT, cross-ply probing), so the oracle is a fresh enhanced searcher run
+ * depth-capped — not {@code chooseDepth}, which stays the GoBot parity oracle and diverges from
+ * the strength path by design. Positions come from the same mid-game fixture the node-budget
+ * parity oracle uses; opening-book positions are skipped because the book answers before
+ * iterative deepening runs.
  *
  * <p>The deadline is wall-clock, so which depth completes varies run to run — but the contract must
  * hold at WHATEVER depth the search reports, so the assertion is timing-independent.
@@ -31,11 +34,24 @@ import org.junit.jupiter.api.Test;
 public class GoBotChooseDeadlineConsistencyTest {
 
   /**
+   * The deterministic result of the enhanced iterative-deepening loop run to exactly {@code depth}
+   * on a fresh searcher — what choose(deadline) must equal at its reported depth.
+   */
+  private static GoResult enhancedOracle(GoState state, int depth) {
+    GoBotSearcher s = GoBotSearcher.newEnhancedSearcher(state);
+    GoResult result = null;
+    for (int d = 1; d <= depth; d++) {
+      result = s.atDepth(state, d);
+    }
+    return result;
+  }
+
+  /**
    * choose(deadline) with a workable budget: the reported depth must be a completed iteration and
-   * the move must equal chooseDepth at that depth.
+   * the move must equal the enhanced ID oracle at that depth.
    */
   @Test
-  public void chooseMatchesChooseDepthAtReportedDepth() throws Exception {
+  public void chooseMatchesEnhancedIterationAtReportedDepth() throws Exception {
     List<GoState> states = fixtureStates(4);
     assertTrue(states.size() >= 2, "fixture yielded too few non-book positions");
     for (GoState state : states) {
@@ -43,20 +59,20 @@ public class GoBotChooseDeadlineConsistencyTest {
       assertNotNull(live);
       assertNotNull(live.action, "choose returned no action");
       assertTrue(live.depth >= 1, "800ms budget should complete at least depth 1");
-      GoResult oracle = GoBotSearcher.chooseDepth(state, live.depth);
+      GoResult oracle = enhancedOracle(state, live.depth);
       assertNotNull(oracle);
       assertEquals(
           oracle.action,
           live.action,
-          "choose(deadline) diverged from chooseDepth at its own reported depth " + live.depth);
+          "choose(deadline) diverged from its own ID loop at reported depth " + live.depth);
       assertEquals(oracle.score, live.score, "score diverged at reported depth " + live.depth);
     }
   }
 
   /**
    * Early-deadline case: with a tiny (even already-expired) deadline the result must be the
-   * fallback (reported depth 0) or exactly chooseDepth at whatever shallow depth completed — never
-   * a half-searched deeper move.
+   * fallback (reported depth 0) or exactly the enhanced ID oracle at whatever shallow depth
+   * completed — never a half-searched deeper move.
    */
   @Test
   public void earlyDeadlineNeverLeaksPartialIteration() throws Exception {
@@ -74,12 +90,12 @@ public class GoBotChooseDeadlineConsistencyTest {
               state.legalActions().contains(live.action),
               "fallback action is not legal at budget " + budget);
         } else {
-          GoResult oracle = GoBotSearcher.chooseDepth(state, live.depth);
+          GoResult oracle = enhancedOracle(state, live.depth);
           assertNotNull(oracle);
           assertEquals(
               oracle.action,
               live.action,
-              "budget " + budget + "ms leaked a move differing from chooseDepth " + live.depth);
+              "budget " + budget + "ms leaked a move differing from the ID loop at " + live.depth);
         }
       }
     }

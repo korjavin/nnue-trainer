@@ -61,7 +61,9 @@ public class GoBotNodeBudgetParityTest {
         Board board = toBoard(rec.get("board"));
 
         GoState state = GoState.fromBoard(board, player, movesLeft, neutralUsed);
-        GoResult result = GoBotSearcher.chooseNodeBudget(state, nodeLimit);
+        // enhanced=false: this fixture pins the byte-exact GoBot oracle; the public 2-arg entry is
+        // the enhanced strength path and diverges from GoBot by design (plan item 2).
+        GoResult result = GoBotSearcher.chooseNodeBudget(state, nodeLimit, false);
         records++;
 
         boolean actionMatch = result != null && expectedAction.equals(result.action);

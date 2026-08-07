@@ -155,6 +155,11 @@ public final class GauntletMatch {
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
     Random random = new Random(seed);
 
+    // One persistent enhanced searcher per player (plan item 2): the TT survives across that
+    // side's moves within the game, so each search starts warm from its previous move's principal
+    // subtree. Created lazily AFTER applyLeaf so each snapshots its own side's leaf eval.
+    GoBotSearcher[] searcherByPlayer = new GoBotSearcher[2];
+
     for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
       List<Action> legal = state.legalActions();
       if (legal.isEmpty()) {
@@ -163,7 +168,7 @@ public final class GauntletMatch {
       // Point the process-wide leaf eval at whichever side is on the move, then search.
       Object moverModel = ((state.currentPlayer() == 1) == aIsP1) ? modelA : modelB;
       applyLeaf(moverModel);
-      GoResult r = chooseMove(state, config);
+      GoResult r = chooseMove(state, config, searcherByPlayer);
 
       Action chosen;
       if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
@@ -196,11 +201,17 @@ public final class GauntletMatch {
     }
   }
 
-  private static GoResult chooseMove(GoState state, Config config) {
+  private static GoResult chooseMove(GoState state, Config config, GoBotSearcher[] byPlayer) {
     if (config.fixedDepth > 0) {
-      return GoBotSearcher.chooseDepth(state, config.fixedDepth);
+      return GoBotSearcher.chooseDepth(state, config.fixedDepth); // parity oracle, stateless
     }
-    return GoBotSearcher.chooseNodeBudget(state, config.nodeLimit);
+    int mover = state.currentPlayer();
+    GoBotSearcher s = byPlayer[mover - 1];
+    if (s == null) {
+      s = GoBotSearcher.newEnhancedSearcher(state);
+      byPlayer[mover - 1] = s;
+    }
+    return s.searchNodeBudget(state, config.nodeLimit);
   }
 
   private static Board freshBoard() {

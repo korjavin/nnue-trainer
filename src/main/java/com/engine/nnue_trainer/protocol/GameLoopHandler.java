@@ -347,6 +347,19 @@ public class GameLoopHandler {
     }
   }
 
+  // Persistent enhanced searcher (plan item 2): the TT carries over between this bot's moves for
+  // the whole game. Recreated only if the mover changes (it never does — handleSnapshot pins
+  // snapshot.currentPlayer == myPlayerIndex); stale entries from earlier positions age out via
+  // TT generations.
+  private GoBotSearcher liveGobotSearcher;
+
+  private GoBotSearcher liveSearcher(GoState gs) {
+    if (liveGobotSearcher == null || liveGobotSearcher.rootPlayer() != gs.currentPlayer()) {
+      liveGobotSearcher = GoBotSearcher.newEnhancedSearcher(gs);
+    }
+    return liveGobotSearcher;
+  }
+
   /** Run the ported GoBot search and adapt its {@link GoResult} into a {@link SearchResult}. */
   private SearchResult gobotSearch(JsonNode snapshot, boolean[] neutralUsed) {
     long start = System.currentTimeMillis();
@@ -375,11 +388,11 @@ public class GameLoopHandler {
     if (fd != null && !fd.isBlank()) {
       r = GoBotSearcher.chooseDepth(gs, Integer.parseInt(fd.trim()));
     } else if (tm != null && !tm.isBlank()) {
-      r = GoBotSearcher.choose(gs);
+      r = liveSearcher(gs).search(gs);
     } else {
       long limit =
           (nl != null && !nl.isBlank()) ? Long.parseLong(nl.trim()) : DEFAULT_LIVE_NODE_LIMIT;
-      r = GoBotSearcher.chooseNodeBudget(gs, limit);
+      r = liveSearcher(gs).searchNodeBudget(gs, limit);
     }
     if (r == null) {
       // No legal action from this position; let makeMove log "No legal actions available."
