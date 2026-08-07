@@ -60,12 +60,20 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
+Java builds need JDK 21: `export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
 
 ```bash
-# Example:
-# npm install
-# npm test
+./mvnw clean package        # build
+./mvnw test                 # Java tests
+./mvnw spotless:apply       # format (run before committing Java)
+./mvnw spotless:check       # verify formatting (CI enforces this)
+
+# Python tests (use the repo venv)
+.venv/bin/python -m unittest discover -s python/mcts -p "*_test.py"
+.venv/bin/python -m unittest discover -s python/v3 -p "*_test.py"
+
+# Before pushing Java changes: spotless:check + compile in one shot
+scripts/pre-push-check.sh
 ```
 
 ## Architecture Overview

@@ -178,6 +178,8 @@ stage_train() {
 # --- stage 3: gauntlet (candidate vs champion, fixed sims) -----------------------------
 stage_gauntlet() {
   ensure_cp
+  # Stale logs from a previous run with a higher GATE_INSTANCES would get pooled by stage_report.
+  rm -f "$GDIR"/logs/gauntlet_*.log
   echo ">> $GATE_INSTANCES x $GATE_GAMES games, candidate vs champion, $GATE_SIMS sims, seeds spaced 1000"
   local pids="" i seed
   for i in $(seq 0 $((GATE_INSTANCES - 1))); do
