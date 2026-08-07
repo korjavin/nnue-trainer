@@ -18,8 +18,8 @@
 #             (CLI: db out depth shardIdx shardCount) and the shards concatenated. train_net's
 #             .jsonl->.npz cache is mtime-validated, so a re-emitted dataset re-parses itself.
 #   train     python -m python.v3.train_net: one informational sweep per seed in $SEEDS
-#             (add --tempo with TEMPO=1 — informational only; train_net refuses to export
-#             1156-wide tempo nets, so the export run never gets the flag), then the export
+#             (TEMPO=1 adds --tempo to sweeps AND the export; the runtime loads 1156-wide
+#             tempo nets as of 2026-08-07), then the export
 #             run (--hidden $HIDDEN --seed $EXPORT_SEED) writes <workdir>/candidate_net.json.
 #             The candidate NEVER lands in the repo before the gate passes.
 #   verify    regenerate the parity fixture against the candidate, run V3NetParityTest (HARD
@@ -208,7 +208,8 @@ stage_dataset() {
 # --- stage 3: train --------------------------------------------------------------------
 stage_train() {
   local tempo_flag="" s
-  # --tempo is informational: train_net refuses to export 1156-wide nets (runtime is 1152).
+  # TEMPO=1 trains and EXPORTS 1156-wide tempo nets; the runtime loads them and queries
+  # evaluate(board, stm, movesLeft) (merged 2026-08-07).
   [ "$TEMPO" = 1 ] && tempo_flag="--tempo"
   for s in $SEEDS; do
     echo ">> sweep seed $s (H: $SWEEP)${tempo_flag:+ [tempo]}"
@@ -216,7 +217,7 @@ stage_train() {
       | tee "$WORK/logs/sweep_seed$s.log"
   done
   echo ">> exporting candidate: H=$HIDDEN seed=$EXPORT_SEED -> $CAND"
-  "$PY" -m python.v3.train_net "$DATASET" --hidden "$HIDDEN" --seed "$EXPORT_SEED" --out "$CAND" 2>&1 \
+  "$PY" -m python.v3.train_net "$DATASET" --hidden "$HIDDEN" --seed "$EXPORT_SEED" $tempo_flag --out "$CAND" 2>&1 \
     | tee "$WORK/logs/export.log"
   [ -s "$CAND" ] || die "training finished but $CAND was not written"
 }
