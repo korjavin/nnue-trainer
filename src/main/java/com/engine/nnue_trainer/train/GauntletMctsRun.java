@@ -86,6 +86,7 @@ public final class GauntletMctsRun {
     GauntletMatch.Config cfg = new GauntletMatch.Config();
     cfg.games = games;
     cfg.seed = seed;
+    cfg.recordDb = System.getenv("GAUNTLET_RECORD_DB"); // opt-in corpus recording (null = off)
     if (sims > 0) {
       cfg.moveMillis = 0;
       cfg.nodeLimit = 60_000L; // the clone's live budget — fixed-compute control

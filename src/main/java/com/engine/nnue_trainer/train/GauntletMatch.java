@@ -14,6 +14,7 @@ import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import com.engine.nnue_trainer.v3.V3Eval;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -88,6 +89,13 @@ public final class GauntletMatch {
     public long seed = 1L;
     public double epsilon = 0.15;
     public int exploreTurns = 8;
+
+    /**
+     * When set, every finished game is appended to this sqlite db in the games.db schema (see
+     * {@link GameRecorder}), so gauntlet games feed the training corpus instead of being discarded.
+     * Null (the default) records nothing.
+     */
+    public String recordDb = null;
   }
 
   private GauntletMatch() {}
@@ -121,24 +129,56 @@ public final class GauntletMatch {
   }
 
   private static Result playGames(Object modelA, Object modelB, Config config) {
-    int wins = 0;
-    int losses = 0;
-    int draws = 0;
-    for (int game = 0; game < config.games; game++) {
-      boolean aIsP1 = (game % 2 == 0);
-      // Same opening seed for the two colors of a pair → identical weights cancel exactly, while
-      // distinct pairs (game/2) explore distinct openings.
-      long gameSeed = deriveGameSeed(config.seed, game);
-      int winner = playGame(modelA, modelB, aIsP1, gameSeed, config);
-      if (winner == 0) {
-        draws++;
-      } else if ((winner == 1) == aIsP1) {
-        wins++;
-      } else {
-        losses++;
+    try (GameRecorder recorder =
+        config.recordDb != null ? new GameRecorder(config.recordDb) : null) {
+      int wins = 0;
+      int losses = 0;
+      int draws = 0;
+      String nameA = sideName(modelA, config);
+      String nameB = sideName(modelB, config);
+      for (int game = 0; game < config.games; game++) {
+        boolean aIsP1 = (game % 2 == 0);
+        // Same opening seed for the two colors of a pair → identical weights cancel exactly, while
+        // distinct pairs (game/2) explore distinct openings.
+        long gameSeed = deriveGameSeed(config.seed, game);
+        int winner = playGame(modelA, modelB, aIsP1, gameSeed, config, recorder, nameA, nameB);
+        if (winner == 0) {
+          draws++;
+        } else if ((winner == 1) == aIsP1) {
+          wins++;
+        } else {
+          losses++;
+        }
       }
+      return new Result(wins, losses, draws);
+    } catch (java.sql.SQLException e) {
+      throw new IllegalStateException("gauntlet recording failed: " + config.recordDb, e);
     }
-    return new Result(wins, losses, draws);
+  }
+
+  /**
+   * Compact, deterministic provenance name for a recorded game's player column: {@code
+   * gauntlet:<eval>:<budget>}, e.g. {@code gauntlet:v3net:250ms} or {@code gauntlet:ht:d3}.
+   */
+  static String sideName(Object side, Config config) {
+    String eval;
+    if (side == null) {
+      eval = "ht";
+    } else if (side instanceof MctsSide) {
+      MctsSide m = (MctsSide) side;
+      eval = m.sims > 0 ? "mcts:s" + m.sims : "mcts";
+    } else if (side instanceof NNUEv2Evaluator) {
+      eval = "nnue2";
+    } else if (side instanceof V3Eval) {
+      eval = side.getClass().getSimpleName().contains("Net") ? "v3net" : "v3lin";
+    } else {
+      eval = "nnue1";
+    }
+    String budget =
+        config.moveMillis > 0
+            ? config.moveMillis + "ms"
+            : config.fixedDepth > 0 ? "d" + config.fixedDepth : "n" + config.nodeLimit;
+    return "gauntlet:" + eval + ":" + budget;
   }
 
   /**
@@ -159,11 +199,21 @@ public final class GauntletMatch {
   }
 
   private static int playGame(
-      Object modelA, Object modelB, boolean aIsP1, long seed, Config config) {
+      Object modelA,
+      Object modelB,
+      boolean aIsP1,
+      long seed,
+      Config config,
+      GameRecorder recorder,
+      String nameA,
+      String nameB)
+      throws java.sql.SQLException {
     GoState state = GoState.fromBoard(freshBoard(), 1, GoState.ACTIONS_PER_TURN, new boolean[2]);
     int maxPlies = config.maxTurns * GoState.ACTIONS_PER_TURN;
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
     Random random = new Random(seed);
+    List<GameRecorder.Turn> turns = recorder != null ? new ArrayList<>() : null;
+    String startedAt = recorder != null ? GameRecorder.now() : null;
 
     for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
       List<Action> legal = state.legalActions();
@@ -197,7 +247,31 @@ public final class GauntletMatch {
         chosen = legal.get(0);
         next = state.apply(chosen);
       }
+      if (turns != null) {
+        // Group consecutive actions by mover — in 1v1 that IS the replayer's turn grouping (a turn
+        // ends exactly when currentPlayer flips, and a player never takes two turns in a row: with
+        // the opponent inactive GoState sets gameOver).
+        int mover = state.currentPlayer();
+        if (turns.isEmpty() || turns.get(turns.size() - 1).player != mover) {
+          turns.add(new GameRecorder.Turn(mover));
+        }
+        turns.get(turns.size() - 1).moves.add(chosen);
+      }
       state = next;
+    }
+    if (recorder != null) {
+      // A decided game stores GoState's winner under "no_moves". A maxTurns-capped game stays a
+      // DRAW for the match result below (unchanged), but is stored with outcomeWinner() — the
+      // territory-tiebreak label every self-play loop uses — under "turn_cap", so a corpus consumer
+      // that reads `result` gets the honest outcome label, not a fake draw.
+      boolean over = state.gameOver();
+      recorder.record(
+          aIsP1 ? nameA : nameB,
+          aIsP1 ? nameB : nameA,
+          over ? state.winner() : state.outcomeWinner(),
+          over ? "no_moves" : "turn_cap",
+          startedAt,
+          turns);
     }
     return state.gameOver() ? state.winner() : 0;
   }

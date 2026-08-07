@@ -76,6 +76,7 @@ public final class GauntletV2Run {
     GauntletMatch.Config cfg = new GauntletMatch.Config();
     cfg.games = games;
     cfg.seed = seed;
+    cfg.recordDb = System.getenv("GAUNTLET_RECORD_DB"); // opt-in corpus recording (null = off)
     if (nodeMode) {
       cfg.fixedDepth = 0;
       cfg.nodeLimit = nodeLimit;
