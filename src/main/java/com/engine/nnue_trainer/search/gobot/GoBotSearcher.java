@@ -123,6 +123,7 @@ public final class GoBotSearcher {
   long evaluations;
   long nodeLimit; // 0 == unlimited
   long deadlineMillis; // 0 == no wall-clock deadline
+  long fastPathCuts; // diagnostics: cut-nodes that never materialized their sibling list
 
   GoBotSearcher(int root, boolean multi) {
     this.root = root;
@@ -336,7 +337,7 @@ public final class GoBotSearcher {
 
   // --- search core ---
 
-  private GoResult atDepth(GoState state, int depth) {
+  GoResult atDepth(GoState state, int depth) {
     long key = state.hash();
     TableEntry rootEntry = probe(key);
     boolean hasRoot = rootEntry != null;
@@ -425,21 +426,59 @@ public final class GoBotSearcher {
         return entry.values[0];
       }
     }
-    List<Child> children = orderedChildren(state, hit ? entry.bestAction : null, hit);
-    if (children.isEmpty()) {
-      evaluations++;
-      return leafEval(state);
-    }
-
     long alphaOrig = alpha;
     long betaOrig = beta;
     boolean maximizing = state.currentPlayer() == root;
     long best = maximizing ? -INF_SCORE : INF_SCORE;
     Action bestAction = null;
+
+    // Staged move generation, stage A (plan item 1): with a TT best move in hand, apply and search
+    // ONLY that child before materializing the ~30 siblings — each sibling costs a full grid copy
+    // plus two flood fills in eliminateStuckPlayers, and at a cut-node all of that is thrown away.
+    // Move-identical to the unstaged search: the TT move's +10M ordering bonus already guarantees
+    // it is child 0, generation consumes no node/eval counters, and the minimax call sequence is
+    // unchanged — GoBotSearchParityTest/GoBotNodeBudgetParityTest pin this byte-exactly.
+    Action ttMove = hit ? entry.bestAction : null;
+    boolean searchedTTFirst = false;
+    if (ttMove instanceof MoveAction && ttMoveTargetPlausible(state, (MoveAction) ttMove)) {
+      searchedTTFirst = true;
+      long score = minimax(state.applyGenerated(ttMove), depth - 1, alpha, beta, ply + 1);
+      best = score;
+      bestAction = ttMove;
+      if (maximizing) {
+        if (best > alpha) {
+          alpha = best;
+        }
+      } else {
+        if (best < beta) {
+          beta = best;
+        }
+      }
+      if (alpha >= beta) {
+        fastPathCuts++;
+        int cutFlag = FLAG_EXACT;
+        if (best <= alphaOrig) {
+          cutFlag = FLAG_UPPER;
+        } else if (best >= betaOrig) {
+          cutFlag = FLAG_LOWER;
+        }
+        store(key, TableEntry.single(depth, ply, cutFlag, bestAction, (int) best));
+        return best;
+      }
+    }
+
+    List<Child> children = orderedChildren(state, ttMove, hit);
+    if (children.isEmpty() && !searchedTTFirst) {
+      evaluations++;
+      return leafEval(state);
+    }
     for (int i = 0; i < children.size(); i++) {
       Child child = children.get(i);
+      if (searchedTTFirst && child.action.equals(ttMove)) {
+        continue; // already searched full-window above
+      }
       long score;
-      if (i == 0) {
+      if (!searchedTTFirst && i == 0) {
         score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
       } else if (maximizing) {
         // Null-window scout: probe whether this sibling beats alpha.
@@ -540,6 +579,24 @@ public final class GoBotSearcher {
       this.state = state;
       this.order = order;
     }
+  }
+
+  /**
+   * Guard for the TT-move-first fast path. A full 64-bit key match means the stored best action was
+   * generated for this exact state, so it is legal and enumerable by {@code searchActions} — this
+   * cheap bounds/kind check only shields a genuine hash collision from crashing or corrupting the
+   * subtree (no BFS; connectivity is implied by the key match). PlaceNeutralsAction TT moves skip
+   * the fast path entirely: search actions enumerate only a strategic SUBSET of legal neutral
+   * pairs, so legality alone would not prove the move is part of the unstaged child list.
+   */
+  private static boolean ttMoveTargetPlausible(GoState state, MoveAction move) {
+    Pos t = move.target;
+    if (t.row < 0 || t.row >= state.rows() || t.col < 0 || t.col >= state.cols()) {
+      return false;
+    }
+    Cell cell = state.at(t.row, t.col);
+    return cell.kind == CellKind.EMPTY
+        || (cell.kind == CellKind.NORMAL && cell.owner != state.currentPlayer());
   }
 
   private List<Child> orderedChildren(GoState state, Action ttMove, boolean hasTT) {
