@@ -37,8 +37,14 @@ public final class GauntletMctsRun {
     MctsSearcher.Config mc = new MctsSearcher.Config();
     mc.cpuct = Double.parseDouble(sysval("MCTS_CPUCT", "1.5"));
     mc.valueScale = Double.parseDouble(sysval("MCTS_VALUE_SCALE", "12000"));
+    String priorPath = sysval("MCTS_PRIOR", "");
     String priorName = "uniform";
-    mc.prior = PolicyPrior.UNIFORM;
+    if (!priorPath.isBlank()) {
+      mc.prior = com.engine.nnue_trainer.mcts.PolicyNetPrior.load(java.nio.file.Path.of(priorPath));
+      priorName = priorPath;
+    } else {
+      mc.prior = PolicyPrior.UNIFORM;
+    }
 
     GauntletMatch.Config cfg = new GauntletMatch.Config();
     cfg.games = games;

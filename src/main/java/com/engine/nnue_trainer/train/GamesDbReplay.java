@@ -173,8 +173,8 @@ public final class GamesDbReplay {
     return board;
   }
 
-  /** Parse one stored move node into an engine action. */
-  private static Action parseAction(JsonNode move) {
+  /** Parse one stored move node into an engine action (shared with the per-action emitters). */
+  static Action parseAction(JsonNode move) {
     JsonNode typeNode = field(move, "type");
     if (typeNode == null) {
       throw new IllegalArgumentException("move has no type");
@@ -214,7 +214,7 @@ public final class GamesDbReplay {
    * Player}/{@code Moves}/{@code Type}/{@code Row}/{@code Col}/{@code Cells}); the live DB uses the
    * lowercase form.
    */
-  private static JsonNode field(JsonNode node, String name) {
+  static JsonNode field(JsonNode node, String name) {
     JsonNode value = node.get(name);
     return value != null
         ? value
