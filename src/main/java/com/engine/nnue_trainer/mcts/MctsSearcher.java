@@ -43,6 +43,12 @@ public final class MctsSearcher {
 
     public PolicyPrior prior = PolicyPrior.UNIFORM;
 
+    /**
+     * Trained value head ({@code MCTS_VALUE=net}): mover-frame tanh value from the artifact's
+     * {@code value_head}; {@code null} falls back to the hand-tuned leaf above.
+     */
+    public PolicyNetPrior valueNet = null;
+
     /** Dirichlet root noise — self-play exploration only; OFF in play mode. */
     public boolean rootNoise = false;
 
@@ -168,7 +174,7 @@ public final class MctsSearcher {
       }
       if (node.actions == null) {
         expand(node);
-        vAbs = node.terminal ? node.terminalValueAbs : leafValueAbs(node.state, config.valueScale);
+        vAbs = node.terminal ? node.terminalValueAbs : leafValue(node.state);
         break;
       }
       int a = select(node);
@@ -231,6 +237,21 @@ public final class MctsSearcher {
       }
     }
     return best;
+  }
+
+  /**
+   * Leaf value in the absolute frame: the trained value head when configured, else the hand-tuned
+   * eval. Both are queried in the leaf's own mover frame and fixed to positive-is-good-for-player-1
+   * with the mover sign — the single flip point (the v3 lesson).
+   */
+  private double leafValue(GoState state) {
+    if (config.valueNet == null) {
+      return leafValueAbs(state, config.valueScale);
+    }
+    double v = config.valueNet.valueMover(state);
+    // ponytail: this re-runs the trunk the prior already ran at expansion; fuse the two
+    // forwards if self-play throughput misses G2's 300 games/h bar.
+    return state.currentPlayer() == 1 ? v : -v;
   }
 
   /**

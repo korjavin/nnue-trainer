@@ -27,6 +27,11 @@ import java.util.List;
  * <p>Heads: 144 move logits (one per {@code MoveAction} target) and 144 per-cell utilities {@code
  * u} with {@code logit(PlaceNeutrals{i,j}) = u[i] + u[j] + b_pair} (factored pair head). The prior
  * is the softmax over the node's legal actions only.
+ *
+ * <p>Phase 2 artifacts additionally carry a {@code value_head} section (GAP over trunk channels →
+ * dense → 1, tanh; exported by {@code python/mcts/train_selfplay.py}) — a <b>mover-frame</b> value
+ * in [-1, 1] served via {@link #valueMover}. Artifacts without it still load ({@link
+ * #hasValueHead} is false) and the searcher falls back to the hand-tuned leaf.
  */
 public final class PolicyNetPrior implements PolicyPrior {
 
@@ -44,6 +49,11 @@ public final class PolicyNetPrior implements PolicyPrior {
   private final double[] pairW; // [channels]
   private final double pairB;
   private final double pairBias;
+  // Optional value head (null when the artifact has none): GAP -> fc1 (relu) -> fc2 -> tanh.
+  private final double[] valueFc1W; // [hidden * channels]
+  private final double[] valueFc1B; // [hidden]
+  private final double[] valueFc2W; // [hidden]
+  private final double valueFc2B;
 
   private PolicyNetPrior(
       int channels,
@@ -54,7 +64,11 @@ public final class PolicyNetPrior implements PolicyPrior {
       double moveB,
       double[] pairW,
       double pairB,
-      double pairBias) {
+      double pairBias,
+      double[] valueFc1W,
+      double[] valueFc1B,
+      double[] valueFc2W,
+      double valueFc2B) {
     this.channels = channels;
     this.layers = layers;
     this.convW = convW;
@@ -64,6 +78,36 @@ public final class PolicyNetPrior implements PolicyPrior {
     this.pairW = pairW;
     this.pairB = pairB;
     this.pairBias = pairBias;
+    this.valueFc1W = valueFc1W;
+    this.valueFc1B = valueFc1B;
+    this.valueFc2W = valueFc2W;
+    this.valueFc2B = valueFc2B;
+  }
+
+  public boolean hasValueHead() {
+    return valueFc1W != null;
+  }
+
+  /**
+   * Trained value for the position in its own mover's frame (tanh, [-1, 1]) — the exact frame the
+   * trainer's targets are in ({@code z_mover = z_abs} flipped by mover, the v3 lesson). Callers
+   * convert to the absolute frame with the mover sign, same as {@code MctsSearcher.leafValueAbs}.
+   */
+  public double valueMover(GoState state) {
+    Board board = state.toBoard();
+    int mover = state.currentPlayer();
+    int[] sym = new int[CELLS];
+    for (int r = 0; r < BOARD; r++) {
+      for (int c = 0; c < BOARD; c++) {
+        sym[r * BOARD + c] = PatternContract.getSymbol(board.getCell(r, c), mover);
+      }
+    }
+    return forward(
+            sym,
+            state.movesLeft(),
+            state.neutralUsed(mover) ? 1 : 0,
+            state.neutralUsed(3 - mover) ? 1 : 0)
+        .value;
   }
 
   @Override
@@ -116,10 +160,12 @@ public final class PolicyNetPrior implements PolicyPrior {
   static final class Heads {
     final double[] move; // [144]
     final double[] pairU; // [144]
+    final double value; // mover-frame tanh value; NaN when the artifact has no value head
 
-    Heads(double[] move, double[] pairU) {
+    Heads(double[] move, double[] pairU, double value) {
       this.move = move;
       this.pairU = pairU;
+      this.value = value;
     }
   }
 
@@ -148,7 +194,31 @@ public final class PolicyNetPrior implements PolicyPrior {
     }
     double[] move = head(x, moveW, moveB);
     double[] pairU = head(x, pairW, pairB);
-    return new Heads(move, pairU);
+    return new Heads(move, pairU, valueFc1W == null ? Double.NaN : value(x));
+  }
+
+  /** Value head on the final trunk activation: GAP per channel -> fc1 relu -> fc2 -> tanh. */
+  private double value(double[] x) {
+    double[] gap = new double[channels];
+    for (int ch = 0; ch < channels; ch++) {
+      double sum = 0;
+      for (int i = 0; i < CELLS; i++) {
+        sum += x[ch * CELLS + i];
+      }
+      gap[ch] = sum / CELLS;
+    }
+    int hidden = valueFc1B.length;
+    double out = valueFc2B;
+    for (int h = 0; h < hidden; h++) {
+      double acc = valueFc1B[h];
+      for (int ch = 0; ch < channels; ch++) {
+        acc += valueFc1W[h * channels + ch] * gap[ch];
+      }
+      if (acc > 0) {
+        out += valueFc2W[h] * acc;
+      }
+    }
+    return Math.tanh(out);
   }
 
   private static final int PADDED = BOARD + 2;
@@ -283,6 +353,32 @@ public final class PolicyNetPrior implements PolicyPrior {
     }
     double[] moveW = headWeights(root.path("move_head"), channels, weightsJson);
     double[] pairW = headWeights(root.path("pair_head"), channels, weightsJson);
+
+    // Optional Phase 2 value head — absent in policy-only artifacts.
+    double[] valueFc1W = null;
+    double[] valueFc1B = null;
+    double[] valueFc2W = null;
+    double valueFc2B = 0;
+    JsonNode vh = root.path("value_head");
+    if (!vh.isMissingNode() && !vh.isNull()) {
+      JsonNode fc1w = vh.path("fc1_w");
+      if (!fc1w.isArray() || fc1w.size() == 0) {
+        throw new IOException("policy net: value_head.fc1_w missing/empty in " + weightsJson);
+      }
+      int hidden = fc1w.size();
+      valueFc1W = new double[hidden * channels];
+      for (int h = 0; h < hidden; h++) {
+        double[] row = vector(fc1w.get(h), channels, "value_head.fc1_w[" + h + "]", weightsJson);
+        System.arraycopy(row, 0, valueFc1W, h * channels, channels);
+      }
+      valueFc1B = vector(vh.path("fc1_b"), hidden, "value_head.fc1_b", weightsJson);
+      valueFc2W = vector(vh.path("fc2_w"), hidden, "value_head.fc2_w", weightsJson);
+      JsonNode b2 = vh.path("fc2_b");
+      if (!b2.isNumber() || !Double.isFinite(b2.doubleValue())) {
+        throw new IOException("policy net: value_head.fc2_b not finite in " + weightsJson);
+      }
+      valueFc2B = b2.doubleValue();
+    }
     return new PolicyNetPrior(
         channels,
         layers,
@@ -292,7 +388,11 @@ public final class PolicyNetPrior implements PolicyPrior {
         root.path("move_head").path("b").doubleValue(),
         pairW,
         root.path("pair_head").path("b").doubleValue(),
-        root.path("pair_bias").doubleValue());
+        root.path("pair_bias").doubleValue(),
+        valueFc1W,
+        valueFc1B,
+        valueFc2W,
+        valueFc2B);
   }
 
   /** A 1x1-conv head's weights: torch shape [1][channels][1][1] flattened to [channels]. */

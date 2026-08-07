@@ -2,7 +2,9 @@ package com.engine.nnue_trainer.train;
 
 import com.engine.nnue_trainer.mcts.MctsSearcher;
 import com.engine.nnue_trainer.mcts.MctsSide;
+import com.engine.nnue_trainer.mcts.PolicyNetPrior;
 import com.engine.nnue_trainer.mcts.PolicyPrior;
+import java.nio.file.Path;
 
 /**
  * Phase 1 gauntlet (plan 20260807-mcts-az-feasibility, gate G1): the PUCT/MCTS searcher (side A) vs
@@ -23,10 +25,23 @@ import com.engine.nnue_trainer.mcts.PolicyPrior;
  * (default 12000), {@code MCTS_PRIOR=<policy weights json>} for the trained prior (default
  * uniform). Gate G1: best arm ≥15% at 1 s/move over 400 games, seed ranges spaced ≥1000 between
  * runs (bead riy).
+ *
+ * <p>Phase 2 knobs: {@code MCTS_PRIOR_B=<weights json>} replaces the clone with a <b>second MCTS
+ * side</b> playing that artifact — the net-vs-net generation gate (same additive pattern as
+ * {@code GauntletV3Run}'s {@code MATCHUP=netb}). {@code MCTS_VALUE=net} makes each side use its
+ * own artifact's value head when present (hand-tuned fallback otherwise). In B mode the run also
+ * prints a {@code PROMOTE}/{@code KEEP} verdict at {@code MCTS_GATE} (default 0.55, the plan's
+ * ≥55% promotion bar; draws count 0.5).
  */
 public final class GauntletMctsRun {
 
   private GauntletMctsRun() {}
+
+  /** The generation gate: promote iff (W + 0.5·D) / N ≥ threshold. */
+  static boolean promote(int wins, int losses, int draws, double threshold) {
+    int n = wins + losses + draws;
+    return n > 0 && (wins + 0.5 * draws) / n >= threshold;
+  }
 
   public static void main(String[] args) throws Exception {
     int games = args.length > 0 ? Integer.parseInt(args[0]) : 400;
@@ -34,16 +49,38 @@ public final class GauntletMctsRun {
     long seed = args.length > 2 ? Long.parseLong(args[2]) : 11L;
     int sims = args.length > 3 ? Integer.parseInt(args[3]) : 0;
 
+    boolean valueNet = "net".equals(sysval("MCTS_VALUE", ""));
     MctsSearcher.Config mc = new MctsSearcher.Config();
     mc.cpuct = Double.parseDouble(sysval("MCTS_CPUCT", "1.5"));
     mc.valueScale = Double.parseDouble(sysval("MCTS_VALUE_SCALE", "12000"));
     String priorPath = sysval("MCTS_PRIOR", "");
     String priorName = "uniform";
     if (!priorPath.isBlank()) {
-      mc.prior = com.engine.nnue_trainer.mcts.PolicyNetPrior.load(java.nio.file.Path.of(priorPath));
-      priorName = priorPath;
+      PolicyNetPrior prior = PolicyNetPrior.load(Path.of(priorPath));
+      mc.prior = prior;
+      if (valueNet && prior.hasValueHead()) {
+        mc.valueNet = prior;
+      }
+      priorName = priorPath + (mc.valueNet != null ? "+value" : "");
     } else {
       mc.prior = PolicyPrior.UNIFORM;
+    }
+
+    // Side B: the hand-tuned clone by default, or a second MCTS artifact (net-vs-net gate).
+    String priorBPath = sysval("MCTS_PRIOR_B", "");
+    Object sideB = null;
+    String sideBName = "hand-tuned clone";
+    if (!priorBPath.isBlank()) {
+      MctsSearcher.Config mb = new MctsSearcher.Config();
+      mb.cpuct = mc.cpuct;
+      mb.valueScale = mc.valueScale;
+      PolicyNetPrior priorB = PolicyNetPrior.load(Path.of(priorBPath));
+      mb.prior = priorB;
+      if (valueNet && priorB.hasValueHead()) {
+        mb.valueNet = priorB;
+      }
+      sideB = new MctsSide(mb, sims);
+      sideBName = "MCTS " + priorBPath + (mb.valueNet != null ? "+value" : "");
     }
 
     GauntletMatch.Config cfg = new GauntletMatch.Config();
@@ -58,19 +95,28 @@ public final class GauntletMctsRun {
     }
 
     String mode =
-        sims > 0 ? ("fixed-compute sims=" + sims + " vs 60k nodes") : (moveMs + " ms/move");
+        sims > 0
+            ? (sideB != null
+                ? ("fixed-compute sims=" + sims + " both sides")
+                : ("fixed-compute sims=" + sims + " vs 60k nodes"))
+            : (moveMs + " ms/move");
     System.out.printf(
-        "=== MCTS (prior=%s, cpuct=%.2f, scale=%.0f) vs hand-tuned clone: %d games, %s, seed %d ===%n",
-        priorName, mc.cpuct, mc.valueScale, cfg.games, mode, seed);
+        "=== MCTS (prior=%s, cpuct=%.2f, scale=%.0f) vs %s: %d games, %s, seed %d ===%n",
+        priorName, mc.cpuct, mc.valueScale, sideBName, cfg.games, mode, seed);
 
     long t0 = System.currentTimeMillis();
-    GauntletMatch.Result r = GauntletMatch.play(new MctsSide(mc, sims), null, cfg);
+    GauntletMatch.Result r = GauntletMatch.play(new MctsSide(mc, sims), sideB, cfg);
     double secs = (System.currentTimeMillis() - t0) / 1000.0;
     int n = r.wins + r.losses + r.draws;
     double winPct = 100.0 * (r.wins + 0.5 * r.draws) / n;
     System.out.printf(
         "MCTS %d-%d-%d (W-L-D) of %d, win%% %.1f (margin %+d) in %.0fs%n",
         r.wins, r.losses, r.draws, n, winPct, r.margin(), secs);
+    if (sideB != null) {
+      double gate = Double.parseDouble(sysval("MCTS_GATE", "0.55"));
+      System.out.printf(
+          "gate %.0f%%: %s%n", 100 * gate, promote(r.wins, r.losses, r.draws, gate) ? "PROMOTE" : "KEEP");
+    }
   }
 
   private static String sysval(String key, String fallback) {
