@@ -197,7 +197,10 @@ stage_dataset() {
     done
     local p
     for p in $pids; do wait "$p" || die "deep-label shard failed — see $WORK/logs/deep_*.log"; done
-    cat "$WORK"/deep_shard_*.jsonl > "$DATASET"
+    # train_net requires globally sorted pos_id; shard concatenation interleaves game-indexed ids.
+    cat "$WORK"/deep_shard_*.jsonl \
+      | "$PY" -c 'import sys,json; rows=sys.stdin.readlines(); rows.sort(key=lambda l: json.loads(l)["pos_id"]); sys.stdout.writelines(rows)' \
+      > "$DATASET"
   else
     java -cp "$CP" "$TRAIN_PKG.V3SiblingDatasetEmitter" "$DB" "$DATASET" 2>&1 \
       | tee "$WORK/logs/emit.log"
