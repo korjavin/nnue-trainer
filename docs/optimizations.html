@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Virus Bot Searches — Every Optimization, Explained</title>
+<style>
+  :root {
+    --bg: #fdfdfc; --fg: #1a1d21; --muted: #5c646e; --card: #f1f2f4;
+    --accent: #2563eb; --good: #15803d; --bad: #b91c1c; --border: #d8dce1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e6e8ea; --muted: #9aa3ad; --card: #1e2328;
+      --accent: #60a5fa; --good: #4ade80; --bad: #f87171; --border: #30363d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .4rem; }
+  h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
+  p, li { color: var(--fg); }
+  .sub { color: var(--muted); margin: 0 0 1.8rem; }
+  a { color: var(--accent); }
+  code {
+    background: var(--card); border-radius: 4px; padding: .1em .35em;
+    font-size: .88em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
+  th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .win { color: var(--good); font-weight: 600; }
+  .loss { color: var(--bad); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+  .fig {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1rem .7rem; margin: 1.2rem 0; overflow-x: auto;
+  }
+  .fig svg { display: block; margin: 0 auto; min-width: 620px; }
+  .fig .cap { color: var(--muted); font-size: .88rem; margin: .7rem 0 0; min-width: 0; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: var(--fg); }
+  svg text.m { fill: var(--muted); font-size: 12px; }
+  svg text.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  svg .edge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+  svg .dead { stroke: var(--border); stroke-dasharray: 4 3; }
+  .toc { columns: 2; font-size: .95rem; }
+  @media (max-width: 40rem) { .toc { columns: 1; } }
+  .callout {
+    background: var(--card); border-left: 4px solid var(--accent);
+    padding: .8rem 1rem; border-radius: 6px;
+  }
+  footer { margin-top: 3.5rem; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--border); padding-top: 1.2rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How the Virus Bot Searches</h1>
+  <p class="sub">Every search and evaluation optimization in the engine, explained from the actual
+  code — what it is, why it pays <em>in this game</em>, and a picture of the mechanism.
+  Companion to the <a href="index.html">project overview</a>.</p>
+
+  <p>The Virus game is a 12×12 territory game with a twist that shapes every design decision
+  below: <strong>each turn grants three actions</strong> (<code>GoState.ACTIONS_PER_TURN = 3</code>),
+  so consecutive search plies usually do <em>not</em> alternate players — measured on real games,
+  only 47.1% of moves end a turn and flip the mover. The main engine,
+  <code>GoBotSearcher</code>, is a classic alpha-beta searcher with ~29.6 legal moves per position
+  on average and a 1-second budget per action
+  (<code>PRODUCTION_BUDGET_MILLIS = 1000</code>). A search "ply" is one <em>action</em>, not one
+  turn. Everything below exists to squeeze more decision quality out of that second.</p>
+
+  <ul class="toc">
+    <li><a href="#ab">1. Alpha-beta pruning</a></li>
+    <li><a href="#ordering">2. Move ordering</a></li>
+    <li><a href="#pvs">3. PVS null-window scouts</a></li>
+    <li><a href="#id">4. Iterative deepening &amp; budgets</a></li>
+    <li><a href="#hash">5. Position hashing</a></li>
+    <li><a href="#tt">6. The transposition table</a></li>
+    <li><a href="#landing">7. Landing now: staged movegen, packed TT, killers</a></li>
+    <li><a href="#nnue">8. The NNUE sparse trick</a></li>
+    <li><a href="#puct">9. MCTS with PUCT</a></li>
+    <li><a href="#frame">10. Absolute-frame backup</a></li>
+    <li><a href="#measure">11. Measurement discipline</a></li>
+  </ul>
+
+  <h2 id="ab">1. Alpha-beta pruning — don't finish refuted moves</h2>
+  <p><strong>What.</strong> Plain minimax evaluates every leaf of the game tree. Alpha-beta keeps
+  two running bounds while it searches — <em>α</em>, the score the maximizing side is already
+  guaranteed, and <em>β</em>, the ceiling the minimizing side will allow — and stops searching a
+  node the moment its score can no longer influence the choice above it. Same answer as minimax,
+  a fraction of the work.</p>
+  <p><strong>Why it pays here.</strong> With ~29.6 children per node, an unpruned depth-4 search
+  visits ~770,000 leaves; with perfect ordering alpha-beta needs roughly the square root. In
+  <code>GoBotSearcher.minimax</code> the cutoff is the <code>if (alpha &gt;= beta) break;</code>
+  after each child — and because the root player can move three times in a row, the code is
+  root-relative minimax (<code>maximizing = state.currentPlayer() == root</code>) rather than the
+  textbook negamax that assumes strict alternation. The improvement plan explicitly declined a
+  negamax rewrite: this repo already lost strength once to a score-frame refactor.</p>
+  <div class="fig">
+    <svg viewBox="0 0 640 270" width="640" height="270" role="img" aria-label="Alpha-beta cutoff on a small game tree">
+      <!-- root -->
+      <rect x="300" y="14" width="40" height="28" rx="4" fill="var(--accent)" opacity="0.25" stroke="var(--accent)"/>
+      <text x="320" y="33" text-anchor="middle">max</text>
+      <text x="365" y="33" class="m">picks 5 (child R)</text>
+      <!-- edges root->children -->
+      <line class="edge" x1="308" y1="42" x2="122" y2="96"/>
+      <line class="edge" x1="320" y1="42" x2="320" y2="96"/>
+      <line class="edge" x1="332" y1="42" x2="518" y2="96"/>
+      <!-- min children -->
+      <circle cx="120" cy="112" r="17" fill="none" stroke="var(--fg)"/>
+      <text x="120" y="117" text-anchor="middle">4</text>
+      <circle cx="320" cy="112" r="17" fill="none" stroke="var(--fg)"/>
+      <text x="320" y="117" text-anchor="middle">≤3</text>
+      <circle cx="520" cy="112" r="17" fill="none" stroke="var(--good)"/>
+      <text x="520" y="117" text-anchor="middle" fill="var(--good)">5</text>
+      <text x="120" y="87" class="m" text-anchor="middle">min</text>
+      <text x="320" y="87" class="m" text-anchor="middle">min</text>
+      <text x="520" y="87" class="m" text-anchor="middle">min</text>
+      <!-- L leaves -->
+      <line class="edge" x1="112" y1="127" x2="66" y2="188"/>
+      <line class="edge" x1="120" y1="129" x2="120" y2="188"/>
+      <line class="edge" x1="128" y1="127" x2="174" y2="188"/>
+      <text x="65" y="206" text-anchor="middle">5</text>
+      <text x="120" y="206" text-anchor="middle">4</text>
+      <text x="175" y="206" text-anchor="middle">7</text>
+      <text x="120" y="232" class="m" text-anchor="middle">searched → 4, so α = 4</text>
+      <!-- M leaves: first searched, rest pruned -->
+      <line class="edge" x1="312" y1="127" x2="266" y2="188"/>
+      <line class="edge dead" x1="320" y1="129" x2="320" y2="188"/>
+      <line class="edge dead" x1="328" y1="127" x2="374" y2="188"/>
+      <text x="265" y="206" text-anchor="middle">3</text>
+      <text x="320" y="206" text-anchor="middle" fill="var(--border)">?</text>
+      <text x="374" y="206" text-anchor="middle" fill="var(--border)">?</text>
+      <text x="320" y="232" class="m" text-anchor="middle">first leaf 3 ≤ α → min is ≤ 3,</text>
+      <text x="320" y="248" class="m" text-anchor="middle">can't beat 4 — rest pruned</text>
+      <!-- R leaves -->
+      <line class="edge" x1="512" y1="127" x2="466" y2="188"/>
+      <line class="edge" x1="520" y1="129" x2="520" y2="188"/>
+      <line class="edge" x1="528" y1="127" x2="574" y2="188"/>
+      <text x="465" y="206" text-anchor="middle">6</text>
+      <text x="520" y="206" text-anchor="middle">9</text>
+      <text x="574" y="206" text-anchor="middle">5</text>
+      <text x="520" y="232" class="m" text-anchor="middle">searched → 5 &gt; α, new best</text>
+    </svg>
+    <p class="cap">The middle subtree is abandoned after one leaf: its minimum is already ≤ 3,
+    and the root has a guaranteed 4. Greyed edges are never generated. The better the first move
+    tried, the more of the tree dies this way — which is why move ordering (next) matters
+    so much.</p>
+  </div>
+
+  <h2 id="ordering">2. Move ordering — try the likely-best move first</h2>
+  <p><strong>What.</strong> Alpha-beta prunes most when the best move is searched first: a strong
+  first child raises α immediately and refutes every sibling cheaply. So before searching,
+  <code>GoBotSearcher.orderedChildren</code> scores each move with heuristic bonuses and stable-sorts
+  descending.</p>
+  <p><strong>Why it pays here.</strong> The bonuses form deliberate magnitude tiers, so a higher
+  tier can never be outvoted by lower ones. The audit behind the current improvement plan found
+  that with the TT move first, most cut-nodes never look past child 1 — the whole point at
+  ~30-wide branching.</p>
+  <div class="fig">
+    <svg viewBox="0 0 640 210" width="640" height="210" role="img" aria-label="Move ordering bonus tiers, log scale">
+      <text x="18" y="20" class="m">bonus (log scale) — tiers from orderedChildren</text>
+      <!-- log10 scale: 100->2, 10k->4, 100k->5, 1M->6, 10M->7; bar length = log10 * 72 -->
+      <g>
+        <rect x="215" y="36"  width="504" height="20" rx="3" fill="var(--accent)" opacity="0.85"/>
+        <text x="18" y="51">TT move</text><text class="mono" x="222" y="51" fill="#fff">+10,000,000</text>
+        <rect x="215" y="66"  width="432" height="20" rx="3" fill="var(--accent)" opacity="0.65"/>
+        <text x="18" y="81">immediate win for the mover</text><text class="mono" x="222" y="81" fill="#fff">+1,000,000</text>
+        <rect x="215" y="96"  width="360" height="20" rx="3" fill="var(--accent)" opacity="0.5"/>
+        <text x="18" y="111">eliminates a player</text><text class="mono" x="222" y="111">+100,000 ×</text>
+        <rect x="215" y="126" width="288" height="20" rx="3" fill="var(--accent)" opacity="0.38"/>
+        <text x="18" y="141">captures an enemy cell</text><text class="mono" x="222" y="141">+10,000</text>
+        <rect x="215" y="156" width="144" height="20" rx="3" fill="var(--accent)" opacity="0.28"/>
+        <text x="18" y="171">keeps the turn (mover unchanged)</text><text class="mono" x="222" y="171">+100</text>
+      </g>
+      <text x="18" y="198" class="m">ties keep stable board order — a determinism requirement inherited from the GoBot parity fixtures</text>
+    </svg>
+    <p class="cap">The tiers in <code>orderedChildren</code>. Note the game-specific entries:
+    "eliminates a player" (destroying a base or stranding an opponent) and "keeps the turn" —
+    a bonus that only makes sense in a 3-actions-per-turn game, nudging the search to look at
+    plans that retain the initiative.</p>
+  </div>
+  <p>What's missing is anything <em>learned during the search</em> — no killer moves, no history
+  table. That gap is item 3 of the plan in <a href="#landing">section 7</a>.</p>
+
+  <h2 id="pvs">3. PVS — prove siblings worse with a zero-width window</h2>
+  <p><strong>What.</strong> Principal Variation Search bets on the move ordering: search the first
+  child with the full (α, β) window, then probe every sibling with a <em>null window</em>
+  (α, α+1) — a window so narrow it cannot measure a score, only answer "is this better than α,
+  yes or no?". A "no" is much cheaper than a full search. A "yes" triggers a full-window
+  re-search to get the real score.</p>
+  <p><strong>Why it pays here.</strong> In <code>GoBotSearcher.minimax</code> that is literally
+  <code>minimax(child, depth-1, alpha, alpha+1, ply+1)</code> followed by a conditional re-search
+  when <code>score &gt; alpha &amp;&amp; score &lt; beta</code> (mirrored as (β−1, β) at
+  minimizing nodes — the root-relative frame again). With ~29 siblings behind child 1 and a
+  usually-correct TT move in front, almost all of the tree is these cheap refutations. At the root
+  <code>atDepth</code> flags a fail-low scout result as <code>exact = false</code> so downstream
+  consumers never treat a bound as a real score.</p>
+  <div class="fig">
+    <svg viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="PVS null window on the score axis">
+      <line x1="50" y1="52" x2="600" y2="52" stroke="var(--muted)" stroke-width="1.5"/>
+      <!-- alpha and beta -->
+      <line x1="200" y1="38" x2="200" y2="66" stroke="var(--fg)" stroke-width="2"/>
+      <line x1="480" y1="38" x2="480" y2="66" stroke="var(--fg)" stroke-width="2"/>
+      <text x="200" y="30" text-anchor="middle">α</text>
+      <text x="480" y="30" text-anchor="middle">β</text>
+      <rect x="200" y="44" width="280" height="16" fill="var(--accent)" opacity="0.15"/>
+      <text x="340" y="30" class="m" text-anchor="middle">full window: child 1 only</text>
+      <!-- null window sliver -->
+      <rect x="200" y="44" width="8" height="16" fill="var(--accent)"/>
+      <text x="212" y="80" class="m">null window (α, α+1): every other sibling</text>
+      <!-- outcomes -->
+      <text x="50" y="116">score ≤ α</text>
+      <text x="220" y="116" class="m">fail low — refuted for one narrow search. The common case.</text>
+      <text x="50" y="146">α &lt; score &lt; β</text>
+      <text x="220" y="146" class="m">surprise: ordering was wrong — re-search with the full window.</text>
+      <text x="50" y="176">score ≥ β</text>
+      <text x="220" y="176" class="m">fail high — cutoff; the score is a bound, good enough to prune.</text>
+    </svg>
+    <p class="cap">The null window is one point wide, so the search inside it prunes maximally —
+    every node in it is itself a cut-node. The bet loses only when a sibling lands strictly
+    inside (α, β), costing one re-search; good ordering keeps that rare.</p>
+  </div>
+
+  <h2 id="id">4. Iterative deepening — a search you can interrupt honestly</h2>
+  <p><strong>What.</strong> Instead of committing to one depth, search depth 1, then 2, then 3…
+  until the budget runs out, and answer with the deepest <em>fully completed</em> iteration.
+  Sounds wasteful; isn't — each iteration is ~branching-factor times bigger than the last, so all
+  previous iterations cost a rounding error, and each one seeds the TT with best moves that make
+  the next one prune far better.</p>
+  <p><strong>Why it pays here.</strong> <code>chooseWithDeadline</code> loops
+  <code>atDepth(state, depth)</code> for depth 1…64 with an absolute epoch-millis deadline;
+  <code>running()</code> checks it (and the optional node budget) at every node and throws
+  <code>SearchIncomplete</code> to abort. The contract — enforced by a dedicated consistency
+  test — is that a partial iteration can never override the last complete one. If not even
+  depth 1 finishes, a <code>preservingFallback</code> action (any legal move that doesn't
+  self-eliminate) is returned. Before any of this runs, <code>GoOpeningBook</code> checks for the
+  one fully-forced phase of the game — the canonical first-turn "wedge" placement — and
+  short-circuits the search entirely.</p>
+  <div class="fig">
+    <svg viewBox="0 0 660 130" width="660" height="130" role="img" aria-label="Iterative deepening timeline within a one second budget">
+      <line x1="30" y1="70" x2="640" y2="70" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="30" y="94" class="m">0 ms</text>
+      <text x="610" y="94" class="m">1000 ms</text>
+      <line x1="630" y1="30" x2="630" y2="80" stroke="var(--bad)" stroke-width="2" stroke-dasharray="5 3"/>
+      <text x="626" y="22" class="m" text-anchor="end" fill="var(--bad)">deadline</text>
+      <!-- blocks: book, d1..d4 complete, d5 partial -->
+      <rect x="30" y="50" width="4" height="20" fill="var(--good)"/>
+      <text x="30" y="44" class="m">book?</text>
+      <rect x="38" y="50" width="6" height="20" fill="var(--accent)" opacity="0.35"/>
+      <rect x="48" y="50" width="16" height="20" fill="var(--accent)" opacity="0.45"/>
+      <rect x="68" y="50" width="60" height="20" fill="var(--accent)" opacity="0.6"/>
+      <rect x="132" y="50" width="230" height="20" fill="var(--accent)" opacity="0.8"/>
+      <text x="240" y="44" class="m" text-anchor="middle">depth 4 — completes → this is the answer</text>
+      <rect x="366" y="50" width="264" height="20" fill="none" stroke="var(--border)" stroke-dasharray="4 3"/>
+      <text x="500" y="44" class="m" text-anchor="middle">depth 5 — cut mid-search, discarded</text>
+      <text x="41" y="118" class="m">d1</text>
+      <text x="53" y="118" class="m">d2</text>
+      <text x="92" y="118" class="m">d3</text>
+    </svg>
+    <p class="cap">Each iteration dwarfs the previous one (roughly ×effective-branching-factor),
+    so depths 1–3 together are almost free. Today the partial depth-5 work is thrown away
+    entirely — the plan's time-management item would keep the root moves it finished and skip
+    doomed iterations (don't start d+1 past ~55% of budget).</p>
+  </div>
+
+  <h2 id="hash">5. Position hashing — a 64-bit name for every position</h2>
+  <p><strong>What.</strong> The transposition table needs a fast fixed-size key per position.
+  Chess engines usually use Zobrist hashing (XOR of per-(cell,state) random numbers, updatable
+  incrementally). <strong>This engine does not:</strong> <code>GoState.hash()</code> is an
+  <em>FNV-1a</em> hash — start from a constant, then for each byte
+  <code>hash ^= byte; hash *= 0x100000001B3</code> — recomputed over the full state at every
+  node, byte-for-byte identical to the original GoBot so the two engines' tables agree. The
+  improvement plan looked at switching to incremental Zobrist and declined: the rescan is ~150
+  cheap operations, dwarfed by the ~60 flood-fills of move generation.</p>
+  <p><strong>Why it pays here — the 3-actions-per-turn subtlety.</strong> The board alone is
+  <em>not</em> the position. Two identical grids are different situations if the mover differs,
+  if the mover has 2 actions left instead of 3, or if a player has already spent their once-per-game
+  neutral-wall placement. So the hash folds in, before the 144 cell bytes:
+  <code>rows</code>, <code>cols</code>, <code>current</code>, <code>movesLeft</code>, and
+  per-player <code>active</code>/<code>neutralUsed</code> flags. Miss any of these and the TT
+  silently returns scores for the wrong situation.</p>
+  <div class="fig">
+    <svg viewBox="0 0 660 120" width="660" height="120" role="img" aria-label="FNV-1a hash input stream">
+      <g>
+        <rect x="14" y="30" width="44" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="36" y="48" class="mono" text-anchor="middle">rows</text>
+        <rect x="62" y="30" width="44" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="84" y="48" class="mono" text-anchor="middle">cols</text>
+        <rect x="110" y="30" width="62" height="26" rx="4" fill="var(--accent)" opacity="0.25" stroke="var(--accent)"/><text x="141" y="48" class="mono" text-anchor="middle">current</text>
+        <rect x="176" y="30" width="78" height="26" rx="4" fill="var(--accent)" opacity="0.25" stroke="var(--accent)"/><text x="215" y="48" class="mono" text-anchor="middle">movesLeft</text>
+        <rect x="258" y="30" width="120" height="26" rx="4" fill="var(--accent)" opacity="0.25" stroke="var(--accent)"/><text x="318" y="48" class="mono" text-anchor="middle">active|neutral ×4</text>
+        <rect x="382" y="30" width="96" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="430" y="48" class="mono" text-anchor="middle">cell(0,0)…</text>
+        <text x="490" y="48" class="mono">⋯ 144 cells</text>
+      </g>
+      <text x="330" y="20" class="m" text-anchor="middle">byte stream — highlighted fields are the hidden turn state most engines don't need</text>
+      <path class="edge" d="M 300 60 L 300 78" marker-end="none"/>
+      <text x="330" y="96" class="mono" text-anchor="middle">per byte: h ^= b; h *= 0x100000001B3   →   64-bit key</text>
+      <text x="330" y="114" class="m" text-anchor="middle">each cell contributes one byte: (owner &lt;&lt; 3) | kind</text>
+    </svg>
+    <p class="cap">Worked example, three cells through the real mixing function
+    (offset basis <code>0xcbf29ce484222325</code>):</p>
+    <div class="tablewrap">
+    <table>
+      <tr><th>fold in</th><th>byte</th><th>hash after</th></tr>
+      <tr><td>cell A — owner 1, NORMAL</td><td><code>(1&lt;&lt;3)|1 = 9</code></td><td><code>0xaf63c44c8601c3c4</code></td></tr>
+      <tr><td>cell B — owner 0, EMPTY</td><td><code>0</code></td><td><code>0x084a5207b4ffa60c</code></td></tr>
+      <tr><td>cell C — owner 2, FORTIFIED</td><td><code>(2&lt;&lt;3)|3 = 19</code></td><td><code>0x15ef82188e6746ad</code></td></tr>
+    </table>
+    </div>
+    <p class="cap">And the turn-state sensitivity: fold in <code>movesLeft</code> first, then the
+    same three cells — <code>movesLeft=3</code> gives <code>0x3b156288202ba440</code>,
+    <code>movesLeft=2</code> gives <code>0xc9bd3e906c91a40d</code>. Same board, unrelated keys,
+    exactly as required.</p>
+  </div>
+
+  <h2 id="tt">6. The transposition table — never search the same position twice</h2>
+  <p><strong>What.</strong> A cache from position key to search result. Positions recur constantly
+  in a search tree (different move orders reaching the same grid — with three actions a turn,
+  placing A then B lands on the same state as B then A), and iterative deepening revisits
+  everything. On a hit at sufficient depth, the stored score answers the node without searching;
+  even on an insufficient hit, the stored best move seeds the ordering.</p>
+  <p><strong>Why it pays here.</strong> The table is a per-search
+  <code>HashMap&lt;Long, TableEntry&gt;</code>; an entry stores
+  <code>{depth, ply, flag, bestAction, score}</code>. Because PVS scores are usually bounds, not
+  exact values, the <code>flag</code> records which: <code>FLAG_EXACT</code> (true score),
+  <code>FLAG_LOWER</code> (score ≥ this — a fail-high), <code>FLAG_UPPER</code> (score ≤ this —
+  a fail-low). The probe in <code>minimax</code> only trusts an entry when
+  <code>entry.depth &gt;= depth &amp;&amp; entry.ply == ply</code>, then applies the flag: exact
+  returns immediately, a lower bound can raise α, an upper bound can lower β, and if the bounds
+  cross, the node is answered without generating a single move.</p>
+  <div class="fig">
+    <svg viewBox="0 0 660 250" width="660" height="250" role="img" aria-label="TT probe: hit and miss paths">
+      <text x="16" y="24" class="mono">key = state.hash()</text>
+      <path class="edge" d="M 175 20 L 235 20"/>
+      <rect x="240" y="4" width="170" height="30" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="325" y="24" text-anchor="middle" class="mono">table.get(key)</text>
+      <!-- miss -->
+      <path class="edge dead" d="M 325 34 L 200 62"/>
+      <text x="130" y="80" class="m">miss → search the node,</text>
+      <text x="130" y="96" class="m">then store(key, entry)</text>
+      <!-- hit -->
+      <path class="edge" d="M 325 34 L 452 62"/>
+      <rect x="330" y="66" width="316" height="44" rx="5" fill="var(--accent)" opacity="0.15" stroke="var(--accent)"/>
+      <text x="342" y="84" class="mono">TableEntry { depth 6, ply 2, flag,</text>
+      <text x="342" y="101" class="mono">             bestAction, score }</text>
+      <text x="330" y="130" class="m">usable only if depth ≥ needed AND ply matches; else best-move hint only</text>
+      <!-- flag rows -->
+      <text x="16" y="164" class="mono" fill="var(--good)">FLAG_EXACT</text>
+      <text x="150" y="164" class="m">the real minimax value — return it, node done</text>
+      <text x="16" y="192" class="mono">FLAG_LOWER</text>
+      <text x="150" y="192" class="m">"score ≥ v" (fail-high) — raise α to v; if v ≥ β, cutoff now</text>
+      <text x="16" y="220" class="mono">FLAG_UPPER</text>
+      <text x="150" y="220" class="m">"score ≤ v" (fail-low) — lower β to v; if v ≤ α, cutoff now</text>
+      <text x="16" y="244" class="m">on any insufficient hit, entry.bestAction still goes first in the move order (+10,000,000)</text>
+    </svg>
+    <p class="cap">Probe outcomes in <code>minimax</code>. The <code>depth</code> condition says
+    "this cached answer looked at least as far ahead as I need"; the <code>ply == ply</code>
+    condition is a faithfully-ported GoBot quirk that rejects the same position reached at a
+    different distance from the root — one of the defects the overhaul below removes.</p>
+  </div>
+
+  <h2 id="landing">7. Landing now — where the audit found the wasted work</h2>
+  <p>The current upgrade wave (<code>docs/plans/20260807-search-strength.md</code>) came out of a
+  line-by-line audit rather than chess-engine folklore. Three items, each behind a single
+  <code>enhanced</code> flag so the GoBot parity fixtures stay untouched.</p>
+
+  <h3>7a. Staged move generation — stop paying for children you'll never search</h3>
+  <p><strong>What.</strong> Today <code>orderedChildren</code> <em>applies every legal action</em>
+  before searching any, because three ordering features (win detection, elimination count, turn
+  continuation) read the child state. Each apply copies the 144-cell grid and runs elimination
+  checks — a full-board connectivity BFS <em>per player</em>. So one interior node pays ~30 grid
+  copies and ~60 flood-fills up front.</p>
+  <p><strong>Why it pays here.</strong> The audit's point: with the TT move ordered first, most
+  cut-nodes cut <em>after child 1</em> — so at a typical cut-node ~90% of that dominant cost is
+  thrown away. Stage A applies and searches only the TT move first; only if it fails to cut does
+  the node fall back to full generation. Measured baseline (60k-node move, 12×12): hand-tuned
+  leaf searches at ~65k nodes/sec, and the runtime doc itself notes move generation, apply and
+  the TT are "a large share of a node". Expected: node cost ÷2–3, roughly one extra action-ply
+  at equal time.</p>
+  <div class="fig">
+    <svg viewBox="0 0 640 170" width="640" height="170" role="img" aria-label="Cost per cut-node, before and after staged generation">
+      <text x="16" y="22" class="m">cost per typical cut-node (schematic, from the audit's ~30 copies + ~60 BFS)</text>
+      <text x="16" y="56">today</text>
+      <rect x="90" y="42" width="420" height="20" fill="var(--bad)" opacity="0.55" rx="3"/>
+      <rect x="510" y="42" width="40" height="20" fill="var(--accent)" opacity="0.7" rx="3"/>
+      <text x="300" y="56" class="m" text-anchor="middle" fill="#fff">apply all ~30 children (30 grid copies, ~60 BFS), sort</text>
+      <text x="556" y="56" class="m">search 1, cut</text>
+      <text x="16" y="106">staged</text>
+      <rect x="90" y="92" width="18" height="20" fill="var(--good)" opacity="0.7" rx="3"/>
+      <rect x="108" y="92" width="40" height="20" fill="var(--accent)" opacity="0.7" rx="3"/>
+      <text x="156" y="106" class="m">apply TT move only → search it → cutoff. Done.</text>
+      <rect x="90" y="128" width="460" height="20" fill="none" stroke="var(--border)" stroke-dasharray="4 3" rx="3"/>
+      <text x="98" y="142" class="m">only if the TT move fails to cut: generate the rest as before</text>
+    </svg>
+    <p class="cap">Pure cost removal — the TT move was already sorted first, so the tree searched
+    is identical. That gives the plan its built-in correctness check: at a fixed <em>node</em>
+    budget the win rate must not move; only fixed <em>time</em> should improve.</p>
+  </div>
+
+  <h3>7b. Transposition table overhaul — packed arrays, cross-ply and cross-move reuse</h3>
+  <p>The audit verified the key is sound (the turn state is hashed — section 5) and located four
+  real defects: the <code>ply == ply</code> probe rule makes any transposition reached at a
+  different depth-from-root miss, and makes reuse across moves worthless (after playing one
+  action every stored ply is off by one); the whole table is <em>thrown away every move</em>
+  even though the position after our chosen action was the most-searched subtree of the previous
+  search; <code>store</code> overwrites unconditionally, so a shallow entry clobbers a deep one;
+  and <code>HashMap&lt;Long, TableEntry&gt;</code> boxes a key and allocates an entry per store —
+  per node. The fix: a fixed-size array (<code>long[] keys</code> + <code>long[] data</code>,
+  2²¹–2²³ slots), each entry packed into one 64-bit word, depth-preferred replacement with
+  generation aging, one persistent searcher per game side, and mate scores rebased by ply on
+  store/probe so "mate in 3" stays meaningful from anywhere in the tree.</p>
+  <div class="fig">
+    <svg viewBox="0 0 640 86" width="640" height="86" role="img" aria-label="Packed 64-bit TT entry layout">
+      <text x="16" y="20" class="m">one TT entry, packed into a single long (no allocation, cache-line friendly)</text>
+      <g>
+        <rect x="16"  y="32" width="288" height="28" fill="var(--accent)" opacity="0.6"/>
+        <rect x="304" y="32" width="54"  height="28" fill="var(--accent)" opacity="0.45"/>
+        <rect x="358" y="32" width="18"  height="28" fill="var(--accent)" opacity="0.3"/>
+        <rect x="376" y="32" width="54"  height="28" fill="var(--accent)" opacity="0.45"/>
+        <rect x="430" y="32" width="162" height="28" fill="var(--accent)" opacity="0.6"/>
+        <text x="160" y="51" text-anchor="middle" fill="#fff">score (32)</text>
+        <text x="331" y="51" text-anchor="middle" fill="#fff">depth 6</text>
+        <text x="403" y="51" text-anchor="middle" fill="#fff">gen 6</text>
+        <text x="511" y="51" text-anchor="middle" fill="#fff">best action (18)</text>
+        <text x="367" y="78" class="m" text-anchor="middle">flag 2</text>
+      </g>
+    </svg>
+    <p class="cap">18 bits fit any action: a move is one cell index 0–143 (8 bits), a
+    neutral-pair placement is two cell indices plus a tag bit. The plan estimates the three
+    compounding effects — allocation-free probes, cross-ply/cross-move hits, no deep-entry
+    clobbering — at +50–100 Elo.</p>
+  </div>
+
+  <h3>7c. Killers and history — remember what refuted the last sibling</h3>
+  <p>At ~30-wide branching, most cutoffs are quiet positional placements that today sit in raw
+  board order — so the same refutation is rediscovered at every sibling node. Killers keep two
+  recently-cutting moves per ply (<code>Action[64][2]</code>, tried right after the TT move);
+  history keeps a score per (mover, target-cell) — <code>int[2][144]</code>, bumped by
+  depth² on every fail-high — that gradually learns which squares are hot. The plan's
+  measurement for this is direct: the fail-high-index histogram must shift its mass toward
+  index 0–1. Cheapest Elo in the plan (+40–80 estimated), ranked after 7a/7b only because
+  ordering gains multiply with cheap nodes and warm TT hits.</p>
+
+  <h2 id="nnue">8. The NNUE sparse trick — a neural net with no matrix multiply</h2>
+  <p><strong>What.</strong> The learned leaf evaluator (<code>NNUEv3NetEvaluator</code>) is a tiny
+  one-hidden-layer net over binary features: one feature per (row, col, cell-state),
+  12×12×8 = 1152 slots. Every position activates <em>exactly 144</em> of them — one per cell.
+  Since active inputs are all 1.0, the first layer needs no matmul at all: the hidden vector is
+  just the <em>sum of the 144 active columns</em> of W1, plus bias. Then ReLU, dot with w2, done.</p>
+  <p><strong>Why it pays here.</strong> A leaf evaluator runs hundreds of thousands of times per
+  move; this is the discipline that makes a net affordable inside alpha-beta.
+  <code>w1</code> is stored column-major (<code>w1[feature * hidden + h]</code>) so each active
+  feature's H weights are contiguous in cache. Measured cost is linear in H, ~
+  <strong>0.4 + 0.08·H µs per eval</strong>. (A tempo variant appends 4 movesLeft one-hot slots —
+  1156 wide, 145 active — the evaluator supports it, but the experiment showed no gain and the
+  shipped net is 1152.)</p>
+  <div class="fig">
+    <svg viewBox="0 0 680 250" width="680" height="250" role="img" aria-label="Sparse accumulation: 144 active columns of W1 summed into H accumulators">
+      <text x="40" y="22" class="m">W1 — H rows × 1152 columns, column-major</text>
+      <!-- matrix strip -->
+      <rect x="40" y="32" width="520" height="80" fill="var(--bg)" stroke="var(--border)"/>
+      <!-- faint columns -->
+      <g stroke="var(--border)" stroke-width="1">
+        <line x1="60" y1="32" x2="60" y2="112"/><line x1="80" y1="32" x2="80" y2="112"/>
+        <line x1="120" y1="32" x2="120" y2="112"/><line x1="140" y1="32" x2="140" y2="112"/>
+        <line x1="180" y1="32" x2="180" y2="112"/><line x1="220" y1="32" x2="220" y2="112"/>
+        <line x1="260" y1="32" x2="260" y2="112"/><line x1="300" y1="32" x2="300" y2="112"/>
+        <line x1="340" y1="32" x2="340" y2="112"/><line x1="380" y1="32" x2="380" y2="112"/>
+        <line x1="420" y1="32" x2="420" y2="112"/><line x1="460" y1="32" x2="460" y2="112"/>
+        <line x1="500" y1="32" x2="500" y2="112"/><line x1="540" y1="32" x2="540" y2="112"/>
+      </g>
+      <!-- highlighted active columns -->
+      <g fill="var(--accent)" opacity="0.75">
+        <rect x="96"  y="32" width="8" height="80"/>
+        <rect x="156" y="32" width="8" height="80"/>
+        <rect x="238" y="32" width="8" height="80"/>
+        <rect x="318" y="32" width="8" height="80"/>
+        <rect x="398" y="32" width="8" height="80"/>
+        <rect x="478" y="32" width="8" height="80"/>
+      </g>
+      <text x="300" y="130" class="m" text-anchor="middle">144 of 1152 columns active — one per board cell: idx = (r·12 + c)·8 + state</text>
+      <!-- accumulator -->
+      <rect x="600" y="32" width="26" height="80" fill="var(--good)" opacity="0.5" stroke="var(--good)"/>
+      <text x="613" y="24" class="m" text-anchor="middle">acc[H]</text>
+      <path class="edge" d="M 100 112 C 200 170, 500 150, 604 108" />
+      <path class="edge" d="M 482 112 C 520 140, 560 130, 600 100" />
+      <text x="640" y="76" class="m">= b1 +</text>
+      <text x="636" y="92" class="m">Σ cols</text>
+      <!-- second stage -->
+      <text x="40" y="180" class="mono">for f in active: for h in 0..H: acc[h] += w1[f*H + h]   // 144·H adds, no multiply</text>
+      <text x="40" y="204" class="mono">out = b2 + Σ_h w2[h] · relu(acc[h])                     // H multiply-adds</text>
+      <text x="40" y="236" class="m">measured: ~0.4 + 0.08·H µs/eval → H=32 runs 289,000 evals/sec on the dev box</text>
+    </svg>
+    <p class="cap">The forward pass from <code>NNUEv3NetEvaluator.evaluate</code>. Output is
+    already in hand-tuned eval units (the net is distilled from <code>HandTunedEval</code>), so
+    there's deliberately no scaling knob.</p>
+  </div>
+  <p>The payoff in search terms, from the committed benchmark (60k-node budget, same node count
+  every run, so the ratio is pure speed):</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>leaf</th><th>search NPS</th><th>vs hand-tuned</th><th>60k-node move</th></tr>
+    <tr><td>hand-tuned eval</td><td>65,260</td><td>1.00×</td><td>920 ms</td></tr>
+    <tr><td>v3 linear</td><td>348,837</td><td class="win">5.35×</td><td>172 ms</td></tr>
+    <tr><td>v3 net H=32</td><td>174,520</td><td class="win">2.66×</td><td>344 ms</td></tr>
+    <tr><td>v3 net H=64</td><td>125,576</td><td class="win">1.87×</td><td>478 ms</td></tr>
+  </table>
+  </div>
+  <p>Two readings worth having: the neural leaf is <em>faster</em> than the hand-written eval it
+  imitates (hand-tuned runs its own flood-fills), and search NPS degrades far more slowly than
+  raw eval speed as H grows — from H=4 to H=64 the eval gets 4.7× slower but search only 2.1× —
+  because movegen, apply and the TT dominate the node. That is why section 7a, not a faster
+  leaf, is the current priority.</p>
+
+  <h2 id="puct">9. MCTS with PUCT — the other searcher</h2>
+  <p><strong>What.</strong> Alongside alpha-beta, the project runs a Monte-Carlo tree searcher
+  (<code>MctsSearcher</code>) as Phase 1 of an AlphaZero-style track. Instead of exhaustive
+  depth-limited search, it grows the tree one simulation at a time, and at each node picks the
+  child maximizing <em>PUCT</em>: an exploitation term Q (average backed-up value) plus an
+  exploration bonus U that favors little-visited moves with high prior probability.</p>
+  <p><strong>Why it pays here.</strong> With ~34 legal actions per state, uniform exploration
+  would drown; the U term concentrates simulations where value or prior points. In
+  <code>select()</code>: <code>score = q + cpuct · prior[a] · √(N+1) / (1 + n[a])</code> with
+  <code>cpuct = 1.5</code>, priors pluggable (uniform for now), and leaf values
+  <code>tanh(HandTunedEval / 12000)</code> — 12000 chosen so a typically decisive mid-game eval
+  (~13k) maps to ≈0.8. Dirichlet root noise exists for future self-play but is off in play
+  mode.</p>
+  <div class="fig">
+    <svg viewBox="0 0 660 240" width="660" height="240" role="img" aria-label="PUCT worked example with three children">
+      <text x="330" y="22" text-anchor="middle" class="mono">score = sign·Q_abs + 1.5 · P · √(N+1) / (1+n)</text>
+      <rect x="255" y="34" width="150" height="30" rx="5" fill="var(--accent)" opacity="0.2" stroke="var(--accent)"/>
+      <text x="330" y="54" text-anchor="middle">parent: N = 24, √25 = 5</text>
+      <line class="edge" x1="290" y1="64" x2="120" y2="98"/>
+      <line class="edge" x1="330" y1="64" x2="330" y2="98"/>
+      <line class="edge" x1="370" y1="64" x2="540" y2="98"/>
+      <!-- child A -->
+      <rect x="30" y="100" width="180" height="104" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="120" y="122" text-anchor="middle">A — the "safe" move</text>
+      <text x="44" y="146" class="mono">n = 12   Q = 0.40</text>
+      <text x="44" y="168" class="mono">U = 1.5·⅓·5/13 = 0.19</text>
+      <text x="44" y="192" class="mono">score = 0.59</text>
+      <!-- child B -->
+      <rect x="240" y="100" width="180" height="104" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="330" y="122" text-anchor="middle">B — nearly as good</text>
+      <text x="254" y="146" class="mono">n = 9    Q = 0.35</text>
+      <text x="254" y="168" class="mono">U = 1.5·⅓·5/10 = 0.25</text>
+      <text x="254" y="192" class="mono">score = 0.60</text>
+      <!-- child C -->
+      <rect x="450" y="100" width="180" height="104" rx="6" fill="none" stroke="var(--good)" stroke-width="2"/>
+      <text x="540" y="122" text-anchor="middle" fill="var(--good)">C — barely explored</text>
+      <text x="464" y="146" class="mono">n = 3    Q = 0.10</text>
+      <text x="464" y="168" class="mono">U = 1.5·⅓·5/4 = 0.63</text>
+      <text x="464" y="192" class="mono">score = 0.73 ← selected</text>
+      <text x="330" y="228" class="m" text-anchor="middle">uniform priors P = ⅓ — C wins on exploration despite the worst Q; as n[C] grows, U shrinks and A/B take over</text>
+    </svg>
+    <p class="cap">The self-balancing property: every visit to C divides its bonus, so bad moves
+    are abandoned after a handful of simulations while good ones accumulate visits — and the
+    final answer is simply the most-visited root move (<code>bestAction()</code>).</p>
+  </div>
+
+  <h2 id="frame">10. Absolute-frame backup — the hardest-won lesson in the repo</h2>
+  <p><strong>What.</strong> Standard two-player MCTS (and negamax) backs values up the tree
+  negating at every edge: "good for me" is "bad for you", and every edge changes whose turn it
+  is. <strong>In this game that assumption is false</strong> — each edge is one <em>action</em>,
+  and only 47.1% of them end a turn. Negate on every edge and you flip the sign on the 52.9% of
+  edges where the same player is still moving.</p>
+  <p><strong>Why it's done this way — the bug that forced it.</strong> The v3 training pipeline
+  hit exactly this class of error: children were labelled from the <em>parent's</em> mover while
+  the runtime queries the <em>leaf's own</em> mover, inverting the sign on the 47.1% of
+  turn-flipping children. The hand-tuned eval hates ending your turn (turn-keeping children
+  average <strong>+6,958</strong>, turn-flipping <strong>−14,108</strong>, and the best child
+  is a flipper in only 1.0% of sibling groups), so after the runtime's negation the net ranked
+  precisely the worst moves best: sibling-ordering correlation ρ = <strong>−0.298</strong> —
+  worse than random — versus <strong>+0.756</strong> once the frame was fixed.
+  <code>MctsSearcher</code> makes that mistake structurally impossible: every value is converted
+  <em>once, at the leaf</em>, into a fixed absolute frame (positive = good for player 1), backed
+  up with <strong>no negation anywhere</strong>, and re-oriented only at selection time via
+  <code>sign(node) = +1 iff node's mover is player 1</code>. The alpha-beta searcher sidesteps
+  the same trap differently — root-relative minimax with a single mover-vs-root flip at the
+  leaf.</p>
+  <div class="fig">
+    <svg viewBox="0 0 660 250" width="660" height="250" role="img" aria-label="Keep-turn edge vs flip-turn edge under negamax and absolute-frame backup">
+      <!-- left panel: keep-turn -->
+      <text x="165" y="24" text-anchor="middle">keep-turn edge (52.9%)</text>
+      <rect x="95" y="36" width="140" height="28" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="165" y="55" text-anchor="middle" class="mono">P1, movesLeft 3</text>
+      <line class="edge" x1="165" y1="64" x2="165" y2="96"/>
+      <rect x="95" y="98" width="140" height="28" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="165" y="117" text-anchor="middle" class="mono">P1, movesLeft 2</text>
+      <text x="165" y="148" text-anchor="middle" class="m">leaf: +0.6 for its mover P1</text>
+      <text x="165" y="176" text-anchor="middle" class="mono" fill="var(--bad)">negamax backup: −0.6 ✗</text>
+      <text x="165" y="194" text-anchor="middle" class="m">(negated onto the same player)</text>
+      <text x="165" y="222" text-anchor="middle" class="mono" fill="var(--good)">absolute frame: +0.6 ✓</text>
+      <!-- divider -->
+      <line x1="330" y1="20" x2="330" y2="235" stroke="var(--border)"/>
+      <!-- right panel: flip-turn -->
+      <text x="495" y="24" text-anchor="middle">flip-turn edge (47.1%)</text>
+      <rect x="425" y="36" width="140" height="28" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="495" y="55" text-anchor="middle" class="mono">P1, movesLeft 1</text>
+      <line class="edge" x1="495" y1="64" x2="495" y2="96"/>
+      <rect x="425" y="98" width="140" height="28" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="495" y="117" text-anchor="middle" class="mono">P2, movesLeft 3</text>
+      <text x="495" y="148" text-anchor="middle" class="m">leaf: +0.6 for its mover P2</text>
+      <text x="495" y="176" text-anchor="middle" class="mono" fill="var(--good)">negamax backup: −0.6 ✓</text>
+      <text x="495" y="194" text-anchor="middle" class="m">(happens to be right here)</text>
+      <text x="495" y="222" text-anchor="middle" class="mono" fill="var(--good)">absolute frame: −0.6 ✓</text>
+    </svg>
+    <p class="cap">Both backups agree on flip-turn edges; on keep-turn edges only the absolute
+    frame is correct. Converting at the leaf (<code>v_abs = mover == 1 ? v : −v</code>, terminals
+    ±1/0 from <code>outcomeWinner()</code>) means the tree never needs to know which edges
+    flipped.</p>
+  </div>
+
+  <h2 id="measure">11. Measurement discipline — why only big gauntlets count</h2>
+  <p>The uncomfortable meta-result of this project: <strong>offline metrics have repeatedly
+  failed to predict playing strength</strong> — by the docs' own running count, six documented
+  disconnects and counting. The greatest hits:</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>looked great offline</th><th>played</th></tr>
+    <tr><td>v2: val MSE 0.018, 97% direction accuracy</td><td class="loss">0–24 (0%)</td></tr>
+    <tr><td>v3 linear: held-out R² = 0.976 vs its target</td><td class="loss">7–17 (29.2%)</td></tr>
+    <tr><td>frame fix: sibling ordering ρ −0.298 → +0.756</td><td class="loss">no measurable strength change</td></tr>
+    <tr><td>retrain on 2.6× data: live-frame top-1 77.5% → 86.6%</td><td class="loss">52.0% ± 2.5 head-to-head — a tie</td></tr>
+  </table>
+  </div>
+  <p>Each failure taught a sharper metric — R² gave way to sibling top-1 agreement, which gave
+  way to the live-frame probe — and each sharper metric <em>still</em> failed to predict the
+  gauntlet. So the project's rule hardened into policy:</p>
+  <p class="callout">A strength claim requires a gauntlet of <strong>400+ games</strong> with
+  disjoint opening seeds. At 24 games the noise on a win-rate difference is about ±10 points —
+  the historical 24-game cells produced per-depth numbers that literally swapped values between
+  runs. At 400 games the 95% interval tightens to ~±5 points (reported results above carry
+  ±2.1–2.5 standard error).</p>
+  <p>Two supporting habits make those numbers trustworthy. <em>Disjoint openings:</em>
+  <code>GauntletMatch</code> derives openings from the seed, and an audit found "robust across
+  seeds 7/11/23" runs actually shared 8 of 12 opening pairs — seed ranges are now spaced 1000
+  apart. <em>Fixed-node vs fixed-time:</em> speed optimizations (sections 7a/7b) must show ~zero
+  effect at a fixed node budget (they don't change the tree — a built-in correctness check) and
+  their real gain at fixed wall-clock; ordering improvements (7c) must win at fixed nodes. Every
+  item in the current plan is scheduled to be measured both ways before it's believed.</p>
+
+  <footer>
+    <a href="index.html">← Project overview</a> ·
+    <a href="https://github.com/korjavin/nnue-trainer">Source on GitHub</a> ·
+    All numbers from the repo's committed benchmarks and gauntlet docs, current as of Aug 2026
+  </footer>
+</main>
+</body>
+</html>
