@@ -27,11 +27,11 @@ import java.nio.file.Path;
  * runs (bead riy).
  *
  * <p>Phase 2 knobs: {@code MCTS_PRIOR_B=<weights json>} replaces the clone with a <b>second MCTS
- * side</b> playing that artifact — the net-vs-net generation gate (same additive pattern as
- * {@code GauntletV3Run}'s {@code MATCHUP=netb}). {@code MCTS_VALUE=net} makes each side use its
- * own artifact's value head when present (hand-tuned fallback otherwise). In B mode the run also
- * prints a {@code PROMOTE}/{@code KEEP} verdict at {@code MCTS_GATE} (default 0.55, the plan's
- * ≥55% promotion bar; draws count 0.5).
+ * side</b> playing that artifact — the net-vs-net generation gate (same additive pattern as {@code
+ * GauntletV3Run}'s {@code MATCHUP=netb}). {@code MCTS_VALUE=net} makes each side use its own
+ * artifact's value head when present (hand-tuned fallback otherwise). In B mode the run also prints
+ * a {@code PROMOTE}/{@code KEEP} verdict at {@code MCTS_GATE} (default 0.55, the plan's ≥55%
+ * promotion bar; draws count 0.5).
  */
 public final class GauntletMctsRun {
 
@@ -115,7 +115,8 @@ public final class GauntletMctsRun {
     if (sideB != null) {
       double gate = Double.parseDouble(sysval("MCTS_GATE", "0.55"));
       System.out.printf(
-          "gate %.0f%%: %s%n", 100 * gate, promote(r.wins, r.losses, r.draws, gate) ? "PROMOTE" : "KEEP");
+          "gate %.0f%%: %s%n",
+          100 * gate, promote(r.wins, r.losses, r.draws, gate) ? "PROMOTE" : "KEEP");
     }
   }
 

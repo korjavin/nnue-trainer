@@ -18,8 +18,10 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Phase 2 self-play record contract: row shape, the absolute-frame z (the critical frame-sign
- * pin — the v3 mover-flip lesson), and byte-level determinism per (seed, shard). */
+/**
+ * Phase 2 self-play record contract: row shape, the absolute-frame z (the critical frame-sign pin —
+ * the v3 mover-flip lesson), and byte-level determinism per (seed, shard).
+ */
 class SelfPlayMctsTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -126,14 +128,17 @@ class SelfPlayMctsTest {
     assertEquals(
         5 * 12 + 7,
         SelfPlayMcts.flatIndex(
-            new com.engine.nnue_trainer.board.MoveAction(new com.engine.nnue_trainer.board.Pos(5, 7))));
+            new com.engine.nnue_trainer.board.MoveAction(
+                new com.engine.nnue_trainer.board.Pos(5, 7))));
     // Pair id is order-independent and uses i<j: 144 + min*144 + max.
     com.engine.nnue_trainer.board.Pos p1 = new com.engine.nnue_trainer.board.Pos(0, 3);
     com.engine.nnue_trainer.board.Pos p2 = new com.engine.nnue_trainer.board.Pos(2, 1);
     int expected = 144 + 3 * 144 + 25;
     assertEquals(
-        expected, SelfPlayMcts.flatIndex(new com.engine.nnue_trainer.board.PlaceNeutralsAction(p1, p2)));
+        expected,
+        SelfPlayMcts.flatIndex(new com.engine.nnue_trainer.board.PlaceNeutralsAction(p1, p2)));
     assertEquals(
-        expected, SelfPlayMcts.flatIndex(new com.engine.nnue_trainer.board.PlaceNeutralsAction(p2, p1)));
+        expected,
+        SelfPlayMcts.flatIndex(new com.engine.nnue_trainer.board.PlaceNeutralsAction(p2, p1)));
   }
 }

@@ -30,8 +30,8 @@ import java.util.List;
  *
  * <p>Phase 2 artifacts additionally carry a {@code value_head} section (GAP over trunk channels →
  * dense → 1, tanh; exported by {@code python/mcts/train_selfplay.py}) — a <b>mover-frame</b> value
- * in [-1, 1] served via {@link #valueMover}. Artifacts without it still load ({@link
- * #hasValueHead} is false) and the searcher falls back to the hand-tuned leaf.
+ * in [-1, 1] served via {@link #valueMover}. Artifacts without it still load ({@link #hasValueHead}
+ * is false) and the searcher falls back to the hand-tuned leaf.
  */
 public final class PolicyNetPrior implements PolicyPrior {
 

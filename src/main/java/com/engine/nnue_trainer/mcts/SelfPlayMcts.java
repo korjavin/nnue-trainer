@@ -23,8 +23,8 @@ import java.util.Random;
  * Phase 2 self-play generator (plan {@code docs/plans/20260807-mcts-az-feasibility.md}): plays
  * MCTS-vs-MCTS games with the current policy(+value) artifact and records AlphaZero training rows.
  *
- * <p>Per plan: Dirichlet root noise ON, temperature τ=1 (sample ∝ root visits) for the first
- * {@link #TEMPERATURE_PLIES} plies then argmax; one JSONL row per multi-choice position.
+ * <p>Per plan: Dirichlet root noise ON, temperature τ=1 (sample ∝ root visits) for the first {@link
+ * #TEMPERATURE_PLIES} plies then argmax; one JSONL row per multi-choice position.
  *
  * <p>Row schema: {@code {"g":gameId,"sym":[144 ints, mover-relative],"ml":1..3,"nuo":0|1,
  * "nux":0|1,"mover":1|2,"pi":[flat action ids],"pv":[root visit counts],"z":-1|0|1}}. Flat ids
@@ -56,7 +56,8 @@ public final class SelfPlayMcts {
 
   public static void main(String[] args) throws Exception {
     if (args.length != 6) {
-      System.err.println("usage: SelfPlayMcts <out.jsonl> <games> <sims> <shardIdx> <shardCount> <seed>");
+      System.err.println(
+          "usage: SelfPlayMcts <out.jsonl> <games> <sims> <shardIdx> <shardCount> <seed>");
       System.exit(2);
     }
     Path out = Path.of(args[0]);
@@ -85,16 +86,28 @@ public final class SelfPlayMcts {
         if (g % shardCount != shardIdx) {
           continue;
         }
-        rows += playGame("sp" + seed + "-" + g, mix64(seed ^ (0x9E3779B97F4A7C15L * (g + 1))),
-            sims, template, w);
+        rows +=
+            playGame(
+                "sp" + seed + "-" + g,
+                mix64(seed ^ (0x9E3779B97F4A7C15L * (g + 1))),
+                sims,
+                template,
+                w);
         played++;
       }
     }
     double secs = (System.currentTimeMillis() - t0) / 1000.0;
     System.out.printf(
         "shard %d/%d: games %d, rows %d, sims %d, prior %s, value %s, %.1fs (%.1f s/game)%n",
-        shardIdx, shardCount, played, rows, sims, priorPath,
-        useValueNet ? "net" : "hand-tuned", secs, played == 0 ? 0 : secs / played);
+        shardIdx,
+        shardCount,
+        played,
+        rows,
+        sims,
+        priorPath,
+        useValueNet ? "net" : "hand-tuned",
+        secs,
+        played == 0 ? 0 : secs / played);
   }
 
   /** One self-play game from the production start; returns the number of rows written. */
