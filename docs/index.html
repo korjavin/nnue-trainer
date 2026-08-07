@@ -137,33 +137,35 @@
   <h2>Where v3 stands (honest numbers)</h2>
   <div class="tablewrap">
   <table>
-    <tr><th>Measurement</th><th>Result</th><th>Meaning</th></tr>
+    <tr><th>Training labels</th><th>Gauntlet vs hand-tuned, depth 3</th><th>Meaning</th></tr>
     <tr>
-      <td>Offline move-ordering agreement (top-1)</td>
-      <td class="win">86.6%</td>
-      <td>The net picks the hand-tuned eval's best move in ~7 of 8 positions — best ever measured
-      here.</td>
-    </tr>
-    <tr>
-      <td>Gauntlet vs hand-tuned, fixed depth 3</td>
+      <td>Static eval (distillation)</td>
       <td class="loss">24.3% ± 2.1</td>
-      <td>400 games, disjoint openings. Playing strength has <em>not</em> followed the offline
-      gains.</td>
+      <td>400 games, disjoint openings. The distillation ceiling: offline metrics kept improving,
+      strength never followed.</td>
     </tr>
     <tr>
-      <td>Head-to-head vs previous v3 net</td>
-      <td>52.0% ± 2.5</td>
-      <td>A statistical tie — 2.6× more training data moved every offline metric and zero
-      strength.</td>
+      <td>Depth-2 search values</td>
+      <td class="loss">28.5% ± 2.3</td>
+      <td>400 games. Same net, same features — only the label oracle got deeper.</td>
+    </tr>
+    <tr>
+      <td>Depth-3 search values</td>
+      <td class="win">44.3% ± 2.5</td>
+      <td>400 games — the closest v3 has come to parity (50%). But it is <em>brittle</em>: the
+      same net at search depth 4 collapses to 9.0% ± 2.0, and at equal time (250 ms/move) to
+      27.0% ± 3.1.</td>
     </tr>
   </table>
   </div>
-  <p>That gap — offline metrics repeatedly improving while the gauntlet refuses to move — is the
-  project's central finding so far. The current working theory: the model's error
-  (≈2.2× the typical gap between a position's best and second-best move) and its blindness to
-  <em>tempo</em> (remaining actions this turn) let search steer into exactly the positions where
-  the eval is wrong. Two fixes are in flight: tempo-aware features, and labels taken from deep
-  search instead of the static eval.</p>
+  <p>The label-depth ladder vindicated the label hypothesis at its sweet spot: search-derived
+  labels are the first lever that moved the gauntlet at all, twenty points' worth. And it exposed
+  the wall: the gain exists only at the training distribution's search depth. Deeper search steers
+  into positions the labels never covered, where the net's errors are large — every net measured
+  here gets <em>weaker</em> when the search gets deeper. That failure mode has a name —
+  distribution shift — and a known cure: train on the positions search actually visits. Self-play
+  RL (MCTS with a learned policy and value net) is implemented and awaiting its first generation;
+  it is the successor, not another patch on distillation.</p>
 
   <h2>Method notes</h2>
   <ul>
