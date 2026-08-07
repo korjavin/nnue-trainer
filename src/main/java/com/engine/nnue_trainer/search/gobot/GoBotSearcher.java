@@ -9,9 +9,13 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
+import com.engine.nnue_trainer.search.ordering.PolicyOrderingTable;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
 import com.engine.nnue_trainer.v3.V3Eval;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -112,16 +116,48 @@ public final class GoBotSearcher {
   // model).
   private static volatile LeafConfig defaultLeaf = new LeafConfig(LeafEval.HAND_TUNED, null);
 
+  /**
+   * Neural quiet-move ordering (epic 1jh integration). Loaded once per process; immutable after
+   * load, so sharing across searchers/threads is safe. Null = off = pre-table ordering — the env
+   * {@code ORDERING_TABLE} overrides the default path, a missing artifact silently disables, and a
+   * present-but-corrupt artifact warns and disables (the searcher must never fail to move because
+   * an ordering hint is bad). Enhanced path only; the {@code chooseDepth} parity oracle never
+   * consults it.
+   */
+  private static volatile PolicyOrderingTable orderingTable = loadOrderingTable();
+
+  private static PolicyOrderingTable loadOrderingTable() {
+    String env = System.getenv("ORDERING_TABLE");
+    Path path =
+        env == null || env.isBlank() ? PolicyOrderingTable.DEFAULT_WEIGHTS : Path.of(env.trim());
+    if (!Files.isRegularFile(path)) {
+      return null;
+    }
+    try {
+      return PolicyOrderingTable.load(path);
+    } catch (IOException e) {
+      System.err.println("ordering table disabled, load failed (" + path + "): " + e.getMessage());
+      return null;
+    }
+  }
+
+  /** Test hook: swap the process-wide ordering table, returning the previous one for restore. */
+  static PolicyOrderingTable setOrderingTable(PolicyOrderingTable t) {
+    PolicyOrderingTable prev = orderingTable;
+    orderingTable = t;
+    return prev;
+  }
+
   final int root;
   final boolean multi;
   final Map<Long, TableEntry> table;
 
   /**
-   * Strength-path switch (plan: parity constraint). True for the live/gauntlet entry points
-   * ({@code chooseNodeBudget}/{@code chooseWithDeadline} and the instance {@code search*}
-   * methods): packed array TT with depth-sufficient cross-ply probing, persistence across moves.
-   * False for the {@code chooseDepth} parity oracle, which keeps GoBot's exact HashMap TT and
-   * ply-exact probe so GoBotSearchParityTest stays byte-identical.
+   * Strength-path switch (plan: parity constraint). True for the live/gauntlet entry points ({@code
+   * chooseNodeBudget}/{@code chooseWithDeadline} and the instance {@code search*} methods): packed
+   * array TT with depth-sufficient cross-ply probing, persistence across moves. False for the
+   * {@code chooseDepth} parity oracle, which keeps GoBot's exact HashMap TT and ply-exact probe so
+   * GoBotSearchParityTest stays byte-identical.
    */
   final boolean enhanced;
 
@@ -137,6 +173,8 @@ public final class GoBotSearcher {
   long fastPathCuts; // diagnostics: cut-nodes that never materialized their sibling list
   long ttProbes; // diagnostics: enhanced-TT probes
   long ttHits; // diagnostics: enhanced-TT hits (any depth)
+  long cutCount; // diagnostics: interior-node beta cutoffs (fast-path cuts included, index 0)
+  long cutIndexSum; // diagnostics: sum of searched-child index at cutoff (mean = ordering quality)
 
   // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
   // ordered right after the TT move; plus a per-mover, per-cell history table bumped depth^2 on
@@ -208,8 +246,8 @@ public final class GoBotSearcher {
   /**
    * A persistent, enhanced searcher rooted at {@code state.currentPlayer()}. Keep it for the whole
    * game and call {@link #searchNodeBudget}/{@link #searchWithDeadline} each move — the packed TT
-   * carries the previous move's most-searched subtree into every new search. One instance per
-   * side: root-relative scores are only valid while the root player matches the mover.
+   * carries the previous move's most-searched subtree into every new search. One instance per side:
+   * root-relative scores are only valid while the root player matches the mover.
    */
   public static GoBotSearcher newEnhancedSearcher(GoState state) {
     return newSearcher(state, true);
@@ -357,12 +395,12 @@ public final class GoBotSearcher {
    * from the previous move's principal subtree.
    *
    * <p>Enhanced time management (plan item 5): a new iteration costs roughly EBF times the last
-   * one, so past {@link #SOFT_DEADLINE_PERCENT} of the budget it would almost surely be cut —
-   * don't start it. And when the deadline does abort an iteration whose PV child (child 0, the
-   * previous best) completed, the aborted iteration's best fully-searched root move is salvaged
-   * instead of discarded ({@link GoResult#salvaged}) — root best-move updates only ever happen on
-   * exact re-searched scores (the root alpha equals the running best), so a fail-low bound can
-   * never displace the PV move.
+   * one, so past {@link #SOFT_DEADLINE_PERCENT} of the budget it would almost surely be cut — don't
+   * start it. And when the deadline does abort an iteration whose PV child (child 0, the previous
+   * best) completed, the aborted iteration's best fully-searched root move is salvaged instead of
+   * discarded ({@link GoResult#salvaged}) — root best-move updates only ever happen on exact
+   * re-searched scores (the root alpha equals the running best), so a fail-low bound can never
+   * displace the PV move.
    */
   public GoResult searchWithDeadline(GoState state, long deadlineMillis) {
     GoResult book = GoOpeningBook.openingBookResult(state);
@@ -493,7 +531,8 @@ public final class GoBotSearcher {
       hasRoot = e != 0L;
       rootTTMove =
           hasRoot
-              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              ? GoTranspositionTable.decodeAction(
+                  GoTranspositionTable.actionBitsOf(e), state.cols())
               : null;
     } else {
       TableEntry rootEntry = probe(key);
@@ -604,7 +643,8 @@ public final class GoBotSearcher {
       hit = e != 0L;
       ttMove =
           hit
-              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              ? GoTranspositionTable.decodeAction(
+                  GoTranspositionTable.actionBitsOf(e), state.cols())
               : null;
       if (hit) {
         ttHits++;
@@ -690,6 +730,7 @@ public final class GoBotSearcher {
       }
       if (alpha >= beta) {
         fastPathCuts++;
+        cutCount++; // fail-high at searched-child index 0
         recordCutoff(state, bestAction, depth, ply);
         int cutFlag = FLAG_EXACT;
         if (best <= alphaOrig) {
@@ -707,11 +748,13 @@ public final class GoBotSearcher {
       evaluations++;
       return leafEval(state);
     }
+    int searched = searchedTTFirst ? 1 : 0;
     for (int i = 0; i < children.size(); i++) {
       Child child = children.get(i);
       if (searchedTTFirst && child.action.equals(ttMove)) {
         continue; // already searched full-window above
       }
+      searched++;
       long score;
       if (!searchedTTFirst && i == 0) {
         score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
@@ -745,6 +788,8 @@ public final class GoBotSearcher {
         }
       }
       if (alpha >= beta) {
+        cutCount++;
+        cutIndexSum += searched - 1; // fail-high index among children actually searched
         recordCutoff(state, bestAction, depth, ply);
         break;
       }
@@ -811,11 +856,13 @@ public final class GoBotSearcher {
     final Action action;
     final GoState state;
     final int order;
+    final double table; // neural ordering score; secondary sort key below the static tiers
 
-    Child(Action action, GoState state, int order) {
+    Child(Action action, GoState state, int order, double table) {
       this.action = action;
       this.state = state;
       this.order = order;
+      this.table = table;
     }
   }
 
@@ -842,6 +889,18 @@ public final class GoBotSearcher {
     int actor = state.currentPlayer();
     int beforeActive = activeCount(state);
     boolean useHeuristics = enhanced && history != null && ply <= MAX_DEPTH;
+    // Epic 1jh: one table call scores all 144 cells (~7µs); each MoveAction reads its cell. Only
+    // meaningful for the v3 feature space (12x12, players 1/2, movesLeft 0..3); anything else
+    // keeps the pre-table ordering. Null table = off = current behavior.
+    double[] tableScores = null;
+    PolicyOrderingTable ordering = enhanced ? orderingTable : null;
+    if (ordering != null
+        && actor <= 2
+        && state.rows() == NNUEv3Accumulator.BOARD
+        && state.cols() == NNUEv3Accumulator.BOARD
+        && state.movesLeft() < PolicyOrderingTable.TEMPO_SLOTS) {
+      tableScores = ordering.score(state.toBoard(), actor, state.movesLeft());
+    }
     List<Child> children = new ArrayList<>();
     for (Action action : pos.searchActions()) {
       if (!running()) {
@@ -849,12 +908,13 @@ public final class GoBotSearcher {
       }
       GoState next = pos.applySearch(action);
       int order = 0;
+      double table = 0.0;
       if (hasTT && action.equals(ttMove)) {
         order += 10_000_000;
       }
-      if (useHeuristics
-          && (action.equals(killers[ply][0]) || action.equals(killers[ply][1]))) {
-        order += 5_000_000; // plan item 3: killers right after the TT move, before every static tier
+      if (useHeuristics && (action.equals(killers[ply][0]) || action.equals(killers[ply][1]))) {
+        order +=
+            5_000_000; // plan item 3: killers right after the TT move, before every static tier
       }
       if (next.gameOver() && next.winner() == actor) {
         order += 1_000_000;
@@ -870,14 +930,31 @@ public final class GoBotSearcher {
           // History below the capture bonus (capped) — biases quiet-move order, never captures.
           order += Math.min(history[actor - 1][t.row * state.cols() + t.col], 9_000);
         }
+        if (tableScores != null) {
+          table = tableScores[t.row * state.cols() + t.col];
+        }
       }
       if (next.currentPlayer() == actor) {
         order += 100;
       }
-      children.add(new Child(action, next, order));
+      children.add(new Child(action, next, order, table));
     }
-    // Stable descending sort by order (Go's sort.SliceStable); ties keep board order.
-    children.sort(Comparator.comparingInt((Child c) -> c.order).reversed());
+    // Stable descending sort (Go's sort.SliceStable): static tiers + history first, neural table
+    // score breaks ties, remaining ties keep board order. With no table every secondary key is
+    // 0.0, so this reduces exactly to the pre-table sort.
+    //
+    // Design call (stage-1 A/B, parity-fixture positions, hand-tuned leaf, searchToDepth):
+    // history-primary/table-tiebreak (this code) vs table-primary/history-tiebreak —
+    //   depth 4, 50 pos: 949,641 vs 949,013 nodes; mean fail-high idx 0.0155 vs 0.0114 (a wash)
+    //   depth 5, 50 pos: 1,900,774 vs 2,003,042 nodes (+5.4% for table-primary);
+    //                    mean fail-high idx 0.0236 vs 0.0224
+    // History-primary wins on nodes-to-depth at the deeper setting: learned in-search refutations
+    // outrank the static prior once history has data, while the table still orders the
+    // zero-history quiet bulk (where it replaces raw board order).
+    children.sort(
+        Comparator.comparingInt((Child c) -> c.order)
+            .reversed()
+            .thenComparing(Comparator.comparingDouble((Child c) -> c.table).reversed()));
     return children;
   }
 
