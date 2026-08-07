@@ -76,6 +76,15 @@ public final class GauntletMatch {
      */
     public long moveMillis = 0;
 
+    /**
+     * Per-side search-enhancement switch (A/B verification of the enhanced search stack). True =
+     * persistent enhanced searcher (packed TT, killers/history, salvage); false = pre-overhaul
+     * one-shot baseline. Both default true — production behavior.
+     */
+    public boolean enhancedA = true;
+
+    public boolean enhancedB = true;
+
     // Per-game opening diversity. The search is fully deterministic, so without this every game
     // from the same start position is byte-identical and N games collapse to just 2 distinct games
     // (one per color) — GAUNTLET_GAMES and PROMOTE_MARGIN granularity would then be a fiction. A
@@ -165,12 +174,18 @@ public final class GauntletMatch {
     int exploreWindow = config.exploreTurns * GoState.ACTIONS_PER_TURN;
     Random random = new Random(seed);
 
+    // One persistent enhanced searcher per player (plan item 2): the TT survives across that
+    // side's moves within the game, so each search starts warm from its previous move's principal
+    // subtree. Created lazily AFTER applyLeaf so each snapshots its own side's leaf eval.
+    GoBotSearcher[] searcherByPlayer = new GoBotSearcher[2];
+
     for (int ply = 0; ply < maxPlies && !state.gameOver(); ply++) {
       List<Action> legal = state.legalActions();
       if (legal.isEmpty()) {
         break; // stuck player — GoState elimination normally sets gameOver first
       }
       Object moverModel = ((state.currentPlayer() == 1) == aIsP1) ? modelA : modelB;
+      boolean moverIsA = ((state.currentPlayer() == 1) == aIsP1);
       Action searched;
       if (moverModel instanceof MctsSide) {
         MctsSide mcts = (MctsSide) moverModel;
@@ -182,7 +197,12 @@ public final class GauntletMatch {
       } else {
         // Point the process-wide leaf eval at whichever side is on the move, then search.
         applyLeaf(moverModel);
-        GoResult r = chooseMove(state, config);
+        GoResult r =
+            chooseMove(
+                state,
+                config,
+                searcherByPlayer,
+                moverIsA ? config.enhancedA : config.enhancedB);
         searched = r != null ? r.action : null;
       }
 
@@ -217,15 +237,28 @@ public final class GauntletMatch {
     }
   }
 
-  private static GoResult chooseMove(GoState state, Config config) {
-    if (config.moveMillis > 0) {
-      return GoBotSearcher.chooseWithDeadline(
-          state, System.currentTimeMillis() + config.moveMillis);
-    }
+  private static GoResult chooseMove(
+      GoState state, Config config, GoBotSearcher[] byPlayer, boolean enhanced) {
     if (config.fixedDepth > 0) {
-      return GoBotSearcher.chooseDepth(state, config.fixedDepth);
+      return GoBotSearcher.chooseDepth(state, config.fixedDepth); // parity oracle, stateless
     }
-    return GoBotSearcher.chooseNodeBudget(state, config.nodeLimit);
+    if (!enhanced) {
+      // Baseline arm for enhanced-vs-baseline verification: pre-overhaul behavior — one-shot
+      // searcher per move, HashMap TT, ply-exact probing, no killers/history.
+      GoBotSearcher one = GoBotSearcher.newSearcher(state);
+      return config.moveMillis > 0
+          ? one.searchWithDeadline(state, System.currentTimeMillis() + config.moveMillis)
+          : one.searchNodeBudget(state, config.nodeLimit);
+    }
+    int mover = state.currentPlayer();
+    GoBotSearcher s = byPlayer[mover - 1];
+    if (s == null) {
+      s = GoBotSearcher.newEnhancedSearcher(state);
+      byPlayer[mover - 1] = s;
+    }
+    return config.moveMillis > 0
+        ? s.searchWithDeadline(state, System.currentTimeMillis() + config.moveMillis)
+        : s.searchNodeBudget(state, config.nodeLimit);
   }
 
   /** Per-move wall clock for a deadline-driven side (production default when unset). */

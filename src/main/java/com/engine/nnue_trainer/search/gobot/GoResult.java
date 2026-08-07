@@ -17,6 +17,14 @@ public final class GoResult {
   public boolean budgetExhausted;
   public boolean searchComplete;
 
+  /**
+   * True when the action comes from a deadline-aborted iteration whose completed root moves
+   * (always including the previous PV as child 0) were salvaged instead of discarded — the move is
+   * at least as well-searched as the last fully completed iteration's answer; {@code depth} still
+   * reports that last completed iteration.
+   */
+  public boolean salvaged;
+
   /** Next-best root candidates (best-first), diagnostics only. */
   public List<RootMove> alternatives;
 
