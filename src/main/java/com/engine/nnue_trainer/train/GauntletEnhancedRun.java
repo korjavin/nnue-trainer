@@ -1,10 +1,10 @@
 package com.engine.nnue_trainer.train;
 
 /**
- * A/B verification of the enhanced search stack (bead 1jh.2): side A = persistent enhanced
- * searcher (packed TT + cross-move warmth, killers/history, deadline salvage), side B = the
- * pre-overhaul one-shot baseline. Both sides play the HAND_TUNED leaf, both on the same wall-clock
- * budget, so any win-rate gap is pure search improvement.
+ * A/B verification of the enhanced search stack (bead 1jh.2): side A = persistent enhanced searcher
+ * (packed TT + cross-move warmth, killers/history, deadline salvage), side B = the pre-overhaul
+ * one-shot baseline. Both sides play the HAND_TUNED leaf, both on the same wall-clock budget, so
+ * any win-rate gap is pure search improvement.
  *
  * <p>CLI: {@code GauntletEnhancedRun [games] [moveMillis] [seed]}. Defaults 50 games, 250 ms, seed
  * 1000. Prints one result line (A's perspective).
@@ -25,6 +25,7 @@ public final class GauntletEnhancedRun {
     cfg.nodeLimit = 0;
     cfg.moveMillis = ms;
     cfg.enhancedB = false;
+    cfg.recordDb = System.getenv("GAUNTLET_RECORD_DB");
 
     long t = System.currentTimeMillis();
     GauntletMatch.Result r = GauntletMatch.play(null, null, cfg);

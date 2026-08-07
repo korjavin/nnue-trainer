@@ -19,10 +19,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Stage-1 self-check for plan item 1 (staged move generation). Byte-exact move/score equality with
- * the unstaged search is already pinned by {@code GoBotSearchParityTest} /
- * {@code GoBotNodeBudgetParityTest}; this test asserts the fast path actually FIRES — i.e. that
- * iterative deepening produces TT-move-first cutoffs that skip sibling materialization — so the
- * speedup cannot silently regress to dead code.
+ * the unstaged search is already pinned by {@code GoBotSearchParityTest} / {@code
+ * GoBotNodeBudgetParityTest}; this test asserts the fast path actually FIRES — i.e. that iterative
+ * deepening produces TT-move-first cutoffs that skip sibling materialization — so the speedup
+ * cannot silently regress to dead code.
  */
 public class GoBotStagedMovegenTest {
 
@@ -105,7 +105,8 @@ public class GoBotStagedMovegenTest {
         board.setCell(
             r,
             c,
-            new Cell(cellNode.get("owner").asInt(), CellKind.valueOf(cellNode.get("kind").asText())));
+            new Cell(
+                cellNode.get("owner").asInt(), CellKind.valueOf(cellNode.get("kind").asText())));
       }
     }
     return board;

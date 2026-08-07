@@ -249,10 +249,7 @@ public final class GauntletMatch {
         applyLeaf(moverModel);
         GoResult r =
             chooseMove(
-                state,
-                config,
-                searcherByPlayer,
-                moverIsA ? config.enhancedA : config.enhancedB);
+                state, config, searcherByPlayer, moverIsA ? config.enhancedA : config.enhancedB);
         searched = r != null ? r.action : null;
       }
 

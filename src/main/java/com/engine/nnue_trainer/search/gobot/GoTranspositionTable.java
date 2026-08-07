@@ -8,8 +8,8 @@ import com.engine.nnue_trainer.board.Pos;
 /**
  * Packed-long array transposition table for the ENHANCED search path (plan item 2). Fixed-size,
  * power-of-two, allocation-free probe/store; depth-preferred + generation-aged replacement. The
- * parity-oracle path ({@code chooseDepth}) and {@code maxN} keep the original {@code
- * HashMap<Long, TableEntry>} untouched.
+ * parity-oracle path ({@code chooseDepth}) and {@code maxN} keep the original {@code HashMap<Long,
+ * TableEntry>} untouched.
  *
  * <p>Entry packing (64 bits): score 32 | depth 6 | flag 2 | generation 6 | action 18. Scores are
  * root-relative and ply-independent EXCEPT mate scores, which encode distance-to-root — those are

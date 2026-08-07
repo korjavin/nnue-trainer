@@ -23,10 +23,10 @@ import org.junit.jupiter.api.Test;
  * deepening produces at the deepest FULLY COMPLETED iteration — a partially searched
  * (deadline-aborted) iteration must never leak into the returned move. Since plan item 2 the live
  * path is ENHANCED (packed TT, cross-ply probing), so the oracle is a fresh enhanced searcher run
- * depth-capped — not {@code chooseDepth}, which stays the GoBot parity oracle and diverges from
- * the strength path by design. Positions come from the same mid-game fixture the node-budget
- * parity oracle uses; opening-book positions are skipped because the book answers before
- * iterative deepening runs.
+ * depth-capped — not {@code chooseDepth}, which stays the GoBot parity oracle and diverges from the
+ * strength path by design. Positions come from the same mid-game fixture the node-budget parity
+ * oracle uses; opening-book positions are skipped because the book answers before iterative
+ * deepening runs.
  *
  * <p>The deadline is wall-clock, so which depth completes varies run to run — but the contract must
  * hold at WHATEVER depth the search reports, so the assertion is timing-independent.

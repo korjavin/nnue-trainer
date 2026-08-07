@@ -117,11 +117,11 @@ public final class GoBotSearcher {
   final Map<Long, TableEntry> table;
 
   /**
-   * Strength-path switch (plan: parity constraint). True for the live/gauntlet entry points
-   * ({@code chooseNodeBudget}/{@code chooseWithDeadline} and the instance {@code search*}
-   * methods): packed array TT with depth-sufficient cross-ply probing, persistence across moves.
-   * False for the {@code chooseDepth} parity oracle, which keeps GoBot's exact HashMap TT and
-   * ply-exact probe so GoBotSearchParityTest stays byte-identical.
+   * Strength-path switch (plan: parity constraint). True for the live/gauntlet entry points ({@code
+   * chooseNodeBudget}/{@code chooseWithDeadline} and the instance {@code search*} methods): packed
+   * array TT with depth-sufficient cross-ply probing, persistence across moves. False for the
+   * {@code chooseDepth} parity oracle, which keeps GoBot's exact HashMap TT and ply-exact probe so
+   * GoBotSearchParityTest stays byte-identical.
    */
   final boolean enhanced;
 
@@ -208,8 +208,8 @@ public final class GoBotSearcher {
   /**
    * A persistent, enhanced searcher rooted at {@code state.currentPlayer()}. Keep it for the whole
    * game and call {@link #searchNodeBudget}/{@link #searchWithDeadline} each move — the packed TT
-   * carries the previous move's most-searched subtree into every new search. One instance per
-   * side: root-relative scores are only valid while the root player matches the mover.
+   * carries the previous move's most-searched subtree into every new search. One instance per side:
+   * root-relative scores are only valid while the root player matches the mover.
    */
   public static GoBotSearcher newEnhancedSearcher(GoState state) {
     return newSearcher(state, true);
@@ -357,12 +357,12 @@ public final class GoBotSearcher {
    * from the previous move's principal subtree.
    *
    * <p>Enhanced time management (plan item 5): a new iteration costs roughly EBF times the last
-   * one, so past {@link #SOFT_DEADLINE_PERCENT} of the budget it would almost surely be cut —
-   * don't start it. And when the deadline does abort an iteration whose PV child (child 0, the
-   * previous best) completed, the aborted iteration's best fully-searched root move is salvaged
-   * instead of discarded ({@link GoResult#salvaged}) — root best-move updates only ever happen on
-   * exact re-searched scores (the root alpha equals the running best), so a fail-low bound can
-   * never displace the PV move.
+   * one, so past {@link #SOFT_DEADLINE_PERCENT} of the budget it would almost surely be cut — don't
+   * start it. And when the deadline does abort an iteration whose PV child (child 0, the previous
+   * best) completed, the aborted iteration's best fully-searched root move is salvaged instead of
+   * discarded ({@link GoResult#salvaged}) — root best-move updates only ever happen on exact
+   * re-searched scores (the root alpha equals the running best), so a fail-low bound can never
+   * displace the PV move.
    */
   public GoResult searchWithDeadline(GoState state, long deadlineMillis) {
     GoResult book = GoOpeningBook.openingBookResult(state);
@@ -493,7 +493,8 @@ public final class GoBotSearcher {
       hasRoot = e != 0L;
       rootTTMove =
           hasRoot
-              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              ? GoTranspositionTable.decodeAction(
+                  GoTranspositionTable.actionBitsOf(e), state.cols())
               : null;
     } else {
       TableEntry rootEntry = probe(key);
@@ -604,7 +605,8 @@ public final class GoBotSearcher {
       hit = e != 0L;
       ttMove =
           hit
-              ? GoTranspositionTable.decodeAction(GoTranspositionTable.actionBitsOf(e), state.cols())
+              ? GoTranspositionTable.decodeAction(
+                  GoTranspositionTable.actionBitsOf(e), state.cols())
               : null;
       if (hit) {
         ttHits++;
@@ -852,9 +854,9 @@ public final class GoBotSearcher {
       if (hasTT && action.equals(ttMove)) {
         order += 10_000_000;
       }
-      if (useHeuristics
-          && (action.equals(killers[ply][0]) || action.equals(killers[ply][1]))) {
-        order += 5_000_000; // plan item 3: killers right after the TT move, before every static tier
+      if (useHeuristics && (action.equals(killers[ply][0]) || action.equals(killers[ply][1]))) {
+        order +=
+            5_000_000; // plan item 3: killers right after the TT move, before every static tier
       }
       if (next.gameOver() && next.winner() == actor) {
         order += 1_000_000;

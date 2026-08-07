@@ -51,8 +51,7 @@ public class GoBotTimeManagementTest {
         salvagedSomewhere = true;
         assertTrue(s.partialRoot.salvaged, "partial result must carry the salvaged flag");
         assertTrue(
-            state.legalActions().contains(s.partialRoot.action),
-            "salvaged action must be legal");
+            state.legalActions().contains(s.partialRoot.action), "salvaged action must be legal");
         // At 90% of the full iteration the salvage saw all-but-the-last children; its choice must
         // already be a move the FULL iteration also scored (sanity: it exists among root moves).
         if (percent == 90 && full4.alternatives != null) {
@@ -77,8 +76,7 @@ public class GoBotTimeManagementTest {
         GoResult r = GoBotSearcher.chooseWithDeadline(state, System.currentTimeMillis() + budget);
         assertNotNull(r);
         assertNotNull(r.action, "no action at budget " + budget);
-        assertTrue(
-            state.legalActions().contains(r.action), "illegal action at budget " + budget);
+        assertTrue(state.legalActions().contains(r.action), "illegal action at budget " + budget);
       }
     }
   }

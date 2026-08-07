@@ -10,10 +10,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Stage-3 self-checks (plan item 3): a recorded killer jumps the ordering queue (right after the
- * TT move, ahead of every static-bonus sibling), history feeds the ordering, and a real enhanced
- * search actually records killers/history — so the heuristics cannot silently regress to dead
- * code. The parity oracle path must order exactly as before (enhanced == false skips both).
+ * Stage-3 self-checks (plan item 3): a recorded killer jumps the ordering queue (right after the TT
+ * move, ahead of every static-bonus sibling), history feeds the ordering, and a real enhanced
+ * search actually records killers/history — so the heuristics cannot silently regress to dead code.
+ * The parity oracle path must order exactly as before (enhanced == false skips both).
  */
 public class GoBotKillerHistoryTest {
 
