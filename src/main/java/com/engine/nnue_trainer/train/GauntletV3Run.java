@@ -37,6 +37,9 @@ public final class GauntletV3Run {
     int[] depths = args.length > 1 ? parseInts(args[1]) : new int[] {3, 4};
     long seed = args.length > 2 ? Long.parseLong(args[2]) : 7L;
     boolean nodeMode = args.length > 3 && "nodes".equalsIgnoreCase(args[3]);
+    // "time" mode: both sides play chooseWithDeadline at args[4] ms/move — the production-honest
+    // comparison where the v3 leaf's speed advantage actually counts (bead 1jh.1).
+    boolean timeMode = args.length > 3 && "time".equalsIgnoreCase(args[3]);
     long nodeLimit = args.length > 4 ? Long.parseLong(args[4]) : 60_000L;
 
     // V3EVAL=net gauntlets the hidden-layer net instead of the linear fit; same search, same
@@ -71,15 +74,18 @@ public final class GauntletV3Run {
           com.engine.nnue_trainer.v3.NNUEv3NetEvaluator.load(
               Path.of(sysval("NNUEV3NET_B", "nnue_v3_net.json")));
     }
+    if (timeMode) {
+      depths = new int[] {0}; // wall-clock mode: depth is unused, run each matchup once
+    }
     for (int depth : depths) {
       if (doBar) {
-        runOne("v3 vs HAND_TUNED", v3, null, games, depth, seed, nodeMode, nodeLimit);
+        runOne("v3 vs HAND_TUNED", v3, null, games, depth, seed, nodeMode, timeMode, nodeLimit);
       }
       if (doV1 && v1 != null) {
-        runOne("v3 vs v1-NNUE", v3, v1, games, depth, seed, nodeMode, nodeLimit);
+        runOne("v3 vs v1-NNUE", v3, v1, games, depth, seed, nodeMode, timeMode, nodeLimit);
       }
       if (netB != null) {
-        runOne("v3 vs NET_B", v3, netB, games, depth, seed, nodeMode, nodeLimit);
+        runOne("v3 vs NET_B", v3, netB, games, depth, seed, nodeMode, timeMode, nodeLimit);
       }
     }
     System.out.println("\nDONE");
@@ -93,18 +99,23 @@ public final class GauntletV3Run {
       int depth,
       long seed,
       boolean nodeMode,
-      long nodeLimit) {
+      boolean timeMode,
+      long limit) {
     GauntletMatch.Config cfg = new GauntletMatch.Config();
     cfg.games = games;
     cfg.seed = seed;
-    if (nodeMode) {
+    if (timeMode) {
       cfg.fixedDepth = 0;
-      cfg.nodeLimit = nodeLimit;
+      cfg.nodeLimit = 0;
+      cfg.moveMillis = limit;
+    } else if (nodeMode) {
+      cfg.fixedDepth = 0;
+      cfg.nodeLimit = limit;
     } else {
       cfg.fixedDepth = depth;
       cfg.nodeLimit = 0;
     }
-    String mode = nodeMode ? ("nodes=" + nodeLimit) : ("depth=" + depth);
+    String mode = timeMode ? ("time=" + limit + "ms") : nodeMode ? ("nodes=" + limit) : ("depth=" + depth);
     long t = System.currentTimeMillis();
     GauntletMatch.Result r = GauntletMatch.play(a, b, cfg);
     double secs = (System.currentTimeMillis() - t) / 1000.0;
