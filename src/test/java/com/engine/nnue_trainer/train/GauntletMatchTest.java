@@ -2,6 +2,8 @@ package com.engine.nnue_trainer.train;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.engine.nnue_trainer.mcts.MctsSearcher;
+import com.engine.nnue_trainer.mcts.MctsSide;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.v3.V3TestEvaluators;
@@ -69,5 +71,31 @@ class GauntletMatchTest {
         GauntletMatch.play(V3TestEvaluators.selfStonesNet(), null, fastConfig());
 
     assertEquals(fastConfig().games, r.wins + r.losses + r.draws, "every game counted once: " + r);
+  }
+
+  /** An {@link MctsSide} plays with the PUCT searcher (fixed sims) against the GoBot clone. */
+  @Test
+  void mctsSideDispatchesAndCompletes() {
+    MctsSide mcts = new MctsSide(new MctsSearcher.Config(), 64);
+
+    GauntletMatch.Result r = GauntletMatch.play(mcts, null, fastConfig());
+
+    assertEquals(fastConfig().games, r.wins + r.losses + r.draws, "every game counted once: " + r);
+  }
+
+  /** {@code moveMillis} drives both sides by wall clock — the plan's rung-1 production control. */
+  @Test
+  void moveMillisDeadlineControlCompletes() {
+    GauntletMatch.Config cfg = new GauntletMatch.Config();
+    cfg.games = 2;
+    cfg.maxTurns = 3;
+    cfg.fixedDepth = 0;
+    cfg.nodeLimit = 0;
+    cfg.moveMillis = 20; // tiny budget: exercises chooseWithDeadline + MCTS deadline path
+
+    GauntletMatch.Result r =
+        GauntletMatch.play(new MctsSide(new MctsSearcher.Config(), 0), null, cfg);
+
+    assertEquals(cfg.games, r.wins + r.losses + r.draws, "every game counted once: " + r);
   }
 }

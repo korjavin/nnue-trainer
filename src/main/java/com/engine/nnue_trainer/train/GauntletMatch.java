@@ -4,6 +4,8 @@ import com.engine.nnue_trainer.board.Action;
 import com.engine.nnue_trainer.board.Board;
 import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
+import com.engine.nnue_trainer.mcts.MctsSearcher;
+import com.engine.nnue_trainer.mcts.MctsSide;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.gobot.GoBotSearcher;
 import com.engine.nnue_trainer.search.gobot.GoResult;
@@ -67,6 +69,13 @@ public final class GauntletMatch {
     /** Fixed search depth; &gt;0 uses {@code chooseDepth} instead of the node budget. */
     public int fixedDepth = 0;
 
+    /**
+     * Fixed wall-clock per move in millis; &gt;0 overrides depth/node budgets and plays the
+     * production condition (plan 20260807 rung 1): the GoBot side uses {@code chooseWithDeadline}
+     * (opening book on, as live), an MCTS side without a sim budget uses the same deadline.
+     */
+    public long moveMillis = 0;
+
     // Per-game opening diversity. The search is fully deterministic, so without this every game
     // from the same start position is byte-identical and N games collapse to just 2 distinct games
     // (one per color) — GAUNTLET_GAMES and PROMOTE_MARGIN granularity would then be a fiction. A
@@ -91,8 +100,9 @@ public final class GauntletMatch {
 
   /**
    * Generalized match. Each side is one of: {@code null} (hand-tuned bar), an {@link NNUEModel} (v1
-   * leaf), an {@link NNUEv2Evaluator} (v2 leaf), or a {@link V3Eval} (v3 leaf, linear or net). Same
-   * GoBot search both sides — only the leaf eval differs.
+   * leaf), an {@link NNUEv2Evaluator} (v2 leaf), a {@link V3Eval} (v3 leaf, linear or net) — all
+   * played by the same GoBot search, only the leaf eval differing — or an {@link MctsSide}, which
+   * replaces the search itself with the Phase 1 PUCT searcher.
    */
   public static Result play(Object sideA, Object sideB, Config config) {
     // Color balance (and exact cancellation of identical nets) requires games to come in
@@ -141,16 +151,27 @@ public final class GauntletMatch {
       if (legal.isEmpty()) {
         break; // stuck player — GoState elimination normally sets gameOver first
       }
-      // Point the process-wide leaf eval at whichever side is on the move, then search.
       Object moverModel = ((state.currentPlayer() == 1) == aIsP1) ? modelA : modelB;
-      applyLeaf(moverModel);
-      GoResult r = chooseMove(state, config);
+      Action searched;
+      if (moverModel instanceof MctsSide) {
+        MctsSide mcts = (MctsSide) moverModel;
+        searched =
+            mcts.sims > 0
+                ? MctsSearcher.chooseSims(state, mcts.sims, mcts.config)
+                : MctsSearcher.chooseDeadline(
+                    state, System.currentTimeMillis() + moveBudgetMillis(config), mcts.config);
+      } else {
+        // Point the process-wide leaf eval at whichever side is on the move, then search.
+        applyLeaf(moverModel);
+        GoResult r = chooseMove(state, config);
+        searched = r != null ? r.action : null;
+      }
 
       Action chosen;
       if (ply < exploreWindow && random.nextDouble() < config.epsilon) {
         chosen = legal.get(random.nextInt(legal.size())); // seeded opening diversity
       } else {
-        chosen = (r != null && r.action != null) ? r.action : legal.get(0);
+        chosen = searched != null ? searched : legal.get(0);
       }
       GoState next = state.apply(chosen);
       if (next == null) {
@@ -178,10 +199,19 @@ public final class GauntletMatch {
   }
 
   private static GoResult chooseMove(GoState state, Config config) {
+    if (config.moveMillis > 0) {
+      return GoBotSearcher.chooseWithDeadline(
+          state, System.currentTimeMillis() + config.moveMillis);
+    }
     if (config.fixedDepth > 0) {
       return GoBotSearcher.chooseDepth(state, config.fixedDepth);
     }
     return GoBotSearcher.chooseNodeBudget(state, config.nodeLimit);
+  }
+
+  /** Per-move wall clock for a deadline-driven side (production default when unset). */
+  private static long moveBudgetMillis(Config config) {
+    return config.moveMillis > 0 ? config.moveMillis : 1000L;
   }
 
   private static Board freshBoard() {
