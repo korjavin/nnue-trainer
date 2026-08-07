@@ -88,8 +88,12 @@ def forward_batch(model, batch):
     m, u, v = model(tp.planes(sym, ml, nuo, nux))
     logits = tp.flat_logits(m, u, model.pair_bias)
     # The legal set is exactly the (non-pad) pi indices — the mask the softmax runs over.
-    mask = torch.zeros_like(logits, dtype=torch.bool)
-    mask.scatter_(1, idx, valid)
+    # Pad entries carry idx 0, and duplicate-index scatter is nondeterministic — a pad's
+    # False could clobber a legal flat id 0. Route pads to a sentinel column instead.
+    cells = logits.shape[1]
+    mask = torch.zeros((logits.shape[0], cells + 1), dtype=torch.bool, device=logits.device)
+    mask.scatter_(1, idx.masked_fill(~valid, cells), True)
+    mask = mask[:, :cells]
     logits = logits.masked_fill(~mask, -1e9)
     return logits, idx, w, v, zt
 

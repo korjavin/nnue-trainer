@@ -53,6 +53,21 @@ class FrameSignTest(unittest.TestCase):
         self.assertEqual(valid[0].tolist(), [True, True, False])
         self.assertEqual(w[1].tolist(), [0.0, 0.5, 0.5])
 
+    def test_mask_keeps_flat_id_zero_legal_despite_padding(self):
+        # Row 0 is padded (k=3) and pads carry idx 0 — flat id 0 being genuinely
+        # legal must survive the scatter (duplicate-index writes are nondeterministic).
+        rows = [
+            _row("a", 1, 0, [0, 7], [1, 1]),
+            _row("a", 2, 0, [3, 7, 150], [1, 1, 1]),
+        ]
+        batch = ts.tensors(rows, "cpu")
+        model = ts.PolicyValueNet(channels=4, layers=1)
+        logits, idx, w, v, zt = ts.forward_batch(model, batch)
+        finite0 = (logits[0] > -1e8).nonzero().flatten().tolist()
+        self.assertEqual(finite0, [0, 7])
+        finite1 = (logits[1] > -1e8).nonzero().flatten().tolist()
+        self.assertEqual(finite1, [3, 7, 150])
+
     def test_mask_covers_exactly_the_legal_set(self):
         rows = [_row("a", 1, 0, [5, 150], [2, 2])]
         batch = ts.tensors(rows, "cpu")
