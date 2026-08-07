@@ -646,7 +646,10 @@ public class SearchEngine {
         // zero-sum negation — the same convention as the GoBot v3 leaf. Querying originalPlayer
         // directly would evaluate opponent-to-move leaves a tempo out of distribution, and the fit
         // is not antisymmetric enough for the two to agree.
-        double v = v3.evaluate(board, sideToMove);
+        // handTunedMovesLeft is the root's live tempo, not the leaf's — this legacy negamax does
+        // not track movesLeft per node. GoBotSearcher.leafEval (the prod path) passes the exact
+        // leaf tempo.
+        double v = v3.evaluate(board, sideToMove, handTunedMovesLeft);
         return (float) (sideToMove == originalPlayer ? v : -v);
       }
       // Load failed -> fall through to the baseline below (as does any non-12x12 board).

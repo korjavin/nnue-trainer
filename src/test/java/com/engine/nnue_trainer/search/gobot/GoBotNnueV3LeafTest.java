@@ -35,13 +35,13 @@ public class GoBotNnueV3LeafTest {
   public void leafIsTheRawEvalRounded() {
     // No scale knob: the evaluator's output IS the leaf score (v3 was fitted in hand-tuned units).
     NNUEv3Evaluator v3 = V3TestEvaluators.constant(1234.6);
-    assertEquals(1235L, GoBotSearcher.nnueV3Leaf(board(12), 1, v3));
+    assertEquals(1235L, GoBotSearcher.nnueV3Leaf(board(12), 1, 3, v3));
   }
 
   @Test
   public void clampsStrictlyBelowMate() {
-    long hi = GoBotSearcher.nnueV3Leaf(board(12), 1, V3TestEvaluators.constant(1e12));
-    long lo = GoBotSearcher.nnueV3Leaf(board(12), 1, V3TestEvaluators.constant(-1e12));
+    long hi = GoBotSearcher.nnueV3Leaf(board(12), 1, 3, V3TestEvaluators.constant(1e12));
+    long lo = GoBotSearcher.nnueV3Leaf(board(12), 1, 3, V3TestEvaluators.constant(-1e12));
     assertEquals(GoBotSearcher.NNUE_CLAMP, hi);
     assertEquals(-GoBotSearcher.NNUE_CLAMP, lo);
     assertTrue(hi < GoBotSearcher.MATE_SCORE && lo > -GoBotSearcher.MATE_SCORE);
@@ -51,8 +51,8 @@ public class GoBotNnueV3LeafTest {
   public void orientedToRequestedPlayerAndZeroSum() {
     Board b = board(12); // player 1 has two NORMAL stones to player 2's one
     NNUEv3Evaluator v3 = V3TestEvaluators.stoneCount();
-    long forP1 = GoBotSearcher.nnueV3Leaf(b, 1, v3);
-    long forP2 = GoBotSearcher.nnueV3Leaf(b, 2, v3);
+    long forP1 = GoBotSearcher.nnueV3Leaf(b, 1, 3, v3);
+    long forP2 = GoBotSearcher.nnueV3Leaf(b, 2, 3, v3);
     assertEquals(1L, forP1, "higher = better for the queried player");
     assertEquals(forP1, -forP2, "zero-sum: the mirror perspective is the exact negative");
   }

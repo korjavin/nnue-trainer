@@ -81,16 +81,18 @@ def synth_net(hidden):
 
 
 def load_net(path):
-    """-> (w1 [H,1152], b1 [H], w2 [H], b2). Validated the same way the Java loader does."""
+    """-> (w1 [H,F], b1 [H], w2 [H], b2). F is 1152 or 1156 (tempo one-hot appended)."""
     with open(path) as f:
         doc = json.load(f)
     hidden = int(doc["meta"]["hidden"])
-    if int(doc["meta"]["features"]) != N_FEATURES:
-        raise SystemExit("%s: meta.features != %d" % (path, N_FEATURES))
+    n_features = int(doc["meta"]["features"])
+    if n_features not in (N_FEATURES, N_FEATURES + 4):
+        raise SystemExit("%s: meta.features %d not in (%d, %d)"
+                         % (path, n_features, N_FEATURES, N_FEATURES + 4))
     w1 = np.array(doc["w1"], dtype=np.float64)
     b1 = np.array(doc["b1"], dtype=np.float64)
     w2 = np.array(doc["w2"], dtype=np.float64)
-    if w1.shape != (hidden, N_FEATURES) or b1.shape != (hidden,) or w2.shape != (hidden,):
+    if w1.shape != (hidden, n_features) or b1.shape != (hidden,) or w2.shape != (hidden,):
         raise SystemExit(
             "%s: shape mismatch for hidden=%d: w1%s b1%s w2%s"
             % (path, hidden, w1.shape, b1.shape, w2.shape)
@@ -131,17 +133,23 @@ def main(argv=None):
     with open(args.boards) as f:
         src = json.load(f)
 
+    tempo = w1.shape[1] > N_FEATURES
     fixtures = []
-    for fx in src["fixtures"]:
+    for i, fx in enumerate(src["fixtures"]):
         board = board_from_cells(fx["cells"])
-        fixtures.append(
-            {
-                "name": fx["name"],
-                "stm": fx["stm"],
-                "cells": fx["cells"],
-                "expected": predict(w1, b1, w2, b2, active_of(board, fx["stm"])),
-            }
-        )
+        active = active_of(board, fx["stm"])
+        entry = {
+            "name": fx["name"],
+            "stm": fx["stm"],
+            "cells": fx["cells"],
+        }
+        if tempo:
+            # Deterministic movesLeft covering all 4 slots across the fixture set.
+            ml = i % 4
+            entry["ml"] = ml
+            active = active + [N_FEATURES + ml]
+        entry["expected"] = predict(w1, b1, w2, b2, active)
+        fixtures.append(entry)
 
     doc = {
         "meta": {

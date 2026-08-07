@@ -19,6 +19,15 @@ public interface V3Eval {
   double evaluate(Board board, int stm);
 
   /**
+   * Tempo-aware leaf value: {@code movesLeft} is the position's remaining actions this turn (0..3).
+   * Evaluators without tempo features ignore it; a tempo net (1156-wide) requires this overload —
+   * its 2-arg {@code evaluate} throws rather than silently assuming a tempo.
+   */
+  default double evaluate(Board board, int stm, int movesLeft) {
+    return evaluate(board, stm);
+  }
+
+  /**
    * The evaluator the offline tools ({@code V3OrderingProbe}, {@code GauntletV3Run}) should use:
    * {@code V3EVAL=net} loads {@link NNUEv3NetEvaluator} from {@code NNUEV3NET_WEIGHTS}, anything
    * else the linear {@link NNUEv3Evaluator} from {@code NNUEV3_WEIGHTS}. Selecting the same feature

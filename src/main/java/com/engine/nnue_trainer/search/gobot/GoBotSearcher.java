@@ -625,7 +625,7 @@ public final class GoBotSearcher {
       Board board = state.toBoard();
       if (v3Usable(board, nnueV3)) {
         int mover = state.currentPlayer();
-        long v = nnueV3Leaf(board, mover, nnueV3);
+        long v = nnueV3Leaf(board, mover, state.movesLeft(), nnueV3);
         return mover == root ? v : -v;
       }
       // fall through to hand-tuned
@@ -661,7 +661,7 @@ public final class GoBotSearcher {
     V3Eval v3 = leafMode == LeafEval.NNUEV3 && v3Usable(board, nnueV3) ? nnueV3 : null;
     for (int p = 1; p <= 4; p++) {
       if (v3 != null) {
-        all[p - 1] = nnueV3Leaf(board, p, v3);
+        all[p - 1] = nnueV3Leaf(board, p, state.movesLeft(), v3);
       } else if (v2 != null) {
         all[p - 1] = nnueV2Leaf(board, p, v2);
       } else if (model != null) {
@@ -701,8 +701,8 @@ public final class GoBotSearcher {
    * units, so this only rounds to the search's {@code long} frame and clamps strictly inside {@code
    * ±MATE_SCORE} — deliberately no scale knob (see {@link V3Eval}).
    */
-  static long nnueV3Leaf(Board board, int player, V3Eval v3) {
-    long score = Math.round(v3.evaluate(board, player));
+  static long nnueV3Leaf(Board board, int player, int movesLeft, V3Eval v3) {
+    long score = Math.round(v3.evaluate(board, player, movesLeft));
     return Math.max(-NNUE_CLAMP, Math.min(NNUE_CLAMP, score));
   }
 

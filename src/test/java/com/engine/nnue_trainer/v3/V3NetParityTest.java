@@ -48,7 +48,11 @@ public class V3NetParityTest {
     int checked = 0;
     for (JsonNode fx : doc.get("fixtures")) {
       double expected = fx.get("expected").asDouble();
-      double actual = ev.evaluate(reconstruct(fx), fx.get("stm").asInt());
+      // Tempo-net fixtures carry the movesLeft the expected score was computed with.
+      double actual =
+          fx.has("ml")
+              ? ev.evaluate(reconstruct(fx), fx.get("stm").asInt(), fx.get("ml").asInt())
+              : ev.evaluate(reconstruct(fx), fx.get("stm").asInt());
       assertEquals(
           expected, actual, Math.max(TOL, Math.abs(expected) * 1e-9), fx.get("name").asText());
       checked++;

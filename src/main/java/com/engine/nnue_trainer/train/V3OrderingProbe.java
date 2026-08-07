@@ -114,7 +114,7 @@ public final class V3OrderingProbe {
             double sgn = cp == mover ? 1.0 : -1.0;
             boolean[] nu = {child.neutralUsed(1), child.neutralUsed(2)};
             double ht = HandTunedEval.staticEval(child.toBoard(), cp, child.movesLeft(), nu);
-            double vv = v3.evaluate(child.toBoard(), cp);
+            double vv = v3.evaluate(child.toBoard(), cp, child.movesLeft());
             errors.add(Math.abs(vv - ht));
             pairs.add(new double[] {sgn * ht, sgn * vv});
           }

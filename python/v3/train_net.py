@@ -473,16 +473,14 @@ def main(argv=None):
                    help="fit the v3.1 linear ridge baseline at these lambdas and stop "
                         "(default 1 10 100 1000)")
     p.add_argument("--tempo", action="store_true",
-                   help="EXPERIMENT: append a 4-way movesLeft one-hot (1152 -> 1156 features). "
-                        "The Java runtime hardcodes 1152, so --out is refused with this on.")
+                   help="append a 4-way movesLeft one-hot (1152 -> 1156 features); the runtime "
+                        "loads 1156-wide nets and queries them via evaluate(board, stm, movesLeft)")
     p.add_argument("--out", default="", help="path to write nnue_v3_net.json; empty = measure only")
     args = p.parse_args(argv)
 
     data = load_dataset(args.dataset)
     n_features = N_FEATURES
     if args.tempo:
-        if args.out:
-            raise SystemExit("--tempo nets are 1156-wide; the runtime cannot load them. Drop --out.")
         data, n_features = with_tempo(data)
         print("TEMPO EXPERIMENT: %d features, %d active (NOT the shipped schema)"
               % (n_features, data["active"].shape[1]))
@@ -548,10 +546,10 @@ def main(argv=None):
             raise SystemExit("--out needs a net; the sweep's best H was the linear baseline (0)")
         model, mu, sigma = results[best_h]["model"]
         meta = {
-            "arch": "1152-%d-1" % best_h,
+            "arch": "%d-%d-1" % (n_features, best_h),
             "hidden": best_h,
             "activation": "relu",
-            "features": N_FEATURES,
+            "features": n_features,
             "score_units": "hand_tuned",
             "games_train": int(len(np.unique(data["gidx"][tr_mask]))),
             "games_holdout": int(len(np.unique(data["gidx"][te_mask]))),
