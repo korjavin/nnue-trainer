@@ -269,3 +269,33 @@ V3EVAL=net MATCHUP=bar ./mvnw -q exec:java \
 python3 -m unittest discover -s python/v3 -p "*_test.py"
 ./mvnw test
 ```
+
+## 2026-08-07 retrain: 2.6x corpus, offline up, strength flat
+
+Fresh prod games.db: 1126 usable games -> 17 394 sibling groups -> 577 664 rows (same 47% turn-flip
+share). H sweep, 3 seeds, corrected frame: **the hidden layer now beats linear offline** (test top-1
+means: H=0 73.7%, H=16 78.3%, H=32 78.8%, H=64 78.8%, H=128 77.9%) — the capacity that bought
+nothing at 224k rows buys ~5 points at 578k. Shipped: H=32 seed 0, holdout top-1 81.6%, live-frame
+probe top-1 **86.6%** (prior net: 77.5%), parity PASS.
+
+Strength, with properly powered samples (openings disjoint per run — see the seed-overlap caveat
+below):
+
+| matchup, depth 3 unless noted | games | result |
+|---|---|---|
+| retrained net vs HAND_TUNED | 400 | 97 W = **24.3% ± 2.1** |
+| retrained net vs HAND_TUNED, depth 4 | 208 | 29 W = **13.9% ± 2.4** |
+| retrained net vs prior net (`MATCHUP=netb`) | 400 | 208 W = **52.0% ± 2.5** |
+
+**The sixth offline-online disconnect, and the cleanest:** +9 points of live-frame top-1 ordering
+produced zero measurable strength (52% head-to-head is a tie). Depth 4 being *worse* than depth 3
+says search amplifies the eval's tail errors — consistent with the probe's resolution verdict
+(median model error 2499 vs the 1125 sibling gap it must judge, 2.2x). Static-eval distillation on
+the 1152 positional features has hit its ceiling; the levers that remain are tempo-aware features
+(the `movesLeft` blind spot above) and deep-search/outcome labels (bead d4a.6.4).
+
+**Seed-overlap caveat (bead nnue-trainer-riy):** `GauntletMatch` derives openings as
+`config.seed + game/2`, so nearby seeds replay overlapping opening sets — the historical
+"robust across seeds 7/11/23" runs shared 8 of 12 opening pairs. All samples in the table above use
+seed ranges spaced 1000 apart (disjoint openings); `MATCHUP=netb` + `NNUEV3NET_B=<path>` plays the
+env-selected v3 eval against a second net artifact.

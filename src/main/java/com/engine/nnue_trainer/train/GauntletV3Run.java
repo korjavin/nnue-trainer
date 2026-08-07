@@ -61,14 +61,25 @@ public final class GauntletV3Run {
     System.out.println("-----------------  ----------  -----  -----------  --------   ------");
 
     String matchup = sysval("MATCHUP", "both").toLowerCase();
-    boolean doBar = !matchup.equals("v1");
-    boolean doV1 = !matchup.equals("bar");
+    boolean doBar = !matchup.equals("v1") && !matchup.equals("netb");
+    boolean doV1 = !matchup.equals("bar") && !matchup.equals("netb");
+    // MATCHUP=netb + NNUEV3NET_B=<path>: current v3 eval (side A) vs a second net (side B),
+    // for head-to-head strength between two net artifacts.
+    V3Eval netB = null;
+    if (matchup.equals("netb")) {
+      netB =
+          com.engine.nnue_trainer.v3.NNUEv3NetEvaluator.load(
+              Path.of(sysval("NNUEV3NET_B", "nnue_v3_net.json")));
+    }
     for (int depth : depths) {
       if (doBar) {
         runOne("v3 vs HAND_TUNED", v3, null, games, depth, seed, nodeMode, nodeLimit);
       }
       if (doV1 && v1 != null) {
         runOne("v3 vs v1-NNUE", v3, v1, games, depth, seed, nodeMode, nodeLimit);
+      }
+      if (netB != null) {
+        runOne("v3 vs NET_B", v3, netB, games, depth, seed, nodeMode, nodeLimit);
       }
     }
     System.out.println("\nDONE");
