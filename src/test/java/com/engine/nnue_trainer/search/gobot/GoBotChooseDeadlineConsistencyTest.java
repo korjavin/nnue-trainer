@@ -38,12 +38,7 @@ public class GoBotChooseDeadlineConsistencyTest {
    * on a fresh searcher — what choose(deadline) must equal at its reported depth.
    */
   private static GoResult enhancedOracle(GoState state, int depth) {
-    GoBotSearcher s = GoBotSearcher.newEnhancedSearcher(state);
-    GoResult result = null;
-    for (int d = 1; d <= depth; d++) {
-      result = s.atDepth(state, d);
-    }
-    return result;
+    return GoBotSearcher.newEnhancedSearcher(state).searchToDepth(state, depth);
   }
 
   /**

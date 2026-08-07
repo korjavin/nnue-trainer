@@ -138,6 +138,12 @@ public final class GoBotSearcher {
   long ttProbes; // diagnostics: enhanced-TT probes
   long ttHits; // diagnostics: enhanced-TT hits (any depth)
 
+  // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
+  // ordered right after the TT move; plus a per-mover, per-cell history table bumped depth^2 on
+  // quiet cutoffs, halved each new search. Both are per-searcher — no cross-searcher bleed.
+  final Action[][] killers = new Action[MAX_DEPTH + 1][2];
+  int[][] history; // [mover-1][cell index], lazily sized to the board; 1v1 movers only
+
   GoBotSearcher(int root, boolean multi) {
     this(root, multi, false);
   }
@@ -402,6 +408,20 @@ public final class GoBotSearcher {
     return best;
   }
 
+  /**
+   * The enhanced iterative-deepening loop run to exactly {@code maxDepth} with no budget — the
+   * deterministic oracle for what {@link #searchWithDeadline} must return at its reported depth
+   * (GoBotChooseDeadlineConsistencyTest). Package-visible for tests/diagnostics.
+   */
+  GoResult searchToDepth(GoState state, int maxDepth) {
+    beginSearch(state, 0, 0);
+    GoResult result = null;
+    for (int depth = 1; depth <= maxDepth; depth++) {
+      result = atDepth(state, depth);
+    }
+    return result;
+  }
+
   /** Per-call reset: budgets and counters are per move; the enhanced TT persists, aged. */
   private void beginSearch(GoState state, long deadline, long limit) {
     if (state.currentPlayer() != root) {
@@ -414,6 +434,20 @@ public final class GoBotSearcher {
     this.evaluations = 0;
     if (enhanced) {
       tt.bumpGeneration();
+      for (Action[] slot : killers) {
+        slot[0] = null;
+        slot[1] = null;
+      }
+      int cells = state.rows() * state.cols();
+      if (history == null || history[0].length != cells) {
+        history = new int[2][cells];
+      } else {
+        for (int[] side : history) {
+          for (int i = 0; i < side.length; i++) {
+            side[i] >>= 1; // age: last move's refutations fade, they don't dominate forever
+          }
+        }
+      }
     }
   }
 
@@ -435,7 +469,7 @@ public final class GoBotSearcher {
       hasRoot = rootEntry != null;
       rootTTMove = hasRoot ? rootEntry.bestAction : null;
     }
-    List<Child> children = orderedChildren(state, rootTTMove, hasRoot);
+    List<Child> children = orderedChildren(state, rootTTMove, hasRoot, 0);
     if (children.isEmpty()) {
       return new GoResult();
     }
@@ -610,6 +644,7 @@ public final class GoBotSearcher {
       }
       if (alpha >= beta) {
         fastPathCuts++;
+        recordCutoff(state, bestAction, depth, ply);
         int cutFlag = FLAG_EXACT;
         if (best <= alphaOrig) {
           cutFlag = FLAG_UPPER;
@@ -621,7 +656,7 @@ public final class GoBotSearcher {
       }
     }
 
-    List<Child> children = orderedChildren(state, ttMove, hit);
+    List<Child> children = orderedChildren(state, ttMove, hit, ply);
     if (children.isEmpty() && !searchedTTFirst) {
       evaluations++;
       return leafEval(state);
@@ -664,6 +699,7 @@ public final class GoBotSearcher {
         }
       }
       if (alpha >= beta) {
+        recordCutoff(state, bestAction, depth, ply);
         break;
       }
     }
@@ -697,7 +733,7 @@ public final class GoBotSearcher {
     if (hit && entry.depth >= depth && entry.ply == ply) {
       return toLong(entry.values);
     }
-    List<Child> children = orderedChildren(state, hit ? entry.bestAction : null, hit);
+    List<Child> children = orderedChildren(state, hit ? entry.bestAction : null, hit, ply);
     if (children.isEmpty()) {
       evaluations++;
       return leafEvalAll(state);
@@ -755,10 +791,11 @@ public final class GoBotSearcher {
         || (cell.kind == CellKind.NORMAL && cell.owner != state.currentPlayer());
   }
 
-  private List<Child> orderedChildren(GoState state, Action ttMove, boolean hasTT) {
+  private List<Child> orderedChildren(GoState state, Action ttMove, boolean hasTT, int ply) {
     GoPosition pos = GoPosition.of(state);
     int actor = state.currentPlayer();
     int beforeActive = activeCount(state);
+    boolean useHeuristics = enhanced && history != null && ply <= MAX_DEPTH;
     List<Child> children = new ArrayList<>();
     for (Action action : pos.searchActions()) {
       if (!running()) {
@@ -768,6 +805,10 @@ public final class GoBotSearcher {
       int order = 0;
       if (hasTT && action.equals(ttMove)) {
         order += 10_000_000;
+      }
+      if (useHeuristics
+          && (action.equals(killers[ply][0]) || action.equals(killers[ply][1]))) {
+        order += 5_000_000; // plan item 3: killers right after the TT move, before every static tier
       }
       if (next.gameOver() && next.winner() == actor) {
         order += 1_000_000;
@@ -779,6 +820,10 @@ public final class GoBotSearcher {
         if (target.kind == CellKind.NORMAL && target.owner != actor) {
           order += 10_000;
         }
+        if (useHeuristics && actor <= 2) {
+          // History below the capture bonus (capped) — biases quiet-move order, never captures.
+          order += Math.min(history[actor - 1][t.row * state.cols() + t.col], 9_000);
+        }
       }
       if (next.currentPlayer() == actor) {
         order += 100;
@@ -788,6 +833,40 @@ public final class GoBotSearcher {
     // Stable descending sort by order (Go's sort.SliceStable); ties keep board order.
     children.sort(Comparator.comparingInt((Child c) -> c.order).reversed());
     return children;
+  }
+
+  /** Ordering as seen by the search at {@code ply} — actions only, for tests/diagnostics. */
+  List<Action> orderedActions(GoState state, Action ttMove, boolean hasTT, int ply) {
+    List<Action> actions = new ArrayList<>();
+    for (Child c : orderedChildren(state, ttMove, hasTT, ply)) {
+      actions.add(c.action);
+    }
+    return actions;
+  }
+
+  /**
+   * Plan item 3: on a fail-high caused by a QUIET move (no capture), remember it as a killer for
+   * this ply and bump its cell's history — the same refutation usually works at sibling nodes.
+   */
+  private void recordCutoff(GoState state, Action action, int depth, int ply) {
+    if (!enhanced || history == null || ply > MAX_DEPTH || !(action instanceof MoveAction)) {
+      return;
+    }
+    Pos t = ((MoveAction) action).target;
+    Cell target = state.at(t.row, t.col);
+    int actor = state.currentPlayer();
+    if (target.kind == CellKind.NORMAL && target.owner != actor) {
+      return; // captures already order high statically
+    }
+    Action[] slot = killers[ply];
+    if (!action.equals(slot[0])) {
+      slot[1] = slot[0];
+      slot[0] = action;
+    }
+    if (actor <= 2) {
+      int idx = t.row * state.cols() + t.col;
+      history[actor - 1][idx] = Math.min(history[actor - 1][idx] + depth * depth, 1 << 28);
+    }
   }
 
   private static List<Child> preservingChildren(List<Child> children, int actor) {
