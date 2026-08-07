@@ -265,6 +265,13 @@ public final class GoBotSearcher {
   /**
    * Port of GoBot's {@code Choose} with an explicit absolute deadline (epoch millis). Returns
    * {@code null} only when the position has no legal action.
+   *
+   * <p>Contract (bd 0dj.7, enforced by {@code GoBotChooseDeadlineConsistencyTest}): the returned
+   * move is exactly the {@link #chooseDepth} move at the deepest FULLY COMPLETED iteration — a
+   * deadline abort mid-iteration throws {@link SearchIncomplete} out of {@link #atDepth} before
+   * anything is committed, so a partially searched iteration can never override the last complete
+   * one. If not even depth 1 completes, the {@code preservingFallback} action is returned with
+   * {@code depth == 0}.
    */
   public static GoResult chooseWithDeadline(GoState state, long deadlineMillis) {
     GoResult book = GoOpeningBook.openingBookResult(state);
