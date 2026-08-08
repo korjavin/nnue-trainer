@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,6 +15,18 @@ import org.junit.jupiter.api.Test;
  * enhanced node-budget path stays deterministic.
  */
 public class GoBotEnhancedTTTest {
+
+  // Determinism/persistence here are single-threaded contracts: with lazy SMP (plan item 4)
+  // helper TT entries steer the main tree run-to-run. SMP-on behavior lives in GoBotSmpTest.
+  @BeforeEach
+  public void smpOff() {
+    GoBotSearcher.smpThreadsOverride = 0;
+  }
+
+  @AfterEach
+  public void restoreSmp() {
+    GoBotSearcher.smpThreadsOverride = null;
+  }
 
   /**
    * Cross-move TT reuse: after searching a position, the position reached by playing the chosen

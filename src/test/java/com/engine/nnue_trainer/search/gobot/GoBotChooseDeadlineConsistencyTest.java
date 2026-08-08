@@ -15,6 +15,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -32,6 +34,19 @@ import org.junit.jupiter.api.Test;
  * hold at WHATEVER depth the search reports, so the assertion is timing-independent.
  */
 public class GoBotChooseDeadlineConsistencyTest {
+
+  // The 0dj.7 contract is defined for the single-threaded search: with lazy SMP (plan item 4)
+  // helper TT entries steer the main thread's iterations, so "equals its own ID loop rerun" only
+  // holds with SMP off. SMP-on behavior has its own suite (GoBotSmpTest).
+  @BeforeEach
+  public void smpOff() {
+    GoBotSearcher.smpThreadsOverride = 0;
+  }
+
+  @AfterEach
+  public void restoreSmp() {
+    GoBotSearcher.smpThreadsOverride = null;
+  }
 
   /**
    * The deterministic result of the enhanced iterative-deepening loop run to exactly {@code depth}

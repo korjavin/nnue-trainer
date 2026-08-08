@@ -16,6 +16,18 @@ import com.engine.nnue_trainer.board.Pos;
  * rebased to node-relative distance on store ({@link #toStoredScore}) and back to the probing
  * node's ply on probe ({@link #fromStoredScore}), the standard mate-in-TT correction.
  *
+ * <p><b>Thread safety (lazy SMP, plan item 4)</b> — lockless via the standard XOR trick: {@code
+ * keys[i]} holds {@code key ^ data[i]}, and a probe only trusts {@code data[i]} when {@code keys[i]
+ * ^ data[i]} reproduces the probed key. The packing alone would NOT make racy reads detectable: key
+ * and data live in two separate plain {@code long[]} slots, so without the XOR a reader could pair
+ * an old key with a new entry's data (or, per JLS 17.7, a torn half-written long) and attribute a
+ * wrong score/move/depth to the position. With the XOR any mismatched or torn pair fails the verify
+ * with probability ~1-2^-64 and reads as a miss. No volatile, no fences: races are benign (worst
+ * case a wasted probe or a suboptimal replacement decision), and the verify costs one XOR — an
+ * {@code AtomicLongArray}/VarHandle acquire-release discipline would put memory fences on the
+ * hottest read in the search for no correctness gain here. Single-thread behavior is unchanged (the
+ * parity and node-budget suites pin it).
+ *
  * <p>Action packing (18 bits): bit 17 = present, bit 16 = type (0 move / 1 neutral pair). Move:
  * bits 0-15 = cell index. Neutral pair: bits 0-7 / 8-15 = the two cell indices, normalized
  * ascending ({@code PlaceNeutralsAction.equals} is unordered). Unencodable actions (board too
@@ -56,26 +68,31 @@ final class GoTranspositionTable {
   /** Packed entry for {@code key}, or 0 on a miss (stored entries always have depth ≥ 1). */
   long probe(long key) {
     int i = (int) key & mask;
-    return keys[i] == key ? data[i] : 0L;
+    long d = data[i];
+    // XOR-verify (see class javadoc): only trust data whose paired key slot reproduces the key.
+    return (keys[i] ^ d) == key ? d : 0L;
   }
 
   /**
    * Depth-preferred, generation-aged replacement: always replace an empty slot, the same key, or
-   * anything from an older generation; within the current generation keep the deeper entry.
+   * anything from an older generation; within the current generation keep the deeper entry. Under
+   * SMP the old-entry inspection is racy — a wrong replacement decision is benign.
    */
   void store(long key, int depth, int flag, int score, int actionBits) {
     int i = (int) key & mask;
     long old = data[i];
-    if (old != 0L && keys[i] != key && genOf(old) == generation && depthOf(old) > depth) {
+    boolean sameKey = (keys[i] ^ old) == key;
+    if (old != 0L && !sameKey && genOf(old) == generation && depthOf(old) > depth) {
       return; // same-generation deeper entry for a different position wins the slot
     }
-    keys[i] = key;
-    data[i] =
+    long d =
         (score & 0xFFFFFFFFL)
             | ((long) (depth & 63) << 32)
             | ((long) (flag & 3) << 38)
             | ((long) generation << 40)
             | ((long) (actionBits & 0x3FFFF) << 46);
+    data[i] = d;
+    keys[i] = key ^ d;
   }
 
   static int scoreOf(long entry) {

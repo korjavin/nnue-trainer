@@ -9,9 +9,13 @@ import com.engine.nnue_trainer.board.Pos;
 import com.engine.nnue_trainer.nnue.BoardFeatureMapper;
 import com.engine.nnue_trainer.nnue.NNUEModel;
 import com.engine.nnue_trainer.search.eval.HandTunedEval;
+import com.engine.nnue_trainer.search.ordering.PolicyOrderingTable;
 import com.engine.nnue_trainer.v2.NNUEv2Evaluator;
 import com.engine.nnue_trainer.v3.NNUEv3Accumulator;
 import com.engine.nnue_trainer.v3.V3Eval;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -112,6 +116,38 @@ public final class GoBotSearcher {
   // model).
   private static volatile LeafConfig defaultLeaf = new LeafConfig(LeafEval.HAND_TUNED, null);
 
+  /**
+   * Neural quiet-move ordering (epic 1jh integration). Loaded once per process; immutable after
+   * load, so sharing across searchers/threads is safe. Null = off = pre-table ordering — the env
+   * {@code ORDERING_TABLE} overrides the default path, a missing artifact silently disables, and a
+   * present-but-corrupt artifact warns and disables (the searcher must never fail to move because
+   * an ordering hint is bad). Enhanced path only; the {@code chooseDepth} parity oracle never
+   * consults it.
+   */
+  private static volatile PolicyOrderingTable orderingTable = loadOrderingTable();
+
+  private static PolicyOrderingTable loadOrderingTable() {
+    String env = System.getenv("ORDERING_TABLE");
+    Path path =
+        env == null || env.isBlank() ? PolicyOrderingTable.DEFAULT_WEIGHTS : Path.of(env.trim());
+    if (!Files.isRegularFile(path)) {
+      return null;
+    }
+    try {
+      return PolicyOrderingTable.load(path);
+    } catch (IOException e) {
+      System.err.println("ordering table disabled, load failed (" + path + "): " + e.getMessage());
+      return null;
+    }
+  }
+
+  /** Test hook: swap the process-wide ordering table, returning the previous one for restore. */
+  static PolicyOrderingTable setOrderingTable(PolicyOrderingTable t) {
+    PolicyOrderingTable prev = orderingTable;
+    orderingTable = t;
+    return prev;
+  }
+
   final int root;
   final boolean multi;
   final Map<Long, TableEntry> table;
@@ -137,23 +173,37 @@ public final class GoBotSearcher {
   long fastPathCuts; // diagnostics: cut-nodes that never materialized their sibling list
   long ttProbes; // diagnostics: enhanced-TT probes
   long ttHits; // diagnostics: enhanced-TT hits (any depth)
+  long cutCount; // diagnostics: interior-node beta cutoffs (fast-path cuts included, index 0)
+  long cutIndexSum; // diagnostics: sum of searched-child index at cutoff (mean = ordering quality)
 
   // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
   // ordered right after the TT move; plus a per-mover, per-cell history table bumped depth^2 on
-  // quiet cutoffs, halved each new search. Both are per-searcher — no cross-searcher bleed.
+  // quiet cutoffs, halved each new search. Both are per-searcher — no cross-searcher bleed (lazy
+  // SMP helpers are separate searcher instances, so they get their own killers/history for free).
   final Action[][] killers = new Action[MAX_DEPTH + 1][2];
   int[][] history; // [mover-1][cell index], lazily sized to the board; 1v1 movers only
+
+  // Lazy SMP (plan item 4): set by the owning main searcher to abort a helper; checked in
+  // running(). Never set on a main searcher, so single-thread semantics are untouched.
+  volatile boolean stopRequested;
+  Throwable helperFailure; // a helper's escaped exception, surfaced to tests; main ignores it
+  List<GoBotSearcher> lastHelpers; // helpers of the most recent search, for tests/diagnostics
 
   GoBotSearcher(int root, boolean multi) {
     this(root, multi, false);
   }
 
   GoBotSearcher(int root, boolean multi, boolean enhanced) {
+    this(root, multi, enhanced, null);
+  }
+
+  /** {@code sharedTT != null} builds a lazy-SMP helper probing/storing the owner's table. */
+  GoBotSearcher(int root, boolean multi, boolean enhanced, GoTranspositionTable sharedTT) {
     this.root = root;
     this.multi = multi;
     this.enhanced = enhanced;
     this.table = new HashMap<>();
-    this.tt = enhanced ? new GoTranspositionTable() : null;
+    this.tt = enhanced ? (sharedTT != null ? sharedTT : new GoTranspositionTable()) : null;
   }
 
   /**
@@ -197,6 +247,109 @@ public final class GoBotSearcher {
   private static final class SearchIncomplete extends RuntimeException {
     SearchIncomplete() {
       super(null, null, false, false);
+    }
+  }
+
+  // --- lazy SMP (plan item 4) ---
+
+  /**
+   * Lazy-SMP width: {@code min(availableProcessors, GOBOT_SMP_THREADS)} with a conservative default
+   * cap of 4 (the machine also runs self-play/gauntlets); 0 or 1 = off. N-1 helper threads run the
+   * same iterative deepening from the same root on the SHARED packed TT at staggered start depths
+   * (2/3 alternating, the classic skew); the main thread's result is authoritative and helpers are
+   * aborted the moment it returns. Helpers keep their own killers/history/counters, so the only
+   * shared structure is the XOR-verified TT.
+   *
+   * <p>Node accounting stays the main thread's own {@code nodes} — SMP-off budget semantics are
+   * byte-identical to single-threaded search. With SMP on, helper TT entries steer the main tree,
+   * so node-budget results are NOT reproducible run-to-run: fixed-node gauntlet gates should run
+   * with {@code GOBOT_SMP_THREADS=0} (or use time mode, where nondeterminism is inherent anyway).
+   */
+  static final int SMP_THREADS = smpThreadsFromEnv();
+
+  /** Test hook: overrides {@link #SMP_THREADS} when non-null (env is baked at class load). */
+  static Integer smpThreadsOverride;
+
+  private static int smpThreadsFromEnv() {
+    int cap = 4;
+    String s = System.getenv("GOBOT_SMP_THREADS");
+    if (s != null && !s.isBlank()) {
+      try {
+        cap = Integer.parseInt(s.trim());
+      } catch (NumberFormatException ignored) {
+        // keep default
+      }
+    }
+    return Math.max(0, Math.min(cap, Runtime.getRuntime().availableProcessors()));
+  }
+
+  private static int smpThreads() {
+    Integer override = smpThreadsOverride;
+    return override != null ? override : SMP_THREADS;
+  }
+
+  /**
+   * Starts the N-1 lazy-SMP helpers for a search of {@code state}, or returns an empty list when
+   * SMP is off (or this is the parity path / a 3+-player game, which never runs SMP).
+   */
+  private List<Thread> startHelpers(GoState state) {
+    int n = enhanced && !multi ? smpThreads() : 0;
+    lastHelpers = null;
+    if (n <= 1) {
+      return List.of();
+    }
+    List<GoBotSearcher> spawned = new ArrayList<>(n - 1);
+    List<Thread> threads = new ArrayList<>(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+      GoBotSearcher h = new GoBotSearcher(root, multi, true, tt);
+      h.leafMode = leafMode;
+      h.nnueModel = nnueModel;
+      h.nnueV2 = nnueV2;
+      h.nnueV3 = nnueV3;
+      int startDepth = 2 + (i & 1); // classic lazy-SMP stagger: depth+1 / depth+2 alternating
+      Thread t = new Thread(() -> h.helperLoop(state, startDepth), "gobot-smp-" + i);
+      t.setDaemon(true);
+      spawned.add(h);
+      threads.add(t);
+      t.start();
+    }
+    lastHelpers = spawned;
+    return threads;
+  }
+
+  /** Aborts and joins the helpers; the main thread's completed result is already in hand. */
+  private void stopHelpers(List<Thread> threads) {
+    if (lastHelpers != null) {
+      for (GoBotSearcher h : lastHelpers) {
+        h.stopRequested = true;
+      }
+    }
+    for (Thread t : threads) {
+      try {
+        t.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return;
+      }
+    }
+  }
+
+  /**
+   * A helper's whole life: iterative deepening from {@code startDepth} on the shared TT until
+   * aborted (or MAX_DEPTH). Results are discarded — a helper's only output is the TT entries it
+   * leaves behind for the main thread. No generation bump (the main searcher owns the clock), no
+   * budget: {@link #stopRequested} is the sole terminator.
+   */
+  private void helperLoop(GoState state, int startDepth) {
+    history = new int[2][state.rows() * state.cols()];
+    try {
+      for (int depth = startDepth; depth <= MAX_DEPTH; depth++) {
+        atDepth(state, depth);
+      }
+    } catch (SearchIncomplete expected) {
+      // aborted by the main thread (or a shared-deadline race) — normal helper death
+    } catch (Throwable t) {
+      helperFailure = t; // never let a helper take down the move choice; tests assert null
     }
   }
 
@@ -257,6 +410,9 @@ public final class GoBotSearcher {
    * completion.
    */
   public boolean running() {
+    if (stopRequested) {
+      return false; // lazy-SMP helper abort; never set on a main searcher
+    }
     if (nodeLimit > 0 && nodes >= nodeLimit) {
       return false;
     }
@@ -377,29 +533,34 @@ public final class GoBotSearcher {
     long budget = deadlineMillis - startMillis;
     beginSearch(state, deadlineMillis, 0);
     GoResult best = new GoResult(fallback);
-    for (int depth = 1; depth <= MAX_DEPTH; depth++) {
-      if (enhanced
-          && depth > 1
-          && budget > 0
-          && (System.currentTimeMillis() - startMillis) * 100 > budget * SOFT_DEADLINE_PERCENT) {
-        break; // soft deadline: recover the half-budget a doomed iteration would waste
-      }
-      GoResult result;
-      try {
-        result = atDepth(state, depth);
-      } catch (SearchIncomplete e) {
-        if (enhanced && partialRoot != null && partialRoot.action != null) {
-          partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
-          partialRoot.nodes = nodes;
-          partialRoot.evaluations = evaluations;
-          best = partialRoot;
+    List<Thread> helpers = startHelpers(state);
+    try {
+      for (int depth = 1; depth <= MAX_DEPTH; depth++) {
+        if (enhanced
+            && depth > 1
+            && budget > 0
+            && (System.currentTimeMillis() - startMillis) * 100 > budget * SOFT_DEADLINE_PERCENT) {
+          break; // soft deadline: recover the half-budget a doomed iteration would waste
         }
-        break;
+        GoResult result;
+        try {
+          result = atDepth(state, depth);
+        } catch (SearchIncomplete e) {
+          if (enhanced && partialRoot != null && partialRoot.action != null) {
+            partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
+            partialRoot.nodes = nodes;
+            partialRoot.evaluations = evaluations;
+            best = partialRoot;
+          }
+          break;
+        }
+        best = result;
+        best.depth = depth;
+        best.nodes = nodes;
+        best.evaluations = evaluations;
       }
-      best = result;
-      best.depth = depth;
-      best.nodes = nodes;
-      best.evaluations = evaluations;
+    } finally {
+      stopHelpers(helpers);
     }
     return best;
   }
@@ -416,15 +577,20 @@ public final class GoBotSearcher {
     }
     beginSearch(state, 0, limit);
     GoResult best = new GoResult(fallback);
-    for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
-      GoResult result;
-      try {
-        result = atDepth(state, depth);
-      } catch (SearchIncomplete e) {
-        break;
+    List<Thread> helpers = startHelpers(state);
+    try {
+      for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
+        GoResult result;
+        try {
+          result = atDepth(state, depth);
+        } catch (SearchIncomplete e) {
+          break;
+        }
+        best = result;
+        best.depth = depth;
       }
-      best = result;
-      best.depth = depth;
+    } finally {
+      stopHelpers(helpers);
     }
     best.nodes = nodes;
     best.evaluations = evaluations;
@@ -692,6 +858,7 @@ public final class GoBotSearcher {
       }
       if (alpha >= beta) {
         fastPathCuts++;
+        cutCount++; // fail-high at searched-child index 0
         recordCutoff(state, bestAction, depth, ply);
         int cutFlag = FLAG_EXACT;
         if (best <= alphaOrig) {
@@ -709,11 +876,13 @@ public final class GoBotSearcher {
       evaluations++;
       return leafEval(state);
     }
+    int searched = searchedTTFirst ? 1 : 0;
     for (int i = 0; i < children.size(); i++) {
       Child child = children.get(i);
       if (searchedTTFirst && child.action.equals(ttMove)) {
         continue; // already searched full-window above
       }
+      searched++;
       long score;
       if (!searchedTTFirst && i == 0) {
         score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
@@ -747,6 +916,8 @@ public final class GoBotSearcher {
         }
       }
       if (alpha >= beta) {
+        cutCount++;
+        cutIndexSum += searched - 1; // fail-high index among children actually searched
         recordCutoff(state, bestAction, depth, ply);
         break;
       }
@@ -813,11 +984,13 @@ public final class GoBotSearcher {
     final Action action;
     final GoState state;
     final int order;
+    final double table; // neural ordering score; secondary sort key below the static tiers
 
-    Child(Action action, GoState state, int order) {
+    Child(Action action, GoState state, int order, double table) {
       this.action = action;
       this.state = state;
       this.order = order;
+      this.table = table;
     }
   }
 
@@ -844,6 +1017,18 @@ public final class GoBotSearcher {
     int actor = state.currentPlayer();
     int beforeActive = activeCount(state);
     boolean useHeuristics = enhanced && history != null && ply <= MAX_DEPTH;
+    // Epic 1jh: one table call scores all 144 cells (~7µs); each MoveAction reads its cell. Only
+    // meaningful for the v3 feature space (12x12, players 1/2, movesLeft 0..3); anything else
+    // keeps the pre-table ordering. Null table = off = current behavior.
+    double[] tableScores = null;
+    PolicyOrderingTable ordering = enhanced ? orderingTable : null;
+    if (ordering != null
+        && actor <= 2
+        && state.rows() == NNUEv3Accumulator.BOARD
+        && state.cols() == NNUEv3Accumulator.BOARD
+        && state.movesLeft() < PolicyOrderingTable.TEMPO_SLOTS) {
+      tableScores = ordering.score(state.toBoard(), actor, state.movesLeft());
+    }
     List<Child> children = new ArrayList<>();
     for (Action action : pos.searchActions()) {
       if (!running()) {
@@ -851,6 +1036,7 @@ public final class GoBotSearcher {
       }
       GoState next = pos.applySearch(action);
       int order = 0;
+      double table = 0.0;
       if (hasTT && action.equals(ttMove)) {
         order += 10_000_000;
       }
@@ -872,14 +1058,31 @@ public final class GoBotSearcher {
           // History below the capture bonus (capped) — biases quiet-move order, never captures.
           order += Math.min(history[actor - 1][t.row * state.cols() + t.col], 9_000);
         }
+        if (tableScores != null) {
+          table = tableScores[t.row * state.cols() + t.col];
+        }
       }
       if (next.currentPlayer() == actor) {
         order += 100;
       }
-      children.add(new Child(action, next, order));
+      children.add(new Child(action, next, order, table));
     }
-    // Stable descending sort by order (Go's sort.SliceStable); ties keep board order.
-    children.sort(Comparator.comparingInt((Child c) -> c.order).reversed());
+    // Stable descending sort (Go's sort.SliceStable): static tiers + history first, neural table
+    // score breaks ties, remaining ties keep board order. With no table every secondary key is
+    // 0.0, so this reduces exactly to the pre-table sort.
+    //
+    // Design call (stage-1 A/B, parity-fixture positions, hand-tuned leaf, searchToDepth):
+    // history-primary/table-tiebreak (this code) vs table-primary/history-tiebreak —
+    //   depth 4, 50 pos: 949,641 vs 949,013 nodes; mean fail-high idx 0.0155 vs 0.0114 (a wash)
+    //   depth 5, 50 pos: 1,900,774 vs 2,003,042 nodes (+5.4% for table-primary);
+    //                    mean fail-high idx 0.0236 vs 0.0224
+    // History-primary wins on nodes-to-depth at the deeper setting: learned in-search refutations
+    // outrank the static prior once history has data, while the table still orders the
+    // zero-history quiet bulk (where it replaces raw board order).
+    children.sort(
+        Comparator.comparingInt((Child c) -> c.order)
+            .reversed()
+            .thenComparing(Comparator.comparingDouble((Child c) -> c.table).reversed()));
     return children;
   }
 
