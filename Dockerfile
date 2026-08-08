@@ -32,6 +32,10 @@ WORKDIR /app
 # Copy the built jar from builder
 COPY --from=builder /build/target/nnue-trainer-0.0.1-SNAPSHOT.jar ./nnue-trainer.jar
 
+# Model artifacts the live bot can load by env (SEARCH=MCTS prior/value, ordering table).
+# Wildcard tolerates absent optional files only via this glob trick per artifact.
+COPY mcts_policy.json ordering_policy.json mcts_champion.jso[n] ./
+
 # Create non-root user and switch to it for secure execution
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser && \
