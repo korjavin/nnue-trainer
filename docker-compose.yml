@@ -21,6 +21,34 @@ services:
       - EVAL=${EVAL:-HANDTUNED}
       - GOBOT_TIME_MODE=${GOBOT_TIME_MODE:-1}
 
+  # Opt-in training sidecar — NOT started by default (compose profile "trainer").
+  # Portainer: add stack env var COMPOSE_PROFILES=trainer to enable on a host.
+  # See docs/server-training.md.
+  trainer:
+    image: ghcr.io/korjavin/nnue-trainer-trainer:latest
+    container_name: nnue-trainer-trainer
+    profiles: ["trainer"]
+    restart: unless-stopped
+    # Plain cpus/mem_limit (not deploy.resources): honored by docker compose v2,
+    # podman-compose, and Portainer stacks without swarm mode.
+    cpus: 4.0
+    mem_limit: 3g
+    networks:
+      - virusgame-network
+    environment:
+      - TRAINER_LOOP=${TRAINER_LOOP:-mcts}
+      - TRAIN_SCHEDULE_HOUR=${TRAIN_SCHEDULE_HOUR:-3}
+      - GAMES=${TRAINER_GAMES:-1000}
+      - SIMS=${TRAINER_SIMS:-192}
+      - GAMES_URL=${GAMES_URL:-https://vs.wandergeek.org/data/games.db}
+      - MIN_NEW_GAMES=${MIN_NEW_GAMES:-25}
+      - RL_REQUIRE_NEW_GAMES=${RL_REQUIRE_NEW_GAMES:-0}
+    volumes:
+      - trainer-work:/work
+
+volumes:
+  trainer-work:
+
 networks:
   virusgame-network:
     name: ${NETWORK_NAME:-virusgame-network}

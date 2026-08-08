@@ -1,0 +1,55 @@
+# Dockerfile.trainer — server-side training sidecar (MCTS self-play RL / NNUE retrain).
+#
+# Debian/Ubuntu base instead of the bot image's alpine: torch only publishes glibc
+# (manylinux) wheels — on musl pip would fall back to building torch from source.
+# CPU-only torch wheels keep the image as small as torch allows.
+
+# Stage 1: compile classes and prime the local maven repo, so the runtime's ensure_cp
+# (./mvnw compile + dependency:build-classpath) resolves offline-fast from /root/.m2.
+FROM eclipse-temurin:21-jdk-noble AS builder
+
+WORKDIR /app
+
+COPY .mvn ./.mvn
+COPY mvnw pom.xml ./
+RUN chmod +x mvnw && ./mvnw -B -q dependency:go-offline
+
+COPY src ./src
+RUN ./mvnw -B -q -DskipTests compile
+
+# Stage 2: runtime — full JDK (the loops shell out to mvnw), python3 + CPU torch.
+FROM eclipse-temurin:21-jdk-noble
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv sqlite3 curl \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# CPU-only torch, pinned to the versions the local training venv uses.
+RUN python3 -m venv .venv \
+ && .venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.13.0 \
+ && .venv/bin/pip install --no-cache-dir numpy==2.5.1
+
+# Repo pieces the loops need: primed ~/.m2 + prebuilt classes (runtime mvnw calls become
+# near no-ops), sources, python trainers, scripts, and the model artifacts.
+COPY --from=builder /root/.m2 /root/.m2
+COPY --from=builder /app/target/classes ./target/classes
+COPY .mvn ./.mvn
+COPY mvnw pom.xml ./
+COPY src ./src
+COPY python ./python
+COPY scripts ./scripts
+COPY mcts_policy.json ordering_policy.json nnue_v3_net.json nnue_v3_weights.json nnue_v3_feature_stats.json ./
+RUN chmod +x mvnw scripts/*.sh
+
+# ponytail: runs as root — the named work volume must be writable whatever uid the host
+# maps, and this is an opt-in batch sidecar; add a fixed uid + chown if that ever matters.
+
+# The loops fan one JVM out per visible core inside a ~3g cgroup; without a cap each JVM
+# would claim 25% of the cgroup by default. Override via compose env if needed.
+ENV JAVA_TOOL_OPTIONS="-Xmx256m"
+ENV WORK=/work
+VOLUME /work
+
+ENTRYPOINT ["/app/scripts/trainer_entrypoint.sh"]
