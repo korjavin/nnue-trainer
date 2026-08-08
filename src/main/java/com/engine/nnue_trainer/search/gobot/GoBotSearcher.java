@@ -175,6 +175,19 @@ public final class GoBotSearcher {
   long ttHits; // diagnostics: enhanced-TT hits (any depth)
   long cutCount; // diagnostics: interior-node beta cutoffs (fast-path cuts included, index 0)
   long cutIndexSum; // diagnostics: sum of searched-child index at cutoff (mean = ordering quality)
+  long aspirationFailLows; // diagnostics: aspirated iterations that failed low (re-searched)
+  long aspirationFailHighs; // diagnostics: aspirated iterations that failed high (re-searched)
+
+  // Plan item 6 rollback/A-B flag: DEFAULT ON on the enhanced path; env GOBOT_ASPIRATION=0
+  // disables (baked at class load; tests use the override). The parity oracle never sees it —
+  // every use is additionally gated on `enhanced`.
+  static final boolean ASPIRATION_ENV = !"0".equals(System.getenv("GOBOT_ASPIRATION"));
+  static Boolean aspirationOverride; // test hook, like smpThreadsOverride
+
+  static boolean aspirationEnabled() {
+    Boolean o = aspirationOverride;
+    return o != null ? o : ASPIRATION_ENV;
+  }
 
   // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
   // ordered right after the TT move; plus a per-mover, per-cell history table bumped depth^2 on
@@ -344,6 +357,10 @@ public final class GoBotSearcher {
     history = new int[2][state.rows() * state.cols()];
     try {
       for (int depth = startDepth; depth <= MAX_DEPTH; depth++) {
+        // Helpers keep the FULL window (no aspiration): their scores are discarded, so there is
+        // no trusted center to aspirate around (they skip depths, and a stale center would just
+        // be re-search churn), and full-window bounds in the shared TT stay valid for whatever
+        // window the main thread happens to search. Simplest correct.
         atDepth(state, depth);
       }
     } catch (SearchIncomplete expected) {
@@ -534,6 +551,8 @@ public final class GoBotSearcher {
     beginSearch(state, deadlineMillis, 0);
     GoResult best = new GoResult(fallback);
     List<Thread> helpers = startHelpers(state);
+    long prevScore = 0;
+    boolean hasPrev = false;
     try {
       for (int depth = 1; depth <= MAX_DEPTH; depth++) {
         if (enhanced
@@ -544,7 +563,7 @@ public final class GoBotSearcher {
         }
         GoResult result;
         try {
-          result = atDepth(state, depth);
+          result = atDepthAspirated(state, depth, hasPrev, prevScore);
         } catch (SearchIncomplete e) {
           if (enhanced && partialRoot != null && partialRoot.action != null) {
             partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
@@ -558,6 +577,8 @@ public final class GoBotSearcher {
         best.depth = depth;
         best.nodes = nodes;
         best.evaluations = evaluations;
+        prevScore = result.score;
+        hasPrev = true;
       }
     } finally {
       stopHelpers(helpers);
@@ -578,16 +599,20 @@ public final class GoBotSearcher {
     beginSearch(state, 0, limit);
     GoResult best = new GoResult(fallback);
     List<Thread> helpers = startHelpers(state);
+    long prevScore = 0;
+    boolean hasPrev = false;
     try {
       for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
         GoResult result;
         try {
-          result = atDepth(state, depth);
+          result = atDepthAspirated(state, depth, hasPrev, prevScore);
         } catch (SearchIncomplete e) {
           break;
         }
         best = result;
         best.depth = depth;
+        prevScore = result.score;
+        hasPrev = true;
       }
     } finally {
       stopHelpers(helpers);
@@ -607,8 +632,12 @@ public final class GoBotSearcher {
   GoResult searchToDepth(GoState state, int maxDepth) {
     beginSearch(state, 0, 0);
     GoResult result = null;
+    long prevScore = 0;
+    boolean hasPrev = false;
     for (int depth = 1; depth <= maxDepth; depth++) {
-      result = atDepth(state, depth);
+      result = atDepthAspirated(state, depth, hasPrev, prevScore);
+      prevScore = result.score;
+      hasPrev = true;
     }
     return result;
   }
@@ -649,7 +678,62 @@ public final class GoBotSearcher {
   // consumed only by searchWithDeadline, ignored by the node-budget paths. Package for tests.
   GoResult partialRoot;
 
+  /**
+   * Plan item 6: aspiration half-window. Derivation: the measured median best-vs-2nd-sibling root
+   * score gap is 1299 in hand-tuned units ({@code docs/nnue-v3-gauntlet.md:46-48}), so ±1500
+   * brackets a typical between-iteration move swing — most iterations complete inside the window
+   * and pay a narrow search instead of a full-window one. Sweep evidence (GOBOT_ASPLMR_CHECK probe,
+   * 50 parity-fixture positions, hand-tuned leaf): at depth 5 δ=750/1500/3000 give
+   * +1.8%/+1.6%/+4.8% nodes (aspiration doesn't pay that shallow); at depth 6 (production-depth)
+   * δ=1500 gives −8.8% nodes at a 66/120 fail/iteration count — 1500 is the measured local optimum
+   * and matches the plan's derivation. v3 emits the same units; NNUEV2's WDL-scaled units differ,
+   * but v2 is dead (0-24) and aspiration simply re-searches more there.
+   */
+  // ponytail: property knob for the sweep above; retune here if the leaf's score scale changes.
+  static final long ASPIRATION_DELTA = Long.getLong("gobot.aspiration.delta", 1500);
+
+  /**
+   * One iteration of the enhanced ID loops, opened with an aspiration window around the previous
+   * iteration's score ({@code hasPrev}); on a fail the failing side widens 4δ, then to ±∞ —
+   * standard progressive widening, so the returned result is always exact. Mate-band scores bypass
+   * aspiration (±δ around a mate score is meaningless re-search churn). Full-window everywhere the
+   * feature is off: parity path, multi (maxN ignores windows), depth &lt; 3, or no previous score.
+   */
+  private GoResult atDepthAspirated(GoState state, int depth, boolean hasPrev, long prev) {
+    if (!enhanced
+        || multi
+        || !aspirationEnabled()
+        || !hasPrev
+        || depth < 3
+        || Math.abs(prev) >= GoTranspositionTable.MATE_BAND) {
+      return atDepth(state, depth);
+    }
+    long alpha = prev - ASPIRATION_DELTA;
+    long beta = prev + ASPIRATION_DELTA;
+    boolean widenedLow = false;
+    boolean widenedHigh = false;
+    while (true) {
+      GoResult result = atDepth(state, depth, alpha, beta);
+      long score = result.score;
+      if (score <= alpha) {
+        aspirationFailLows++;
+        alpha = widenedLow ? -INF_SCORE : prev - 4 * ASPIRATION_DELTA;
+        widenedLow = true;
+      } else if (score >= beta) {
+        aspirationFailHighs++;
+        beta = widenedHigh ? INF_SCORE : prev + 4 * ASPIRATION_DELTA;
+        widenedHigh = true;
+      } else {
+        return result;
+      }
+    }
+  }
+
   GoResult atDepth(GoState state, int depth) {
+    return atDepth(state, depth, -INF_SCORE, INF_SCORE);
+  }
+
+  private GoResult atDepth(GoState state, int depth, long alphaOrig, long betaOrig) {
     partialRoot = null;
     long key = state.hash();
     boolean hasRoot;
@@ -677,8 +761,8 @@ public final class GoBotSearcher {
     best.score = (int) -INF_SCORE;
     long bestScore = -INF_SCORE;
     List<RootMove> roots = new ArrayList<>(children.size());
-    long alpha = -INF_SCORE;
-    long beta = INF_SCORE;
+    long alpha = alphaOrig;
+    long beta = betaOrig;
     try {
       for (int i = 0; i < children.size(); i++) {
         Child child = children.get(i);
@@ -710,11 +794,13 @@ public final class GoBotSearcher {
         }
       }
     } catch (SearchIncomplete e) {
-      if (enhanced && !roots.isEmpty()) {
+      if (enhanced && !roots.isEmpty() && bestScore > alphaOrig) {
         // Child 0 — the previous iteration's PV, TT-ordered first — completed, so the running
         // best is at least as well-searched as the previous answer. Root best-move updates only
         // happen on exact scores (root alpha == running best, so any improvement was re-searched
-        // full-window), which keeps a fail-low bound from ever displacing the PV move.
+        // full-window), which keeps a fail-low bound from ever displacing the PV move. Under an
+        // aspiration window (alphaOrig > -INF) an all-children-fail-low prefix is bounds only —
+        // the bestScore > alphaOrig guard refuses to salvage it.
         GoResult partial = new GoResult(best.action);
         partial.score = (int) bestScore;
         partial.salvaged = true;
@@ -724,7 +810,15 @@ public final class GoBotSearcher {
       throw e;
     }
     best.score = (int) bestScore;
-    storeEntry(state, key, depth, 0, FLAG_EXACT, best.action, bestScore);
+    // Full-window callers (parity path included) always store EXACT, as before; an aspirated
+    // iteration that failed its window stores the true bound so the re-search orders off it.
+    int rootFlag = FLAG_EXACT;
+    if (bestScore <= alphaOrig) {
+      rootFlag = FLAG_UPPER;
+    } else if (bestScore >= betaOrig) {
+      rootFlag = FLAG_LOWER;
+    }
+    storeEntry(state, key, depth, 0, rootFlag, best.action, bestScore);
     best.alternatives = topAlternatives(roots, best.action);
     return best;
   }
