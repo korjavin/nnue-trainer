@@ -55,7 +55,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
 
       - name: Build and push trainer image
         uses: docker/build-push-action@v5
