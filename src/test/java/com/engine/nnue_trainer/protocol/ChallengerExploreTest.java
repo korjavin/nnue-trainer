@@ -24,6 +24,18 @@ public class ChallengerExploreTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
+  // Reproducibility assertions are single-threaded contracts — lazy-SMP helper TT traffic makes
+  // node-budget searches non-deterministic run-to-run.
+  @org.junit.jupiter.api.BeforeAll
+  static void pinSmpOff() {
+    com.engine.nnue_trainer.search.gobot.SmpTestPin.off();
+  }
+
+  @org.junit.jupiter.api.AfterAll
+  static void unpinSmp() {
+    com.engine.nnue_trainer.search.gobot.SmpTestPin.reset();
+  }
+
   // Player 1 owns base(0,0) + a normal cell at (0,1), which voids the opening book → the search
   // runs and returns a real (depth>0) result with alternatives to sample from.
   private static final String MIDGAME =
