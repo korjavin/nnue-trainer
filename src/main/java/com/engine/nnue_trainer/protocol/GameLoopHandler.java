@@ -83,7 +83,14 @@ public class GameLoopHandler {
             System.out.println("Opponent placed Neutrals");
           }
         }
-        handleSnapshot(node);
+        // Only act on OPPONENT neutral placements. Our own neutral consumes the whole turn, but
+        // its ack snapshot still shows us as mover with moves left — searching off it fired a
+        // rogue out-of-turn move, which fast (sub-second) searches turned into an accepted move
+        // in our NEXT turn followed by a stale-state duplicate and an illegal_move forfeit
+        // (2 live forfeits on 2026-08-08; the authoritative turn_change drives our real turns).
+        if (player != myPlayerIndex) {
+          handleSnapshot(node);
+        }
       } else if ("turn_change".equals(type)) {
         if (node.has("snapshot")) {
           JsonNode snapshot = node.get("snapshot");

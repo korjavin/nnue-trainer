@@ -123,4 +123,46 @@ public class GameLoopHandlerTest {
       }
     }
   }
+
+  /**
+   * Regression: 2026-08-08 live forfeits. The ack of OUR OWN neutrals_placed still shows us as
+   * mover with movesLeft &gt; 0, but a neutral consumes the whole turn — acting on that snapshot
+   * fired a rogue out-of-turn move (fatal once fast searches landed it in our next turn). Only
+   * opponent neutral placements may drive a search; our real turns arrive via turn_change.
+   */
+  @org.junit.jupiter.api.Test
+  public void testOwnNeutralAck_doesNotTriggerMove_opponentNeutralDoes() {
+    String startJson =
+        "{\"type\":\"multiplayer_game_start\",\"gameId\":\"g2\",\"yourPlayer\":1,\"rows\":3,\"cols\":3}";
+    gameLoopHandler.handleMessage(startJson);
+
+    String ownNeutralAck =
+        "{"
+            + "\"type\":\"neutrals_placed\","
+            + "\"player\":1,"
+            + "\"cells\":[{\"row\":1,\"col\":0},{\"row\":1,\"col\":2}],"
+            + "\"snapshot\":{"
+            + "  \"rows\":3,\"cols\":3,"
+            + "  \"currentPlayer\":1,"
+            + "  \"movesLeft\":3,"
+            + "  \"gameOver\":false,"
+            + "  \"winner\":0,"
+            + "  \"neutralUsed\":[true,false],"
+            + "  \"bases\":[{\"row\":0,\"col\":0},{\"row\":2,\"col\":2}],"
+            + "  \"board\":["
+            + "    [{\"Owner\":1,\"Kind\":2},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0}],"
+            + "    [{\"Owner\":0,\"Kind\":0},{\"Owner\":0,\"Kind\":0},{\"Owner\":2,\"Kind\":2}]"
+            + "  ]"
+            + "}"
+            + "}";
+    gameLoopHandler.handleMessage(ownNeutralAck);
+    org.mockito.Mockito.verify(messageSender, org.mockito.Mockito.never())
+        .send(org.mockito.ArgumentCaptor.forClass(String.class).capture());
+
+    String opponentNeutral = ownNeutralAck.replace("\"player\":1,", "\"player\":2,");
+    gameLoopHandler.handleMessage(opponentNeutral);
+    org.mockito.Mockito.verify(messageSender, org.mockito.Mockito.atLeastOnce())
+        .send(org.mockito.Mockito.anyString());
+  }
 }
