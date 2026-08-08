@@ -126,16 +126,26 @@ against the production clone at 1 s/move, 104 games per arm: uniform prior **18.
 trained supervised prior **24.0% ± 4.2** — both past the ≥15% feasibility gate. Those are
 baseline-competence numbers for generation 0, not a strength claim.
 
-## Depth-4 labels (pending)
+## Depth-4 labels: the ladder breaks (with confounds)
 
-A depth-4-label run on a quarter of the corpus is in flight (full-corpus depth 4 is
-CPU-prohibitive at the measured per-row cost). Expectation, given everything above: a strong
-result at fixed depth 4 that does not transfer off it. The table will be filled in when the run
-completes — not before.
+Quarter corpus only (284 games / 148,521 rows — full-corpus depth-4 labeling costs ~20 CPU-hours).
+Net H=64, offline top-1 65.3% vs its depth-4 oracle (the offline gate's first FAIL, consistent
+with less data + a harder target).
 
-| training labels | corpus | depth 4 | equal time 250 ms | |
-|---|---|---|---|---|
-| depth-4 search values | ¼ (quarter run) | — | — | *pending* |
+| labels | gauntlet at fixed depth 3 |
+|---|---|
+| static eval | 24.3% ± 2.1 |
+| depth 2 | 28.5% ± 2.3 |
+| depth 3 | **44.3% ± 2.5** |
+| depth 4 (quarter corpus) | **21.5% ± 2.1** |
+
+Two confounds prevent a clean read: 4x less training data, and the suggestive pattern that the
+ladder's peak sits exactly where **label depth equals query depth**. Distinguishing them needs the
+full-corpus depth-4 run; deferred — by the time this rung completed, the self-play RL loop had
+promoted its first generation (candidate 65.75% over the gen-0 champion, 400 games), making it the
+primary neural line. The deep-label result stands as the strongest evidence in this project that
+labels, not features, were the NNUE leaf's binding constraint — and that fixed-depth labels cannot
+escape the train/query distribution coupling that self-play training dissolves by construction.
 
 ## Reproducing
 
