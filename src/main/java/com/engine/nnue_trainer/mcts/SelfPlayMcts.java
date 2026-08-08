@@ -68,14 +68,8 @@ public final class SelfPlayMcts {
     long seed = Long.parseLong(args[5]);
 
     String priorPath = env("MCTS_PRIOR", "mcts_policy.json");
-    PolicyNetPrior prior = PolicyNetPrior.load(Path.of(priorPath));
-    boolean useValueNet = "net".equals(env("MCTS_VALUE", "")) && prior.hasValueHead();
-
-    MctsSearcher.Config template = new MctsSearcher.Config();
-    template.cpuct = Double.parseDouble(env("MCTS_CPUCT", "1.5"));
-    template.valueScale = Double.parseDouble(env("MCTS_VALUE_SCALE", "12000"));
-    template.prior = prior;
-    template.valueNet = useValueNet ? prior : null;
+    MctsSearcher.Config template = envTemplate();
+    boolean useValueNet = template.valueNet != null;
     template.rootNoise = true; // self-play exploration — the whole point of this mode
 
     long t0 = System.currentTimeMillis();
@@ -222,7 +216,22 @@ public final class SelfPlayMcts {
     return best;
   }
 
-  private static MctsSearcher.Config copyWithSeed(MctsSearcher.Config t, long seed) {
+  /**
+   * Search template from the shared env knobs ({@code MCTS_PRIOR}, {@code MCTS_VALUE=net}, {@code
+   * MCTS_CPUCT}, {@code MCTS_VALUE_SCALE}) — one source of truth for every emitter that searches
+   * with the current champion artifact. Root noise is left OFF; self-play turns it on itself.
+   */
+  static MctsSearcher.Config envTemplate() throws Exception {
+    PolicyNetPrior prior = PolicyNetPrior.load(Path.of(env("MCTS_PRIOR", "mcts_policy.json")));
+    MctsSearcher.Config t = new MctsSearcher.Config();
+    t.cpuct = Double.parseDouble(env("MCTS_CPUCT", "1.5"));
+    t.valueScale = Double.parseDouble(env("MCTS_VALUE_SCALE", "12000"));
+    t.prior = prior;
+    t.valueNet = "net".equals(env("MCTS_VALUE", "")) && prior.hasValueHead() ? prior : null;
+    return t;
+  }
+
+  static MctsSearcher.Config copyWithSeed(MctsSearcher.Config t, long seed) {
     MctsSearcher.Config c = new MctsSearcher.Config();
     c.cpuct = t.cpuct;
     c.valueScale = t.valueScale;

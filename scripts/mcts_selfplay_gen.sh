@@ -18,8 +18,18 @@
 #   selfplay  SelfPlayMcts sharded across all CPUs with the champion artifact (MCTS_VALUE=net:
 #             the value head is used once the champion has one; gen 1 runs hand-tuned value).
 #             Deterministic per (seed, shard); seed = SEED_BASE + gen*1000 (bead riy spacing).
+#   curriculum  (CURRICULUM=1 only; default OFF) HumanCurriculumEmitter --human-only on the
+#             prod games DB ($GAMES_DB — the trainer entrypoint points it at the guardrail's
+#             fresh fetch): deep MCTS targets with the CURRENT champion on every position of
+#             the human-vs-bot games -> gen<N>/curriculum.jsonl. Skipped with a warning when
+#             $GAMES_DB is unset/missing.
 #   train     train_selfplay.py on a sliding window of the last $WINDOW generations' rows
 #             (plan Phase 2 task 3) -> gen<N>/candidate.json (+ holdout top-1 / value MAE).
+#             The current gen's curriculum.jsonl (if any) joins the mix, passed
+#             $CURRICULUM_REPEAT times: human games are few vs ~1500 self-play games/gen and
+#             train_selfplay.py has no per-file weighting, so oversampling by repetition
+#             happens here, not in the trainer. Only the CURRENT generation's curriculum file
+#             is used — it carries the freshest champion's targets for the same positions.
 #   gauntlet  $GATE_INSTANCES parallel GauntletMctsRun candidate-vs-champion at $GATE_SIMS
 #             fixed sims (MCTS_PRIOR_B mode), per-instance seeds spaced 1000.
 #   report    (always re-runs) pools W-L-D; gate: (W + 0.5D)/N >= $GATE (0.55, ~2 SE at 400
@@ -32,7 +42,9 @@
 # Knobs (env): GAMES=192 (self-play games/gen), SIMS=256 (self-play sims/move),
 #   GATE_GAMES=100 (per instance), GATE_INSTANCES=4 (pooled 400 = the plan's gate size),
 #   GATE_SIMS=256, GATE=0.55, EPOCHS=8, WINDOW=3, SEED_BASE=11, MCTS_CPUCT, JAVA_HOME
-#   (auto-detected), PYTHON (default .venv/bin/python).
+#   (auto-detected), PYTHON (default .venv/bin/python), CURRICULUM=0 (1 = human-games
+#   curriculum stage), GAMES_DB= (prod games.db path for it), CURRICULUM_SIMS=$SIMS,
+#   CURRICULUM_REPEAT=3 (oversampling factor at train time).
 #
 # Generation 1 example:
 #   scripts/mcts_selfplay_gen.sh work/mcts-rl
@@ -88,6 +100,10 @@ PY="${PYTHON:-$ROOT/.venv/bin/python}"
 : "${WINDOW:=3}"
 : "${SEED_BASE:=11}"
 : "${MCTS_CPUCT:=1.5}"
+: "${CURRICULUM:=0}"
+: "${CURRICULUM_SIMS:=$SIMS}"
+: "${CURRICULUM_REPEAT:=3}"
+: "${GAMES_DB:=}"
 
 CHAMPION="$WORK/champion.json"
 [ -f "$CHAMPION" ] || cp "$ROOT/mcts_policy.json" "$CHAMPION"
@@ -111,7 +127,7 @@ ensure_cp() {
 }
 
 # --- resumable stage machinery ---------------------------------------------------------
-STAGES="selfplay train gauntlet report"
+STAGES="selfplay curriculum train gauntlet report"
 stamp() { echo "$GDIR/.done.$1"; }
 
 if [ -n "$UNTIL" ]; then
@@ -160,6 +176,37 @@ stage_selfplay() {
   grep -h "^shard" "$GDIR"/logs/selfplay_*.log || true
 }
 
+# --- stage 1b: human-games curriculum (CURRICULUM=1 only) ------------------------------
+stage_curriculum() {
+  if [ "$CURRICULUM" != 1 ]; then
+    echo ">> curriculum: disabled (set CURRICULUM=1 + GAMES_DB=<prod games.db> to enable)"
+    return 0
+  fi
+  if [ -z "$GAMES_DB" ] || [ ! -f "$GAMES_DB" ]; then
+    echo ">> curriculum: WARNING — CURRICULUM=1 but GAMES_DB is unset or missing ('$GAMES_DB'); skipping"
+    return 0
+  fi
+  ensure_cp
+  local n seed pids i p
+  n="$(ncpu)"
+  seed=$((SEED_BASE + GEN * 1000))
+  echo ">> human curriculum from $GAMES_DB: $CURRICULUM_SIMS sims/position, seed $seed, $n shards"
+  rm -f "$GDIR"/curriculum_shard_*.jsonl "$GDIR/curriculum.jsonl"
+  pids=""
+  for i in $(seq 0 $((n - 1))); do
+    MCTS_PRIOR="$CHAMPION" MCTS_VALUE=net MCTS_CPUCT="$MCTS_CPUCT" \
+      java -cp "$CP" "$MCTS_PKG.HumanCurriculumEmitter" \
+      "$GAMES_DB" "$GDIR/curriculum_shard_$i.jsonl" "$CURRICULUM_SIMS" "$i" "$n" "$seed" \
+      --human-only \
+      > "$GDIR/logs/curriculum_$i.log" 2>&1 &
+    pids="$pids $!"
+  done
+  for p in $pids; do wait "$p" || die "curriculum shard failed — see $GDIR/logs/curriculum_*.log"; done
+  cat "$GDIR"/curriculum_shard_*.jsonl > "$GDIR/curriculum.jsonl"
+  echo ">> curriculum rows: $(wc -l < "$GDIR/curriculum.jsonl" | tr -d ' ')"
+  grep -h "^shard" "$GDIR"/logs/curriculum_*.log || true
+}
+
 # --- stage 2: train --------------------------------------------------------------------
 stage_train() {
   # Sliding window: this generation plus up to WINDOW-1 previous ones (plan Phase 2 task 3).
@@ -168,6 +215,13 @@ stage_train() {
     [ "$g" -ge 1 ] && [ -f "$WORK/gen$g/selfplay.jsonl" ] && datasets="$datasets $WORK/gen$g/selfplay.jsonl"
   done
   [ -n "$datasets" ] || die "no self-play datasets found for generations <= $GEN"
+  # Human curriculum: few games vs ~1500 self-play/gen, and train_selfplay.py has no per-file
+  # weighting — oversample by passing the file CURRICULUM_REPEAT times (it just concatenates).
+  if [ -s "$GDIR/curriculum.jsonl" ]; then
+    local r
+    for r in $(seq 1 "$CURRICULUM_REPEAT"); do datasets="$datasets $GDIR/curriculum.jsonl"; done
+    echo ">> curriculum: $(wc -l < "$GDIR/curriculum.jsonl" | tr -d ' ') rows x$CURRICULUM_REPEAT"
+  fi
   echo ">> training on:$datasets"
   # shellcheck disable=SC2086
   "$PY" python/mcts/train_selfplay.py $datasets --out "$CAND" --epochs "$EPOCHS" 2>&1 \
@@ -231,7 +285,7 @@ EOF
   exit 1
 }
 
-for s in selfplay train gauntlet; do
+for s in selfplay curriculum train gauntlet; do
   run_stage "$s"
   if [ "$s" = "$UNTIL" ]; then
     echo ">> stopped after [$s] (--until); re-run without --until to continue"

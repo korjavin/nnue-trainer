@@ -166,7 +166,7 @@ public final class GamesDbReplay {
   }
 
   /** Empty board with the two bases in opposite corners. */
-  static Board initialBoard(int rows, int cols) {
+  public static Board initialBoard(int rows, int cols) {
     Board board = new Board(rows, cols);
     board.setCell(0, 0, new Cell(1, CellKind.BASE));
     board.setCell(rows - 1, cols - 1, new Cell(2, CellKind.BASE));
@@ -174,7 +174,7 @@ public final class GamesDbReplay {
   }
 
   /** Parse one stored move node into an engine action (shared with the per-action emitters). */
-  static Action parseAction(JsonNode move) {
+  public static Action parseAction(JsonNode move) {
     JsonNode typeNode = field(move, "type");
     if (typeNode == null) {
       throw new IllegalArgumentException("move has no type");
@@ -214,7 +214,7 @@ public final class GamesDbReplay {
    * Player}/{@code Moves}/{@code Type}/{@code Row}/{@code Col}/{@code Cells}); the live DB uses the
    * lowercase form.
    */
-  static JsonNode field(JsonNode node, String name) {
+  public static JsonNode field(JsonNode node, String name) {
     JsonNode value = node.get(name);
     return value != null
         ? value

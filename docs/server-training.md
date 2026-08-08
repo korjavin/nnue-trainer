@@ -33,9 +33,9 @@ time), `TRAINER_GAMES` (`1000`), `TRAINER_SIMS` (`192`), `GAMES_URL`
 One scheduled window = one invocation of the existing resumable scripts, `nice`d and inside
 the container's `cpus: 4.0` / `mem_limit: 3g` budget:
 
-- `mcts` — one generation of `scripts/mcts_selfplay_gen.sh` (self-play → train → gauntlet
-  gate → promote) in the `trainer-work` volume. Stamps make a crashed/killed run resume at
-  the next window instead of restarting.
+- `mcts` — one generation of `scripts/mcts_selfplay_gen.sh` (self-play → human curriculum →
+  train → gauntlet gate → promote) in the `trainer-work` volume. Stamps make a
+  crashed/killed run resume at the next window instead of restarting.
 - `v3` — one `scripts/v3_retrain_loop.sh` run in a fresh dated workdir, fed the games DB
   the guardrail just fetched.
 
@@ -59,6 +59,29 @@ undercounts, which fails safe).
 
 The watermark advances only after a run actually consumed the games. Every window appends
 one line to `runs.log` in the volume including the guardrail decision.
+
+## Human-games curriculum (expert iteration on human-reached positions)
+
+The mcts loop runs with `CURRICULUM=1` by default in the container: after self-play,
+`HumanCurriculumEmitter --human-only` replays every valid 12x12 game from the guardrail's
+freshly fetched `games.db` where at least one player is human (names not matching the
+`NNUE Bot`/`Bot N`/`GoBot` families), runs a deep MCTS with the **current champion**
+artifact on every multi-choice position, and writes rows in the exact self-play schema
+(`pv` = root visit counts, `z` = the real game outcome from the `result` column, absolute
+frame) to `gen<N>/curriculum.jsonl`.
+
+Mixing: human games are few (~200) against ~1500 self-play games per generation, and
+`train_selfplay.py` has no per-file weighting — it just concatenates its input files. So
+the generation script passes the curriculum file `CURRICULUM_REPEAT` (default `3`) times
+alongside the self-play window. Only the *current* generation's curriculum file is used:
+it is re-emitted each generation, so the targets always come from the freshest champion.
+
+Because the emitter needs the prod DB, the entrypoint fetches it every mcts window even
+with `RL_REQUIRE_NEW_GAMES=0` — but a failed fetch never blocks the RL generation: the
+curriculum stage just skips (or reuses the previous fetch) with a warning in
+`gen<N>/logs/curriculum_*.log`. Knobs: `CURRICULUM` (`1` in the container, `0` locally),
+`CURRICULUM_SIMS` (defaults to `SIMS`), `CURRICULUM_REPEAT` (`3`). Locally:
+`CURRICULUM=1 GAMES_DB=/path/to/games.db scripts/mcts_selfplay_gen.sh work/mcts-rl`.
 
 ## Where candidates land, how promotion works
 

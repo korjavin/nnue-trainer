@@ -16,6 +16,13 @@
 # is optional frugality, not correctness. The watermark advances only after a run that
 # actually consumed the games.
 #
+# Human-games curriculum: the mcts loop runs with CURRICULUM=1 by default — the guardrail's
+# freshly fetched games.db feeds HumanCurriculumEmitter --human-only (expert-iteration
+# targets on human-reached positions, oversampled x$CURRICULUM_REPEAT at train time; see
+# mcts_selfplay_gen.sh). The DB is fetched for this even when RL_REQUIRE_NEW_GAMES=0, but a
+# failed fetch or few new games never skips the RL run — the stage just runs without/with
+# stale data. Set CURRICULUM=0 to turn it off.
+#
 # Promotions land in $WORK/out (artifact + md report) for the owner to review and commit
 # into the repo by hand — a candidate never auto-ships.
 #
@@ -39,6 +46,8 @@ cd "$ROOT"
 : "${RL_REQUIRE_NEW_GAMES:=0}"
 export GAMES="${GAMES:-1000}"
 export SIMS="${SIMS:-192}"
+# Server default ON: every window has a fresh guardrail DB to mine human games from.
+export CURRICULUM="${CURRICULUM:-1}"
 
 GUARD="$WORK/guard"
 WM_FILE="$GUARD/watermark"
@@ -88,7 +97,9 @@ guard_commit() { [ -z "${PENDING_WM:-}" ] || echo "$PENDING_WM" > "$WM_FILE"; }
 run_mcts() {
   local gen rc=0
   gen="$(cat "$WORK/gen" 2> /dev/null || echo 1)"
-  nice -n "$NICE_LEVEL" "$ROOT/scripts/mcts_selfplay_gen.sh" "$WORK"
+  # The curriculum stage consumes the guardrail's fetch; if it failed, the stage skips itself.
+  GAMES_DB="$GUARD/games.db" \
+    nice -n "$NICE_LEVEL" "$ROOT/scripts/mcts_selfplay_gen.sh" "$WORK"
   rc=$?
   if [ "$rc" -le 1 ]; then
     # Generation completed (0 = PROMOTE, 1 = KEEP) — this window's games are consumed.
@@ -163,29 +174,35 @@ run_v3() {
 
 # --- main loop -------------------------------------------------------------------------
 echo ">> trainer sidecar up: loop=$TRAINER_LOOP window=${TRAIN_SCHEDULE_HOUR}:00 work=$WORK"
-echo ">>   GAMES=$GAMES SIMS=$SIMS MIN_NEW_GAMES=$MIN_NEW_GAMES RL_REQUIRE_NEW_GAMES=$RL_REQUIRE_NEW_GAMES"
+echo ">>   GAMES=$GAMES SIMS=$SIMS MIN_NEW_GAMES=$MIN_NEW_GAMES RL_REQUIRE_NEW_GAMES=$RL_REQUIRE_NEW_GAMES CURRICULUM=$CURRICULUM"
 
 [ "${TRAIN_ON_START:-0}" = 1 ] || sleep_until_window
 
 while :; do
   GUARD_NOTE=""
   SKIP=0
-  if [ "$TRAINER_LOOP" = v3 ] || [ "$RL_REQUIRE_NEW_GAMES" = 1 ]; then
+  # ENFORCE: low new-game count skips the run. FETCH_ONLY: the mcts curriculum stage wants a
+  # fresh DB, but neither a failed fetch nor few new games may block the RL generation.
+  ENFORCE=0
+  FETCH_ONLY=0
+  { [ "$TRAINER_LOOP" = v3 ] || [ "$RL_REQUIRE_NEW_GAMES" = 1 ]; } && ENFORCE=1
+  [ "$TRAINER_LOOP" = mcts ] && [ "$CURRICULUM" = 1 ] && FETCH_ONLY=1
+  if [ "$ENFORCE" = 1 ] || [ "$FETCH_ONLY" = 1 ]; then
     if guard_check; then
-      if [ "$NEW_GAMES" -lt "$MIN_NEW_GAMES" ]; then
+      if [ "$ENFORCE" = 1 ] && [ "$NEW_GAMES" -lt "$MIN_NEW_GAMES" ]; then
         GUARD_NOTE="guardrail: $NEW_GAMES new games since watermark (< $MIN_NEW_GAMES) — skipped"
         SKIP=1
       else
-        GUARD_NOTE="guardrail: $NEW_GAMES new games since watermark (>= $MIN_NEW_GAMES) — run"
+        GUARD_NOTE="guardrail: $NEW_GAMES new games since watermark — run"
       fi
     elif [ "$TRAINER_LOOP" = v3 ]; then
       GUARD_NOTE="guardrail: fetching $GAMES_URL failed — skipped (v3 needs that DB anyway)"
       SKIP=1
     else
-      GUARD_NOTE="guardrail: fetching $GAMES_URL failed — running anyway (self-play needs no prod games)"
+      GUARD_NOTE="guardrail: fetching $GAMES_URL failed — running anyway (self-play needs no prod games; curriculum stage will skip or use the last fetch)"
     fi
   else
-    GUARD_NOTE="guardrail: not consulted (mcts with RL_REQUIRE_NEW_GAMES=0)"
+    GUARD_NOTE="guardrail: not consulted (mcts with RL_REQUIRE_NEW_GAMES=0, CURRICULUM=0)"
   fi
   echo ">> $GUARD_NOTE"
 
