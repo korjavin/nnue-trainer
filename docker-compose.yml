@@ -12,10 +12,14 @@ services:
     environment:
       - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws?bot=true&namePrefix=JavaBot}
       - CHALLENGER_MODE=${CHALLENGER_MODE:-false}
-      # Deploy the STRONG bot: GoBot search + hand-tuned eval (beats GoBot 6-0). Without these
-      # the bot runs the default negamax+NNUE config, which is weaker. Override via env if needed.
+      # Deploy the STRONG bot: GoBot search + hand-tuned eval. Time mode (wall-clock deadline)
+      # engages the enhanced stack fully — lazy SMP (~4x nodes/sec), warm cross-move TT, deadline
+      # salvage; verified 62%±2.4 vs the node-budget-era baseline at equal time. The old fixed
+      # 60k-node default underuses the upgrade (it just moves faster, not deeper). Override via
+      # env if needed; GOBOT_NODE_LIMIT + empty GOBOT_TIME_MODE restores the deterministic budget.
       - SEARCH=${SEARCH:-GOBOT}
       - EVAL=${EVAL:-HANDTUNED}
+      - GOBOT_TIME_MODE=${GOBOT_TIME_MODE:-1}
 
 networks:
   virusgame-network:
