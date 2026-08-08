@@ -177,16 +177,26 @@ public final class GoBotSearcher {
   long cutIndexSum; // diagnostics: sum of searched-child index at cutoff (mean = ordering quality)
   long aspirationFailLows; // diagnostics: aspirated iterations that failed low (re-searched)
   long aspirationFailHighs; // diagnostics: aspirated iterations that failed high (re-searched)
+  long lmrReductions; // diagnostics: scouts searched one action shallower (plan item 7)
+  long lmrReSearches; // diagnostics: reduced scouts that failed high and re-ran at full depth
+  long lmrTurnEndingReductions; // tripwire: reductions of turn-ending actions; must stay 0
 
-  // Plan item 6 rollback/A-B flag: DEFAULT ON on the enhanced path; env GOBOT_ASPIRATION=0
-  // disables (baked at class load; tests use the override). The parity oracle never sees it —
-  // every use is additionally gated on `enhanced`.
+  // Plan items 6-7 rollback/A-B flags: both DEFAULT ON on the enhanced path; env
+  // GOBOT_ASPIRATION=0 / GOBOT_LMR=0 disables (baked at class load; tests use the overrides).
+  // The parity oracle never sees either — every use is additionally gated on `enhanced`.
   static final boolean ASPIRATION_ENV = !"0".equals(System.getenv("GOBOT_ASPIRATION"));
+  static final boolean LMR_ENV = !"0".equals(System.getenv("GOBOT_LMR"));
   static Boolean aspirationOverride; // test hook, like smpThreadsOverride
+  static Boolean lmrOverride; // test hook
 
   static boolean aspirationEnabled() {
     Boolean o = aspirationOverride;
     return o != null ? o : ASPIRATION_ENV;
+  }
+
+  static boolean lmrEnabled() {
+    Boolean o = lmrOverride;
+    return o != null ? o : LMR_ENV;
   }
 
   // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
@@ -971,23 +981,53 @@ public final class GoBotSearcher {
       return leafEval(state);
     }
     int searched = searchedTTFirst ? 1 : 0;
+    boolean lmrNode = enhanced && depth >= 3 && lmrEnabled();
     for (int i = 0; i < children.size(); i++) {
       Child child = children.get(i);
       if (searchedTTFirst && child.action.equals(ttMove)) {
         continue; // already searched full-window above
       }
       searched++;
+      // Plan item 7 + bead 1jh.4: turn-aware late-move reduction — scout late quiet SAME-TURN
+      // moves one action shallower; a fail-high re-searches at full depth before the normal PVS
+      // widening. `searched` counts the TT fast-path child, so index >= 4 means ordered index.
+      // The order tiers make the exclusions exact: TT +10M, killer +5M, win +1M, elimination
+      // ±100k, capture +10k all put order >= 10_000, while a quiet move tops out at history
+      // (9_000) + turn-continuation (100). Turn-ending actions (movesLeft==1 moves, neutral
+      // pairs, self-eliminations — the mover flips) are never reduced: the plan flags the turn
+      // boundary as where tempo-swing eval error concentrates, and a reduced leaf would land in
+      // the other side's turn-fragment with a systematically different tempo term.
+      int reduction = 0;
+      if (lmrNode
+          && searched > 4
+          && child.order < 10_000
+          && child.action instanceof MoveAction
+          && child.state.currentPlayer() == state.currentPlayer()) {
+        reduction = 1;
+        lmrReductions++;
+      }
+      if (reduction != 0 && child.state.currentPlayer() != state.currentPlayer()) {
+        lmrTurnEndingReductions++; // independent tripwire, asserted 0 by GoBotAspirationLmrTest
+      }
       long score;
       if (!searchedTTFirst && i == 0) {
         score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
       } else if (maximizing) {
-        // Null-window scout: probe whether this sibling beats alpha.
-        score = minimax(child.state, depth - 1, alpha, alpha + 1, ply + 1);
+        // Null-window scout: probe whether this sibling beats alpha (reduced if LMR applies).
+        score = minimax(child.state, depth - 1 - reduction, alpha, alpha + 1, ply + 1);
+        if (reduction != 0 && score > alpha) {
+          lmrReSearches++; // reduced scout failed high: verify at full depth
+          score = minimax(child.state, depth - 1, alpha, alpha + 1, ply + 1);
+        }
         if (score > alpha && score < beta) {
           score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
         }
       } else {
-        score = minimax(child.state, depth - 1, beta - 1, beta, ply + 1);
+        score = minimax(child.state, depth - 1 - reduction, beta - 1, beta, ply + 1);
+        if (reduction != 0 && score < beta) {
+          lmrReSearches++; // reduced scout failed high (for the minimizer): verify at full depth
+          score = minimax(child.state, depth - 1, beta - 1, beta, ply + 1);
+        }
         if (score < beta && score > alpha) {
           score = minimax(child.state, depth - 1, alpha, beta, ply + 1);
         }
