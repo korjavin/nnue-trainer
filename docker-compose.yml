@@ -17,6 +17,10 @@ services:
       # salvage; verified 62%±2.4 vs the node-budget-era baseline at equal time. The old fixed
       # 60k-node default underuses the upgrade (it just moves faster, not deeper). Override via
       # env if needed; GOBOT_NODE_LIMIT + empty GOBOT_TIME_MODE restores the deterministic budget.
+      # RL champion promotion path: SEARCH=MCTS plays the PUCT searcher with the trained policy
+      # prior (MCTS_PRIOR, default mcts_champion.json then mcts_policy.json; MCTS_VALUE=net
+      # enables the artifact's value head, MCTS_MOVE_MILLIS budgets each move). See
+      # docs/server-training.md "how promotion works".
       - SEARCH=${SEARCH:-GOBOT}
       - EVAL=${EVAL:-HANDTUNED}
       - GOBOT_TIME_MODE=${GOBOT_TIME_MODE:-1}

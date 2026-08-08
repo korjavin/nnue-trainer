@@ -76,6 +76,33 @@ owner (or a follow-up commit) reviews the report, copies the artifact into the r
 (`mcts_policy.json` or `nnue_v3_net.json` + parity fixture), and pushes — which then ships
 it through the normal deploy pipeline.
 
+### Promoting an RL champion to the live bot
+
+`SEARCH=MCTS` is the deployment path: the bot then plays the PUCT searcher with the
+trained policy prior instead of the GoBot alpha-beta search. Final steps, exactly:
+
+```bash
+# 1. Copy the gated champion out of the trainer volume into the repo
+docker cp nnue-trainer-trainer:/work/out/champion_gen<N>.json mcts_champion.json
+
+# 2. Commit it under the name the bot loads by default
+git add mcts_champion.json && git commit -m "promote RL champion gen<N>"
+
+# 3. Flip the bot to the MCTS search (Portainer stack env, or .env on the host)
+#    SEARCH=MCTS
+#    Optional: MCTS_VALUE=net (use the champion's value head),
+#    MCTS_MOVE_MILLIS=1000 (per-move budget, the default), MCTS_CPUCT, MCTS_PRIOR=<path>.
+
+# 4. Push — the deploy pipeline ships the image; the bot logs "SEARCH=MCTS: prior=..." on
+#    its first move.
+git push
+```
+
+`MCTS_PRIOR` unset loads `mcts_champion.json`, falling back to the committed
+`mcts_policy.json`; if neither loads the bot logs a warning and keeps playing the GoBot
+search (same graceful degradation as the EVAL flags). Non-12x12 or >2-player games fall
+back automatically — the prior net is 12x12 1v1 only.
+
 ## Resource expectations
 
 Reference point: a local 8-core box ran 1500 self-play games at 192 sims in ~2.5–3.5 h.

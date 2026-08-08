@@ -6,6 +6,8 @@ import com.engine.nnue_trainer.board.Cell;
 import com.engine.nnue_trainer.board.CellKind;
 import com.engine.nnue_trainer.board.MoveAction;
 import com.engine.nnue_trainer.board.PlaceNeutralsAction;
+import com.engine.nnue_trainer.mcts.MctsSearcher;
+import com.engine.nnue_trainer.mcts.PolicyNetPrior;
 import com.engine.nnue_trainer.search.SearchEngine;
 import com.engine.nnue_trainer.search.SearchResult;
 import com.engine.nnue_trainer.search.gobot.GoBotExploration;
@@ -15,6 +17,8 @@ import com.engine.nnue_trainer.search.gobot.GoState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class GameLoopHandler {
   private final ObjectMapper objectMapper = new ObjectMapper();
@@ -192,6 +196,10 @@ public class GameLoopHandler {
   // Read at construction (not class-load) so the SEARCH flag is honoured per instance and testable.
   private final boolean useGobotSearch = gobotSearchFromEnv();
 
+  // SEARCH=MCTS selects the PUCT searcher with the trained policy prior — the deployment path for
+  // promoted RL champions (mcts_champion.json). Read at construction like useGobotSearch.
+  private final boolean useMctsSearch = "MCTS".equalsIgnoreCase(envOrProp("SEARCH"));
+
   // Env-gated, seeded near-best exploration for the data-gen challenger (opt-in only). Read at
   // construction like useGobotSearch. Default OFF ⇒ byte-identical deterministic best-move play.
   private final GoBotExploration exploration =
@@ -286,10 +294,12 @@ public class GameLoopHandler {
   private void makeMove(
       JsonNode snapshot, Board board, boolean canPlaceNeutral, boolean[] neutralUsed) {
     SearchResult searchResult =
-        useGobotSearch
-            ? gobotSearch(snapshot, neutralUsed)
-            : searchEngine.findBestActionWithTimeLimitUsingModel(
-                board, myPlayerIndex, 5000, canPlaceNeutral);
+        useMctsSearch
+            ? mctsSearch(snapshot, board, canPlaceNeutral, neutralUsed)
+            : useGobotSearch
+                ? gobotSearch(snapshot, neutralUsed)
+                : searchEngine.findBestActionWithTimeLimitUsingModel(
+                    board, myPlayerIndex, 5000, canPlaceNeutral);
     Action bestAction = searchResult.bestAction;
 
     System.out.println(
@@ -409,5 +419,122 @@ public class GameLoopHandler {
     }
     return new SearchResult(
         chosen, r.score, r.depth, (int) r.nodes, System.currentTimeMillis() - start);
+  }
+
+  // --- SEARCH=MCTS: live PUCT search with the trained policy prior ---
+
+  // Loaded once per handler on the first MCTS move (like liveGobotSearcher); null after a load
+  // attempt means no artifact was found and every move falls back to the GoBot search.
+  private MctsSearcher.Config mctsLiveConfig;
+  private boolean mctsLiveConfigLoaded;
+
+  private static String envOrProp(String key) {
+    return System.getProperty(key, System.getenv(key));
+  }
+
+  private static String envOrProp(String key, String fallback) {
+    String v = envOrProp(key);
+    return v != null && !v.isBlank() ? v : fallback;
+  }
+
+  /**
+   * Build the live MCTS config from env, or {@code null} when no prior artifact loads (the caller
+   * then falls back to the GoBot search — same graceful-degradation contract as EVAL=NNUEV3).
+   * {@code MCTS_PRIOR} names the artifact; unset tries the promoted {@code mcts_champion.json}
+   * first, then the committed Phase 1 {@code mcts_policy.json}. {@code MCTS_VALUE=net} enables the
+   * artifact's value head when present; {@code MCTS_CPUCT} overrides the exploration constant. Root
+   * noise stays OFF (play mode, the Config default).
+   */
+  static MctsSearcher.Config loadMctsConfig() {
+    String configured = envOrProp("MCTS_PRIOR", "");
+    String[] candidates =
+        configured.isBlank()
+            ? new String[] {"mcts_champion.json", "mcts_policy.json"}
+            : new String[] {configured};
+    PolicyNetPrior prior = null;
+    String loadedFrom = null;
+    for (String p : candidates) {
+      if (!Files.exists(Path.of(p))) {
+        continue;
+      }
+      try {
+        prior = PolicyNetPrior.load(Path.of(p));
+        loadedFrom = p;
+        break;
+      } catch (Exception e) {
+        System.err.println("SEARCH=MCTS: failed to load prior " + p + ": " + e.getMessage());
+      }
+    }
+    if (prior == null) {
+      return null;
+    }
+    MctsSearcher.Config config = new MctsSearcher.Config();
+    config.prior = prior;
+    config.cpuct = Double.parseDouble(envOrProp("MCTS_CPUCT", "1.5"));
+    if ("net".equalsIgnoreCase(envOrProp("MCTS_VALUE", ""))) {
+      if (prior.hasValueHead()) {
+        config.valueNet = prior;
+      } else {
+        System.err.println(
+            "SEARCH=MCTS: MCTS_VALUE=net but "
+                + loadedFrom
+                + " has no value_head; using the hand-tuned leaf value.");
+      }
+    }
+    System.out.println(
+        "SEARCH=MCTS: prior="
+            + loadedFrom
+            + (config.valueNet != null ? "+value" : "")
+            + " cpuct="
+            + config.cpuct);
+    return config;
+  }
+
+  /**
+   * Run the PUCT searcher from the same tested {@link #goStateFromSnapshot} seam as the GoBot path
+   * under a wall-clock budget ({@code MCTS_MOVE_MILLIS}, default 1000 — the gauntlet's production
+   * condition). Falls back rather than crashing: non-12x12 or >2 players (the prior net is 12x12
+   * 1v1 only) takes the legacy negamax path; a missing prior artifact takes the GoBot path.
+   */
+  private SearchResult mctsSearch(
+      JsonNode snapshot, Board board, boolean canPlaceNeutral, boolean[] neutralUsed) {
+    if (board.rows != 12 || board.cols != 12 || (neutralUsed != null && neutralUsed.length > 2)) {
+      System.err.println(
+          "SEARCH=MCTS supports 12x12 1v1 only; got "
+              + board.rows
+              + "x"
+              + board.cols
+              + " — using the negamax path.");
+      return searchEngine.findBestActionWithTimeLimitUsingModel(
+          board, myPlayerIndex, 5000, canPlaceNeutral);
+    }
+    if (!mctsLiveConfigLoaded) {
+      mctsLiveConfigLoaded = true;
+      mctsLiveConfig = loadMctsConfig();
+      if (mctsLiveConfig == null) {
+        System.err.println(
+            "WARNING: SEARCH=MCTS but no prior artifact loaded (MCTS_PRIOR /"
+                + " mcts_champion.json / mcts_policy.json) — falling back to the GoBot search.");
+      }
+    }
+    if (mctsLiveConfig == null) {
+      return gobotSearch(snapshot, neutralUsed);
+    }
+    long start = System.currentTimeMillis();
+    GoState gs = goStateFromSnapshot(snapshot);
+    long budget = Long.parseLong(envOrProp("MCTS_MOVE_MILLIS", "1000"));
+    MctsSearcher searcher = new MctsSearcher(gs, mctsLiveConfig);
+    searcher.runUntilDeadline(start + budget);
+    Action action = searcher.bestAction();
+    long elapsed = System.currentTimeMillis() - start;
+    if (action == null) {
+      // No legal action; let makeMove log "No legal actions available."
+      return new SearchResult(null, 0, 0, 0, elapsed);
+    }
+    // Root value is absolute-frame (positive = good for player 1); report the mover's frame like
+    // the other paths. depth has no MCTS analogue (0); sims map to the nodes diagnostic.
+    double v = searcher.rootValueAbs();
+    float score = (float) (gs.currentPlayer() == 1 ? v : -v);
+    return new SearchResult(action, score, 0, searcher.simsRun(), elapsed);
   }
 }
