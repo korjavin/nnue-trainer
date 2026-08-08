@@ -178,20 +178,32 @@ public final class GoBotSearcher {
 
   // Plan item 3 (enhanced only): two killer actions per ply, recorded on quiet-move cutoffs and
   // ordered right after the TT move; plus a per-mover, per-cell history table bumped depth^2 on
-  // quiet cutoffs, halved each new search. Both are per-searcher — no cross-searcher bleed.
+  // quiet cutoffs, halved each new search. Both are per-searcher — no cross-searcher bleed (lazy
+  // SMP helpers are separate searcher instances, so they get their own killers/history for free).
   final Action[][] killers = new Action[MAX_DEPTH + 1][2];
   int[][] history; // [mover-1][cell index], lazily sized to the board; 1v1 movers only
+
+  // Lazy SMP (plan item 4): set by the owning main searcher to abort a helper; checked in
+  // running(). Never set on a main searcher, so single-thread semantics are untouched.
+  volatile boolean stopRequested;
+  Throwable helperFailure; // a helper's escaped exception, surfaced to tests; main ignores it
+  List<GoBotSearcher> lastHelpers; // helpers of the most recent search, for tests/diagnostics
 
   GoBotSearcher(int root, boolean multi) {
     this(root, multi, false);
   }
 
   GoBotSearcher(int root, boolean multi, boolean enhanced) {
+    this(root, multi, enhanced, null);
+  }
+
+  /** {@code sharedTT != null} builds a lazy-SMP helper probing/storing the owner's table. */
+  GoBotSearcher(int root, boolean multi, boolean enhanced, GoTranspositionTable sharedTT) {
     this.root = root;
     this.multi = multi;
     this.enhanced = enhanced;
     this.table = new HashMap<>();
-    this.tt = enhanced ? new GoTranspositionTable() : null;
+    this.tt = enhanced ? (sharedTT != null ? sharedTT : new GoTranspositionTable()) : null;
   }
 
   /**
@@ -235,6 +247,109 @@ public final class GoBotSearcher {
   private static final class SearchIncomplete extends RuntimeException {
     SearchIncomplete() {
       super(null, null, false, false);
+    }
+  }
+
+  // --- lazy SMP (plan item 4) ---
+
+  /**
+   * Lazy-SMP width: {@code min(availableProcessors, GOBOT_SMP_THREADS)} with a conservative default
+   * cap of 4 (the machine also runs self-play/gauntlets); 0 or 1 = off. N-1 helper threads run the
+   * same iterative deepening from the same root on the SHARED packed TT at staggered start depths
+   * (2/3 alternating, the classic skew); the main thread's result is authoritative and helpers are
+   * aborted the moment it returns. Helpers keep their own killers/history/counters, so the only
+   * shared structure is the XOR-verified TT.
+   *
+   * <p>Node accounting stays the main thread's own {@code nodes} — SMP-off budget semantics are
+   * byte-identical to single-threaded search. With SMP on, helper TT entries steer the main tree,
+   * so node-budget results are NOT reproducible run-to-run: fixed-node gauntlet gates should run
+   * with {@code GOBOT_SMP_THREADS=0} (or use time mode, where nondeterminism is inherent anyway).
+   */
+  static final int SMP_THREADS = smpThreadsFromEnv();
+
+  /** Test hook: overrides {@link #SMP_THREADS} when non-null (env is baked at class load). */
+  static Integer smpThreadsOverride;
+
+  private static int smpThreadsFromEnv() {
+    int cap = 4;
+    String s = System.getenv("GOBOT_SMP_THREADS");
+    if (s != null && !s.isBlank()) {
+      try {
+        cap = Integer.parseInt(s.trim());
+      } catch (NumberFormatException ignored) {
+        // keep default
+      }
+    }
+    return Math.max(0, Math.min(cap, Runtime.getRuntime().availableProcessors()));
+  }
+
+  private static int smpThreads() {
+    Integer override = smpThreadsOverride;
+    return override != null ? override : SMP_THREADS;
+  }
+
+  /**
+   * Starts the N-1 lazy-SMP helpers for a search of {@code state}, or returns an empty list when
+   * SMP is off (or this is the parity path / a 3+-player game, which never runs SMP).
+   */
+  private List<Thread> startHelpers(GoState state) {
+    int n = enhanced && !multi ? smpThreads() : 0;
+    lastHelpers = null;
+    if (n <= 1) {
+      return List.of();
+    }
+    List<GoBotSearcher> spawned = new ArrayList<>(n - 1);
+    List<Thread> threads = new ArrayList<>(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+      GoBotSearcher h = new GoBotSearcher(root, multi, true, tt);
+      h.leafMode = leafMode;
+      h.nnueModel = nnueModel;
+      h.nnueV2 = nnueV2;
+      h.nnueV3 = nnueV3;
+      int startDepth = 2 + (i & 1); // classic lazy-SMP stagger: depth+1 / depth+2 alternating
+      Thread t = new Thread(() -> h.helperLoop(state, startDepth), "gobot-smp-" + i);
+      t.setDaemon(true);
+      spawned.add(h);
+      threads.add(t);
+      t.start();
+    }
+    lastHelpers = spawned;
+    return threads;
+  }
+
+  /** Aborts and joins the helpers; the main thread's completed result is already in hand. */
+  private void stopHelpers(List<Thread> threads) {
+    if (lastHelpers != null) {
+      for (GoBotSearcher h : lastHelpers) {
+        h.stopRequested = true;
+      }
+    }
+    for (Thread t : threads) {
+      try {
+        t.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return;
+      }
+    }
+  }
+
+  /**
+   * A helper's whole life: iterative deepening from {@code startDepth} on the shared TT until
+   * aborted (or MAX_DEPTH). Results are discarded — a helper's only output is the TT entries it
+   * leaves behind for the main thread. No generation bump (the main searcher owns the clock), no
+   * budget: {@link #stopRequested} is the sole terminator.
+   */
+  private void helperLoop(GoState state, int startDepth) {
+    history = new int[2][state.rows() * state.cols()];
+    try {
+      for (int depth = startDepth; depth <= MAX_DEPTH; depth++) {
+        atDepth(state, depth);
+      }
+    } catch (SearchIncomplete expected) {
+      // aborted by the main thread (or a shared-deadline race) — normal helper death
+    } catch (Throwable t) {
+      helperFailure = t; // never let a helper take down the move choice; tests assert null
     }
   }
 
@@ -295,6 +410,9 @@ public final class GoBotSearcher {
    * completion.
    */
   public boolean running() {
+    if (stopRequested) {
+      return false; // lazy-SMP helper abort; never set on a main searcher
+    }
     if (nodeLimit > 0 && nodes >= nodeLimit) {
       return false;
     }
@@ -415,29 +533,34 @@ public final class GoBotSearcher {
     long budget = deadlineMillis - startMillis;
     beginSearch(state, deadlineMillis, 0);
     GoResult best = new GoResult(fallback);
-    for (int depth = 1; depth <= MAX_DEPTH; depth++) {
-      if (enhanced
-          && depth > 1
-          && budget > 0
-          && (System.currentTimeMillis() - startMillis) * 100 > budget * SOFT_DEADLINE_PERCENT) {
-        break; // soft deadline: recover the half-budget a doomed iteration would waste
-      }
-      GoResult result;
-      try {
-        result = atDepth(state, depth);
-      } catch (SearchIncomplete e) {
-        if (enhanced && partialRoot != null && partialRoot.action != null) {
-          partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
-          partialRoot.nodes = nodes;
-          partialRoot.evaluations = evaluations;
-          best = partialRoot;
+    List<Thread> helpers = startHelpers(state);
+    try {
+      for (int depth = 1; depth <= MAX_DEPTH; depth++) {
+        if (enhanced
+            && depth > 1
+            && budget > 0
+            && (System.currentTimeMillis() - startMillis) * 100 > budget * SOFT_DEADLINE_PERCENT) {
+          break; // soft deadline: recover the half-budget a doomed iteration would waste
         }
-        break;
+        GoResult result;
+        try {
+          result = atDepth(state, depth);
+        } catch (SearchIncomplete e) {
+          if (enhanced && partialRoot != null && partialRoot.action != null) {
+            partialRoot.depth = best.depth; // the label stays the last COMPLETED iteration
+            partialRoot.nodes = nodes;
+            partialRoot.evaluations = evaluations;
+            best = partialRoot;
+          }
+          break;
+        }
+        best = result;
+        best.depth = depth;
+        best.nodes = nodes;
+        best.evaluations = evaluations;
       }
-      best = result;
-      best.depth = depth;
-      best.nodes = nodes;
-      best.evaluations = evaluations;
+    } finally {
+      stopHelpers(helpers);
     }
     return best;
   }
@@ -454,15 +577,20 @@ public final class GoBotSearcher {
     }
     beginSearch(state, 0, limit);
     GoResult best = new GoResult(fallback);
-    for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
-      GoResult result;
-      try {
-        result = atDepth(state, depth);
-      } catch (SearchIncomplete e) {
-        break;
+    List<Thread> helpers = startHelpers(state);
+    try {
+      for (int depth = 1; depth <= MAX_DEPTH && nodes < limit; depth++) {
+        GoResult result;
+        try {
+          result = atDepth(state, depth);
+        } catch (SearchIncomplete e) {
+          break;
+        }
+        best = result;
+        best.depth = depth;
       }
-      best = result;
-      best.depth = depth;
+    } finally {
+      stopHelpers(helpers);
     }
     best.nodes = nodes;
     best.evaluations = evaluations;
