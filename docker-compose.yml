@@ -4,7 +4,7 @@ version: "3.8"
 services:
   nnue-trainer-bot:
     # The image tag will be replaced by the GitHub Actions workflow in the deploy branch
-    image: ghcr.io/korjavin/nnue-trainer:latest
+    image: ghcr.io/korjavin/nnue-trainer:a135c4b811e96d2c3aeed247deda2df45f3b6685
     container_name: nnue-trainer-bot
     networks:
       - virusgame-network
@@ -35,7 +35,7 @@ services:
   # Portainer: add stack env var COMPOSE_PROFILES=trainer to enable on a host.
   # See docs/server-training.md.
   trainer:
-    image: ghcr.io/korjavin/nnue-trainer-trainer:latest
+    image: ghcr.io/korjavin/nnue-trainer-trainer:a135c4b811e96d2c3aeed247deda2df45f3b6685
     container_name: nnue-trainer-trainer
     profiles: ["trainer"]
     restart: unless-stopped
