@@ -106,7 +106,15 @@ PY="${PYTHON:-$ROOT/.venv/bin/python}"
 : "${GAMES_DB:=}"
 
 CHAMPION="$WORK/champion.json"
-[ -f "$CHAMPION" ] || cp "$ROOT/mcts_policy.json" "$CHAMPION"
+if [ ! -f "$CHAMPION" ]; then
+  # Seed from the promoted prod champion when the image/repo carries one — a fresh work volume
+  # must continue the ladder, not restart it from the gen-0 policy prior.
+  if [ -f "$ROOT/mcts_champion.json" ]; then
+    cp "$ROOT/mcts_champion.json" "$CHAMPION"
+  else
+    cp "$ROOT/mcts_policy.json" "$CHAMPION"
+  fi
+fi
 [ -f "$WORK/gen" ] || echo 1 > "$WORK/gen"
 GEN="$(cat "$WORK/gen")"
 GDIR="$WORK/gen$GEN"

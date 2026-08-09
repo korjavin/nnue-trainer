@@ -40,7 +40,7 @@ COPY mvnw pom.xml ./
 COPY src ./src
 COPY python ./python
 COPY scripts ./scripts
-COPY mcts_policy.json ordering_policy.json nnue_v3_net.json nnue_v3_weights.json nnue_v3_feature_stats.json ./
+COPY mcts_policy.json ordering_policy.json nnue_v3_net.json nnue_v3_weights.json nnue_v3_feature_stats.json mcts_champion.jso[n] ./
 RUN chmod +x mvnw scripts/*.sh
 
 # ponytail: runs as root — the named work volume must be writable whatever uid the host
