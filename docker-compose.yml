@@ -24,6 +24,12 @@ services:
       - SEARCH=${SEARCH:-GOBOT}
       - EVAL=${EVAL:-HANDTUNED}
       - GOBOT_TIME_MODE=${GOBOT_TIME_MODE:-1}
+      # MCTS mode passthrough (empty = feature default): stack env only substitutes into this
+      # template, it is not auto-injected — every knob needs an explicit line here.
+      - MCTS_VALUE=${MCTS_VALUE:-}
+      - MCTS_PRIOR=${MCTS_PRIOR:-}
+      - MCTS_MOVE_MILLIS=${MCTS_MOVE_MILLIS:-}
+      - MCTS_CPUCT=${MCTS_CPUCT:-}
 
   # Opt-in training sidecar — NOT started by default (compose profile "trainer").
   # Portainer: add stack env var COMPOSE_PROFILES=trainer to enable on a host.
